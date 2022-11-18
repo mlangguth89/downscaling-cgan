@@ -262,13 +262,18 @@ def write_data(years,
        
     dates = [item.date() for item in pd.date_range(start=start_date, end=end_date)]
     
-    dates = [item for item in dates if file_exists(data_source=observational_data_source, year=item.year,
-                                                        month=item.month, day=item.day,
-                                                        data_paths=data_paths)]
+    # This is super slow! So removing it for now, there are checls further on that deal with it
+    # dates = [item for item in dates if file_exists(data_source=observational_data_source, year=item.year,
+    #                                                     month=item.month, day=item.day,
+    #                                                     data_paths=data_paths)]
     
     dates = [item for item in dates if file_exists(data_source=forecast_data_source, year=item.year,
                                                         month=item.month, day=item.day,
                                                         data_paths=data_paths)]
+    if not dates[0] == start_date.date():
+        # Means there likely isn't forecast data for the day before
+        dates = dates[1:]
+        
     all_years = set([item.year for item in dates])
     
     records_folder = data_paths["TFRecords"]["tfrecords_path"]
@@ -298,7 +303,8 @@ def write_data(years,
     write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
     write_to_yaml(os.path.join(hash_dir, 'input_args.yaml'), arg_inputs)
 
-    for hour in tqdm(hours, total=len(hours)):
+    for hour in hours:
+        print('Hour = ', hour)
         dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
                             forecast_data_source=forecast_data_source, 
                             observational_data_source=observational_data_source,
@@ -320,7 +326,7 @@ def write_data(years,
                     flename = os.path.join(hash_dir, f"{year}_{hour}.{fh}.tfrecords")
                     fle_hdles[year].append(tf.io.TFRecordWriter(flename))
             
-        for batch, date in enumerate(dates):
+        for batch, date in tqdm(enumerate(dates)):
             
             logger.debug(f"hour={hour}, batch={batch}")
             
@@ -362,6 +368,10 @@ def write_data(years,
                         # Check no Null values
                         if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
                             raise ValueError('Unexpected NaN values in data')
+                        
+                        # Check for empty data
+                        if observations.sum() == 0 or forecast.sum() == 0 or const.sum() == 0:
+                            raise ValueError('one or more of arrays is all zeros')
                         
                         # Check hi res data has same dimensions
                             
@@ -444,6 +454,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     fcst_data_source = args.fcst_data_source
+    data_paths = DATA_PATHS
+    if args.records_folder:
+        data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
     write_data(args.years,
                 forecast_data_source=args.fcst_data_source, 
@@ -455,7 +468,7 @@ if __name__ == '__main__':
                 scaling_factor=args.scaling_factor,
                 log_precip=args.log_precip,
                 fcst_norm=args.fcst_norm,
-                data_paths=DATA_PATHS,
+                data_paths=data_paths,
                 constants=not args.no_constants,
                 latitude_range=DEFAULT_LATITUDE_RANGE,
                 longitude_range=DEFAULT_LONGITUDE_RANGE)

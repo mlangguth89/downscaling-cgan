@@ -10,7 +10,7 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.tfrecords_generator import write_data, create_dataset
-from dsrnngan.data import all_ifs_fields, fcst_hours, all_era5_fields, IMERG_PATH, ERA5_PATH
+from dsrnngan.data import all_ifs_fields, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, all_era5_fields, IMERG_PATH, ERA5_PATH
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -21,11 +21,12 @@ era5_path = ERA5_PATH
 imerg_folder = IMERG_PATH
 
 class TestTfrecordsGenerator(unittest.TestCase):
-    
+            
     def test_write_ifs_data(self):
         
         with tempfile.TemporaryDirectory() as tmpdirname:
-        
+            
+            
             test_data_dir = HOME / 'system_tests' / 'data'
             data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
                                     'IFS': str(test_data_dir / 'IFS'),
@@ -34,7 +35,18 @@ class TestTfrecordsGenerator(unittest.TestCase):
                                     'CONSTANTS': str(test_data_dir / 'constants')},
                           'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
                         #   'TFRecords': {'tfrecords_path': tmpdirname}}
-        
+            output_dir = write_data(2016,
+                forecast_data_source='ifs', 
+                observational_data_source='imerg',
+                hours=[0, 1, 2],
+                img_chunk_width=200,
+                img_size=200,
+                num_class=4,
+                log_precip=True,
+                fcst_norm=True,
+                scaling_factor=1,
+                latitude_range=np.arange(0, 1, 0.1),
+                    longitude_range=np.arange(33, 34, 0.1))
         
             output_dir = write_data(2017,
                     forecast_data_source='ifs', 

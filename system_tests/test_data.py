@@ -98,14 +98,18 @@ class TestLoad(unittest.TestCase):
         month = 7
         day = 5
         hour = 4
+
+        # year = 2016
+        # month = 3
+        # day=1
+        # hour = 0
         
         lat_coords = []
         lon_coords = []
         
         for field in all_ifs_fields:
             
-            ds = load_ifs_raw(field, year, month, day, hour, 
-                              ifs_data_dir=str(ifs_path))
+            ds = load_ifs_raw(field, year, month, day, hour, ifs_data_dir=str(ifs_path))
             
             self.assertIsInstance(ds, xr.Dataset)
             

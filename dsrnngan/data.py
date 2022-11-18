@@ -92,7 +92,7 @@ all_era5_fields = list(VAR_LOOKUP_ERA5.keys())
 # Defaults are set for east africa
 # TODO: put this in the config (probably after refactoring config)
 DEFAULT_LATITUDE_RANGE = np.arange(-10, 10, 0.1)
-DEFAULT_LONGITUDE_RANGE = np.arange(25, 45, 0.1)
+DEFAULT_LONGITUDE_RANGE = np.arange(26, 46, 0.1)
 
 LAST_TRAIN_YEAR = read_config.read_config()['TRAIN']['train_years'][-1]
 
@@ -470,15 +470,15 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
     time = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
 
     # Get the correct forecast starttime
-    if time.hour < 6:
+    if time.hour <= 6:
         tmpdate = time - timedelta(days=1)
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'
-    elif 6 <= time.hour < 18:
+    elif 6 < time.hour <= 18:
         tmpdate = time
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=6)
         loadtime = '00'
-    elif 18 <= time.hour < 24:
+    elif 18 < time.hour < 24:
         tmpdate = time
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'
