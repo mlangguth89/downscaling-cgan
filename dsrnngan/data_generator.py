@@ -107,12 +107,12 @@ class DataGenerator(Sequence):
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
 
         
-            if return_dic:
-                return {"lo_res_inputs": data_x_batch,
-                        "hi_res_inputs": self.constants},\
-                        {"output": data_y_batch}
-            else:
-                return data_x_batch, self.constants, data_y_batch
+        if return_dic:
+            return {"lo_res_inputs": data_x_batch,
+                    "hi_res_inputs": self.constants},\
+                    {"output": data_y_batch}
+        else:
+            return data_x_batch, self.constants, data_y_batch
 
     def shuffle_data(self):
         assert len(self.hours) == len(self.dates)

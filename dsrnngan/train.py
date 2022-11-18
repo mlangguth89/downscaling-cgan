@@ -36,13 +36,13 @@ def train_model(*,
         loss_log = model.train(batch_gen_train, steps_per_checkpoint)
 
     if do_plot:
-    plots.plot_sequences(model.gen,
-                         mode,
-                         batch_gen_valid,
-                         checkpoint,
-                         noise_channels=noise_channels,
-                         latent_variables=latent_variables,
-                         num_samples=plot_samples,
-                         out_fn=plot_fn)
+        plots.plot_sequences(model.gen,
+                            mode,
+                            batch_gen_valid,
+                            checkpoint,
+                            noise_channels=noise_channels,
+                            latent_variables=latent_variables,
+                            num_samples=plot_samples,
+                            out_fn=plot_fn)
 
     return loss_log

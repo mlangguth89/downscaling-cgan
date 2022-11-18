@@ -1,6 +1,6 @@
 from tensorflow.keras.layers import Layer, Add, Conv2D, LeakyReLU, BatchNormalization, AveragePooling2D
 
-from dsrnngam.layers import ReflectionPadding2D, SymmetricPadding2D
+from dsrnngan.layers import ReflectionPadding2D, SymmetricPadding2D
 
 
 class Conv2DPadding(Layer):

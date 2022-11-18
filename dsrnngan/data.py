@@ -5,7 +5,6 @@ import re
 import pickle
 import logging
 import netCDF4
-import itertools
 from calendar import monthrange
 from tqdm import tqdm
 from glob import glob
@@ -30,8 +29,8 @@ IMERG_PATH = DATA_PATHS["GENERAL"].get("IMERG")
 NIMROD_PATH = DATA_PATHS["GENERAL"].get("NIMROD")
 ERA5_PATH = DATA_PATHS["GENERAL"].get("ERA5")
 IFS_PATH = DATA_PATHS["GENERAL"].get("IFS")
-OROGRAPHY_PATH = DATA_PATHS["GENERAL"].get("LSM")
-LSM_PATH = DATA_PATHS["GENERAL"].get("OROGRAPHY")
+OROGRAPHY_PATH = DATA_PATHS["GENERAL"].get("OROGRAPHY")
+LSM_PATH = DATA_PATHS["GENERAL"].get("LSM")
 CONSTANTS_PATH = DATA_PATHS["GENERAL"].get("CONSTANTS")
 
 FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
@@ -357,7 +356,7 @@ def load_orography(oro_path=OROGRAPHY_PATH, latitude_vals=None, longitude_vals=N
             ds = interpolate_dataset_on_lat_lon(ds, latitude_vals=latitude_vals,
                                                 longitude_vals=longitude_vals,
                                                 interp_method='bilinear')
-    else:
+        else:
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
 
     ds = standardise_dataset(ds)
@@ -418,7 +417,7 @@ def load_fcst_radar_batch(batch_dates,
                           obs_data_dir,
                           latitude_range=None,
                           longitude_range=None,
-                           constants_dir=CONSTANTS_PATH,
+                          constants_dir=CONSTANTS_PATH,
                           log_precip=False, constants=False, hour=0, norm=False):
     batch_x = []
     batch_y = []
@@ -552,7 +551,7 @@ def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH,
     if log_precip and field in ['tp', 'cp', 'pr', 'prc', 'prl']:
         return log_precipitation(y)
     
-        return y
+    return y
 
 
 def load_fcst_stack(data_source, fields, date, hour, fcst_dir, constants_dir=CONSTANTS_PATH,

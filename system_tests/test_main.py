@@ -59,7 +59,7 @@ class TestMain(unittest.TestCase):
 
         setup_params['SETUP']['log_folder'] = log_folder
             
-        args = parser.parse_args(['--config', config_path, '--eval_blitz'])
+        args = parser.parse_args(['--eval_blitz'])
         
         data_paths = {'TFRecords': {'tfrecords_path': '/user/work/uz22147/tfrecords/era5_imerg_random_bins'}}
         
@@ -81,15 +81,13 @@ class TestMain(unittest.TestCase):
         
         # Try with qual
         main(restart=args.restart, do_training=args.do_training, 
-            evalnum=args.evalnum, qual=True,
-            rank=True, 
+            evalnum=args.evalnum, eval=True,
             plot_ranks=args.plot_ranks,
             setup_params=setup_params,
             data_paths=data_paths)
         
         # Check that logs written to folder
-        self.assertTrue(os.path.isfile(os.path.join(log_folder, 'rank.txt')))
-        self.assertTrue(os.path.isfile(os.path.join(log_folder, 'qual.txt')))
+        self.assertTrue(os.path.isfile(os.path.join(log_folder, 'eval.txt')))
 
 
 if __name__ == '__main__':

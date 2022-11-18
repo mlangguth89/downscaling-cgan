@@ -9,6 +9,7 @@ test-logs/
 *.jpg
 *.txt
 *.zip
+system_tests/data/constants/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

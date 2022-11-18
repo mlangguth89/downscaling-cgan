@@ -17,7 +17,7 @@ from dsrnngan.rapsd import rapsd
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 path = os.path.dirname(os.path.abspath(__file__))
-ds_fac = read_config.read_downscaling_factor()["downscaling_factor"]
+ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 
 
 def setup_inputs(*,

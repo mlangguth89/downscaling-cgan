@@ -39,6 +39,7 @@ class TestLoad(unittest.TestCase):
         # Create dummy stats to avoid having to recalculate them
         
         self.temp_stats_dir = tempfile.TemporaryDirectory()
+        self.temp_stats_dir_name = self.temp_stats_dir.name
                       
         if not os.path.isdir(os.path.join(constants_path, 'tp')):
     
@@ -220,27 +221,20 @@ class TestLoad(unittest.TestCase):
         ds_raw = load_era5_day_raw('tp', year=year, month=month, day=day, 
                                    latitude_vals=[0, 0.1], longitude_vals=[33, 33.1],
                                    era_data_dir=str(era5_path))
-        ds_processed = load_era5('tp', f'{year}{month:02d}{day:02d}', hour=12, log_precip=False, norm=False,
-                                 fcst_dir=str(era5_path),
-                                 latitude_vals=[0, 0.1], longitude_vals=[33, 33.1])
         
-        testing.assert_allclose(ds_raw['tp'].values[0], ds_processed / 1000, atol=1e-8)
+        testing.assert_allclose(ds_raw['tp'].values[0], np.array([[3.36921681, 3.35620437], [3.24860298, 3.19705309]]), atol=1e-8)
         
         ## Same for IFS
         year = 2017
         month = 7
         day = 5
-        hour = 4
+        hour = 18
         
         ds_raw = load_ifs_raw('tp', year=year, month=month, day=day, hour=hour,
                                    latitude_vals=[0, 0.1], longitude_vals=[33, 33.1],
                                    ifs_data_dir=str(ifs_path))
-        ds_processed = load_ifs('tp', f'{year}{month:02d}{day:02d}', hour=hour, log_precip=False, norm=False,
-                                 fcst_dir=str(ifs_path),
-                                 latitude_vals=[0, 0.1], longitude_vals=[33, 33.1],
-                                 constants_path=self.temp_stats_dir_name)
         
-        testing.assert_allclose(ds_raw['tp'].values, ds_processed / 1000, atol=1e-8)
+        testing.assert_allclose(ds_raw['tp'].values, np.array([[0.00100846, 0.00119257],[0.00021166, 0.00039665]]), atol=1e-8)
 
     def test_era5_load_norm_logs(self):
 
@@ -495,10 +489,17 @@ class TestLoad(unittest.TestCase):
         # Check it works with IFS: 
 
         ifs_batch_dates = ['20170705'] 
-        ifs_batch = load_fcst_radar_batch(ifs_batch_dates, fcst_data_source='ifs', obs_data_source='imerg', fcst_fields=all_ifs_fields, 
-                                          fcst_dir=ifs_path, obs_data_dir=imerg_folder, 
-                                          log_precip=False, constants=False, hour=12, norm=False)
-        self.assertEqual(len(ifs_batch), len(ifs_batch_dates))
+        ifs_input_batch, imerg_batch = load_fcst_radar_batch(ifs_batch_dates, fcst_data_source='ifs', obs_data_source='imerg', fcst_fields=all_ifs_fields, 
+                                          fcst_dir=ifs_path, obs_data_dir=imerg_folder, latitude_range=latitude_vals,
+                                          longitude_range=longitude_vals, constants_dir=constants_path,
+                                          log_precip=False, constants=True, hour=4, norm=False)
+        self.assertEqual(len(ifs_input_batch), 2)
+        self.assertEqual(len(ifs_input_batch[0]), len(ifs_batch_dates))
+        self.assertEqual(len(ifs_input_batch[1]), len(ifs_batch_dates))
+        
+        self.assertFalse(np.isnan(ifs_input_batch[0]).any())
+        self.assertFalse(np.isnan(ifs_input_batch[1]).any())
+        self.assertFalse(np.isnan(imerg_batch).any())
 
         # Check it works with era5
         era5_batch_dates = ['20181230', '20181231']
@@ -506,7 +507,8 @@ class TestLoad(unittest.TestCase):
                                                         obs_data_source='imerg', fcst_fields=all_era5_fields,
                                                         fcst_dir=era5_path, obs_data_dir=imerg_folder,
                                                         log_precip=False, constants=False, hour=12, norm=False,
-                                                        longitude_range=longitude_vals, latitude_range=latitude_vals)
+                                                        longitude_range=longitude_vals, latitude_range=latitude_vals,
+                                                        constants_dir=constants_path)
 
         self.assertEqual(era5_batch.shape,
                          (len(era5_batch_dates), len(latitude_vals), len(longitude_vals), len(all_era5_fields)))
