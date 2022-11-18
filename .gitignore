@@ -7,8 +7,6 @@ test-logs/
 *.pkl
 *.tfrecords
 *.jpg
-*.nc
-*.h5
 *.txt
 *.zip
 

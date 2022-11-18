@@ -15,6 +15,11 @@ Note that to set up this to work with a GPU you may also need to run:
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
 
+This repo uses Git LFS for the test data. To set this up in Bristol, use
+`module add tools/git-lfs/3.1.0`
+
+Then `git lfs install` in the repo.
+
 # High-level data overview
 
 You should have two main datasets:
