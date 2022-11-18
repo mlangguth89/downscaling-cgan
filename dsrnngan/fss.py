@@ -35,15 +35,15 @@ import pickle
 import numpy as np
 from scipy.ndimage.filters import uniform_filter
 
-import data
-import setupmodel
-from benchmarks import nn_interp_model
-from data import get_dates, all_fcst_fields
-from data_generator import DataGenerator as DataGeneratorFull
-from evaluation import _init_VAEGAN
-from noise import NoiseGenerator
-from read_config import read_downscaling_factor
-from tfrecords_generator import create_fixed_dataset
+from dsrnngan import data
+from dsrnngan import setupmodel
+from dsrnngan.benchmarks import nn_interp_model
+from dsrnngan.data import get_dates, all_fcst_fields
+from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation import _init_VAEGAN
+from dsrnngan.noise import NoiseGenerator
+from dsrnngan.read_config import read_config
+from dsrnngan.tfrecords_generator import create_fixed_dataset
 
 
 def plot_fss_curves(*,
@@ -63,7 +63,7 @@ def plot_fss_curves(*,
                     ensemble_members,
                     plot_upsample):
 
-    df_dict = read_downscaling_factor()
+    df_dict = read_config()['DOWNSCALING']
     ds_fac = df_dict["downscaling_factor"]
     downscaling_steps = df_dict["steps"]
 

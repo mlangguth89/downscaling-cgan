@@ -6,10 +6,10 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.utils import generic_utils
 
-from layers import GradientPenalty, RandomWeightedAverage
-from meta import ensure_list, input_shapes, Nontrainable, load_opt_weights, save_opt_weights
-from vaegantrain import VAE_trainer
-from wloss import wasserstein_loss, CL_chooser
+from dsrnngan.layers import GradientPenalty, RandomWeightedAverage
+from dsrnngan.meta import ensure_list, input_shapes, Nontrainable, load_opt_weights, save_opt_weights
+from dsrnngan.vaegantrain import VAE_trainer
+from dsrnngan.wloss import wasserstein_loss, CL_chooser
 
 
 class WGANGP(object):

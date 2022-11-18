@@ -2,20 +2,21 @@ import gc
 
 from tensorflow.keras.optimizers import Adam
 
-import deterministic
-import gan
-import models
-from vaegantrain import VAE
+from dsrnngan import deterministic
+from dsrnngan import gan
+from dsrnngan import models
+from dsrnngan.vaegantrain import VAE
 
 
 def setup_model(*,
-                mode=None,
-                arch=None,
-                downscaling_steps=None,
-                input_channels=None,
-                filters_gen=None,
-                filters_disc=None,
-                noise_channels=None,
+                mode,
+                arch,
+                downscaling_steps,
+                input_channels,
+                filters_gen,
+                filters_disc,
+                noise_channels,
+                constant_fields,
                 latent_variables=None,
                 padding=None,
                 kl_weight=None,
@@ -41,12 +42,14 @@ def setup_model(*,
                          arch=arch,
                          downscaling_steps=downscaling_steps,
                          input_channels=input_channels,
+                         constant_fields=constant_fields,
                          noise_channels=noise_channels,
                          filters_gen=filters_gen,
                          padding=padding)
         disc = disc_to_use(arch=arch,
                            downscaling_steps=downscaling_steps,
                            input_channels=input_channels,
+                           constant_fields=constant_fields,
                            filters_disc=filters_disc,
                            padding=padding)
         model = gan.WGANGP(gen, disc, mode, lr_disc=lr_disc, lr_gen=lr_gen,

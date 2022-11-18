@@ -4,7 +4,7 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.python.keras.utils import generic_utils
 
-from meta import ensure_list, input_shapes, load_opt_weights, save_opt_weights
+from dsrnngan.meta import ensure_list, input_shapes, load_opt_weights, save_opt_weights
 
 
 class Deterministic(object):

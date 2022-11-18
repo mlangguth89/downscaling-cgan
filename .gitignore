@@ -3,9 +3,14 @@ logs/
 test-det/
 test-logs/
 *.pdf
-*.sh
 *.yaml
-
+*.pkl
+*.tfrecords
+*.jpg
+*.nc
+*.h5
+*.txt
+*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,13 +6,13 @@ import numpy as np
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
 
-import data
-import read_config
-import setupdata
-import setupmodel
-from noise import NoiseGenerator
-from pooling import pool
-from rapsd import rapsd
+from dsrnngan import data
+from dsrnngan import read_config
+from dsrnngan import setupdata
+from dsrnngan import setupmodel
+from dsrnngan.noise import NoiseGenerator
+from dsrnngan.pooling import pool
+from dsrnngan.rapsd import rapsd
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 

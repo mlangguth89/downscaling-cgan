@@ -9,12 +9,59 @@ from matplotlib.colors import ListedColormap
 from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
 
-import data
-from noise import NoiseGenerator
-from rapsd import plot_spectrum1d, rapsd
-from thresholded_ranks import findthresh
+from dsrnngan import data
+from dsrnngan.noise import NoiseGenerator
+from dsrnngan.rapsd import plot_spectrum1d, rapsd
+from dsrnngan.thresholded_ranks import findthresh
 
 path = os.path.dirname(os.path.abspath(__file__))
+
+
+def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
+                       lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,
+                       colorbar=False):
+    latitude_vals = ds[lat_var_name].values
+    longitude_vals = ds[lon_var_name].values
+
+    ds = ds.sortby(lat_var_name, ascending=True)
+    ds = ds.sortby(lon_var_name, ascending=True)
+    if ax is None or fig is None:
+        fig, ax = plt.subplots(1, 1, subplot_kw={'projection': ccrs.PlateCarree()})
+        
+    precip = np.around(ds[variable][0, :, :], 5)
+    if log_precip:
+        precip = np.log(1 + precip)
+    
+    if transpose:
+        precip = precip.transpose()
+    ax.add_feature(cfeature.BORDERS)
+    ax.add_feature(cfeature.LAKES)
+    im = ax.contourf(longitude_vals, latitude_vals , precip, transform=ccrs.PlateCarree(),
+                    cmap='Greys')
+
+    ax.coastlines()
+
+
+    ax.set_xticks(np.arange(int(min(longitude_vals) +1 ), int(max(longitude_vals -1)), 2))
+    ax.set_yticks(np.arange(int(min(latitude_vals) +1 ), int(max(latitude_vals)), 2))
+    ax.set_xlabel('longitude')
+    ax.set_ylabel('latitude')
+    
+    if colorbar:
+        #get size and extent of axes:
+        axpos = ax.get_position()
+        pos_x = axpos.x0+axpos.width + 0.01 # + 0.25*axpos.width
+        pos_y = axpos.y0
+        cax_width = 0.04
+        cax_height = axpos.height
+        #create new axes where the colorbar should go.
+        #it should be next to the original axes and have the same height!
+        pos_cax = fig.add_axes([pos_x,pos_y,cax_width,cax_height])
+        plt.colorbar(im, cax = pos_cax)
+    
+    if title:
+        ax.set_title(title)
+    return im, ax
 
 
 def plot_img(img, value_range=(np.log10(0.1), np.log10(100)), extent=None):

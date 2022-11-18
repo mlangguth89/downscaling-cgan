@@ -3,16 +3,18 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 
-from data import load_fcst_radar_batch, load_hires_constants, fcst_hours
-import read_config
-
+from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+from dsrnngan import read_config
 return_dic = True
 
+fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
-    def __init__(self, dates, fcst_fields, batch_size, log_precip=True,
-                 shuffle=True, constants=None, hour='random', fcst_norm=True,
+    def __init__(self, dates, batch_size, forecast_data_source, observational_data_source, data_paths=DATA_PATHS,
+                 log_precip=True, shuffle=True, constants=True, hour='random', longitude_range=DEFAULT_LONGITUDE_RANGE,
+                 latitude_range=DEFAULT_LATITUDE_RANGE, fcst_norm=True,
                  downsample=False, seed=9999):
+
         self.dates = dates
 
         if isinstance(hour, str):
@@ -30,29 +32,43 @@ class DataGenerator(Sequence):
             self.hours = np.repeat(hour, len(self.dates))
             self.dates = np.tile(self.dates, len(hour))
 
+            if forecast_data_source == 'era5':
+                raise ValueError('ERA5 data only supports daily')
+
         else:
-            assert False, f"Unsupported hour {hour}"
+            raise ValueError(f"Unsupported hour {hour}")
 
         self.shuffle = shuffle
         if self.shuffle:
             np.random.seed(seed)
             self.shuffle_data()
 
+        self.forecast_data_source = forecast_data_source
+        self.observational_data_source = observational_data_source
+        self.data_paths = data_paths
         self.batch_size = batch_size
-        self.fcst_fields = fcst_fields
+
+        self.fcst_fields = fields_lookup[self.forecast_data_source.lower()]
         self.log_precip = log_precip
         self.shuffle = shuffle
         self.hour = hour
         self.fcst_norm = fcst_norm
         self.downsample = downsample
+        self.latitude_range = latitude_range
+        self.longitude_range = longitude_range
+               
         if self.downsample:
             # read downscaling factor from file
-            df_dict = read_config.read_downscaling_factor()  # read downscaling params
-            self.ds_factor = df_dict["downscaling_factor"]
-        if constants is None:
-            self.constants = constants
+            self.ds_factor = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
+        
+        if not constants:
+            # Dummy constants
+            self.constants = np.ones((self.batch_size, len(self.latitude_range), len(self.longitude_range), 1))
         elif constants is True:
-            self.constants = load_hires_constants(self.batch_size)
+            self.constants = load_hires_constants(self.batch_size,
+                                                  lsm_path=data_paths['GENERAL']['LSM'], 
+                                                  oro_path=data_paths['GENERAL']['OROGRAPHY'],
+                                                  latitude_vals=latitude_range, longitude_vals=longitude_range)
         else:
             self.constants = np.repeat(constants, self.batch_size, axis=0)
 
@@ -74,20 +90,23 @@ class DataGenerator(Sequence):
         # Load and return this batch of images
         data_x_batch, data_y_batch = load_fcst_radar_batch(
             dates_batch,
+            fcst_dir=self.data_paths['GENERAL'][self.forecast_data_source.upper()],
+            obs_data_dir=self.data_paths['GENERAL'][self.observational_data_source.upper()],
+            constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
             fcst_fields=self.fcst_fields,
             log_precip=self.log_precip,
+            fcst_data_source=self.forecast_data_source,
+            obs_data_source=self.observational_data_source,
             hour=hours_batch,
-            norm=self.fcst_norm)
+            norm=self.fcst_norm,
+            latitude_range=self.latitude_range,
+            longitude_range=self.longitude_range)
+        
         if self.downsample:
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
 
-        if self.constants is None:
-            if return_dic:
-                return {"lo_res_inputs": data_x_batch}, {"output": data_y_batch}
-            else:
-                return data_x_batch, data_y_batch
-        else:
+        
             if return_dic:
                 return {"lo_res_inputs": data_x_batch,
                         "hi_res_inputs": self.constants},\

@@ -1,28 +1,17 @@
 # Downscaling cGAN requirements:
 
-Use conda (even better, mamba); install everything from conda-forge
-- Python 3
-- TensorFlow 2
-    - we use v2.7; other versions should require no/minimal changes
-    - GPU strongly recommended (use a GPU-enabled TensorFlow build, compatable with the installed CUDA version)
-- numba[^1]
-- matplotlib
-- seaborn
-- cartopy
-- jupyter
-- xarray
-- pandas
-- netcdf4
-- h5netcdf
-- scikit-learn
-- cfgrib
-- dask
-- tqdm
-- properscoring
-- climlab
-- iris
+# Setup
 
-May also require cudatoolkit
+Uses Python3.9. Create a new conda enviroment with:
+
+`conda env create -f environment.yaml`
+
+Works on Linux, possibly not on Windows.
+
+Note that to set up this to work with a GPU you may also need to run:
+
+`pip uninstall tensorflow; pip install tensorflow-gpu`
+
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
 
@@ -79,7 +68,7 @@ file to somewhere on your local machine before training.
 
 Run the following to start the training:
 
-`python main.py --config path/to/config_file.yaml`
+`python main.py`
 
 There are a number of options you can use at this point. These will 
 evaluate your model after it has finished training:
@@ -104,12 +93,12 @@ time. Possibly weeks. You have been warned.
 As an example, to train a model and evaluate the last few model
 checkpoints, you could run:
 
-`python main.py --config path/to/config_file.yaml --evaluate --eval_blitz --plot_ranks`
+`python main.py --evaluate --eval_blitz --plot_ranks`
 
 2. If you've already trained your model, and you just want to run some 
 evaluation, use the --no_train flag, for example:
 
-`python main.py --config path/to/config_file.yaml --no_train --evaluate --eval_full`
+`python main.py --no_train --evaluate --eval_full`
 
 3. To generate plots of the output from a trained model, use `predict.py`
 This requires a path to the directory where the weights of the model are 

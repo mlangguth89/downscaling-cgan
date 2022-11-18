@@ -3,7 +3,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import concatenate, Conv2D, Dense, GlobalAveragePooling2D
 from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D
 
-from blocks import residual_block, const_upscale_block
+from dsrnngan.blocks import residual_block, const_upscale_block
 
 
 def generator(mode,

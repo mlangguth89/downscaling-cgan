@@ -7,14 +7,14 @@ from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
 import data
 import setupmodel
-from benchmarks import nn_interp_model
-from data import all_fcst_fields, get_dates
-from data_generator import DataGenerator as DataGeneratorFull
-from evaluation import _init_VAEGAN
-from noise import NoiseGenerator
-from pooling import pool
-from read_config import read_downscaling_factor
-from tfrecords_generator import create_fixed_dataset
+from dsrnngan.benchmarks import nn_interp_model
+from dsrnngan.data import all_fcst_fields, get_dates
+from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation import _init_VAEGAN
+from dsrnngan.noise import NoiseGenerator
+from dsrnngan.pooling import pool
+from dsrnngan.read_config import read_config
+from dsrnngan.tfrecords_generator import create_fixed_dataset
 
 
 def calculate_roc(*,
@@ -34,7 +34,7 @@ def calculate_roc(*,
                   ensemble_members,
                   calc_upsample):
 
-    df_dict = read_downscaling_factor()
+    df_dict = read_config()['DOWNSCALING']
     ds_fac = df_dict["downscaling_factor"]
     downscaling_steps = df_dict["steps"]
 

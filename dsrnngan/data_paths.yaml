@@ -1,18 +1,21 @@
-LOCATION1:
+BLUE_PEBBLE:
     GENERAL:
-        RADAR_PATH: '/path/to/radar/data'
-        FORECAST_PATH: '/path/to/forecast/data'
-        CONSTANTS_PATH: '/path/to/constants/data'
+        IMERG: '/bp1/geog-tropical/data/Obs/IMERG/half_hourly/final/'
+        ERA5: '/bp1/geog-tropical/data/ERA-5/day'
+        IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
+        NIMROD: ''
+        OROGRAPHY: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/h_HRES_EAfrica.nc'
+        LSM: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lsm_HRES_EAfrica.nc'
+        CONSTANTS: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants'
+    TFRecords:
+        tfrecords_path: '/user/work/uz22147/tfrecords/'      
+
+AOPP:
+    GENERAL:
+        NIMROD_PATH: '/network/group/aopp/predict/TIP018_HARRIS_TENSORFL/NIMROD'
+        IFS_PATH: '/network/group/aopp/predict/TIP018_HARRIS_TENSORFL/IFS'
+        CONSTANTS_PATH: '/network/group/aopp/predict/TIP018_HARRIS_TENSORFL/constants'
+        CONSTANTS_PATH_ORO: '/network/group/aopp/predict/TIP018_HARRIS_TENSORFL/constants/topo_local_0.01.nc'
 
     TFRecords:
-        tfrecords_path: '/path/to/tfrecords/folder'
-
-
-LOCATION2:
-    GENERAL:
-        RADAR_PATH: '/another/path/to/radar/data'
-        FORECAST_PATH: '/another/path/to/forecast/data'
-        CONSTANTS_PATH: '/another/path/to/constants/data'
-
-    TFRecords:
-        tfrecords_path: '/another/path/to/tfrecords/folder'
+        tfrecords_path: '/network/group/aopp/predict/TIP018_HARRIS_TENSORFL/tfrecordsIFS20'

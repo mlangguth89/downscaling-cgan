@@ -1,5 +1,5 @@
-import noise
-import plots
+from dsrnngan import noise
+from dsrnngan import plots
 
 
 def train_model(*,
@@ -11,6 +11,7 @@ def train_model(*,
                 latent_variables=None,
                 checkpoint=None,
                 steps_per_checkpoint=None,
+                do_plot=False,
                 plot_samples=8,
                 plot_fn=None):
 
@@ -34,6 +35,7 @@ def train_model(*,
     elif mode == 'det':
         loss_log = model.train(batch_gen_train, steps_per_checkpoint)
 
+    if do_plot:
     plots.plot_sequences(model.gen,
                          mode,
                          batch_gen_valid,

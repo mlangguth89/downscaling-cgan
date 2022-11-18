@@ -5,15 +5,15 @@ import os
 import numpy as np
 from properscoring import crps_ensemble
 
-import benchmarks
-import read_config
-from data import all_fcst_fields, get_dates
-from data_generator import DataGenerator as DataGeneratorFull
-from evaluation import calculate_ralsd_rmse, log_line
-from pooling import pool
+from dsrnngan import benchmarks
+from dsrnngan import read_config
+from dsrnngan.data import all_fcst_fields, get_dates
+from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation import calculate_ralsd_rmse, log_line
+from dsrnngan.pooling import pool
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
-ds_fac = read_config.read_downscaling_factor()["downscaling_factor"]
+ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--log_folder', type=str,

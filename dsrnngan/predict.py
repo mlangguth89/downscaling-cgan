@@ -11,19 +11,19 @@ import seaborn as sns
 from matplotlib import colorbar, colors, gridspec
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import ListedColormap
-import data
-import read_config
-from data import all_fcst_fields, get_dates, fcst_norm
-from data_generator import DataGenerator as DataGeneratorFull
-from evaluation import _init_VAEGAN
-from noise import NoiseGenerator
-from plots import plot_img_log_coastlines, truncate_colourmap
-from rapsd import plot_spectrum1d, rapsd
-from setupmodel import setup_model
-from tfrecords_generator import create_fixed_dataset
+from dsrnngan import data
+from dsrnngan import read_config
+from dsrnngan.data import all_fcst_fields, get_dates, fcst_norm
+from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation import _init_VAEGAN
+from dsrnngan.noise import NoiseGenerator
+from dsrnngan.plots import plot_img_log_coastlines, truncate_colourmap
+from dsrnngan.rapsd import plot_spectrum1d, rapsd
+from dsrnngan.setupmodel import setup_model
+from dsrnngan.tfrecords_generator import create_fixed_dataset
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
-downscaling_steps = read_config.read_downscaling_factor()["steps"]
+downscaling_steps = read_config.read_config()['DOWNSCALING']["steps"]
 
 # plotting parameters
 value_range_precip = (0.1, 15)

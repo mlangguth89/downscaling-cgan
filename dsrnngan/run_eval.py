@@ -23,6 +23,7 @@ with open(config_path, 'r') as f:
 mode = setup_params["GENERAL"]["mode"]
 arch = setup_params["MODEL"]["architecture"]
 padding = setup_params["MODEL"]["padding"]
+batch_size = 1  # setup_params["TRAIN"]["batch_size"]
 problem_type = setup_params["GENERAL"]["problem_type"]
 filters_gen = setup_params["GENERATOR"]["filters_gen"]
 noise_channels = setup_params["GENERATOR"]["noise_channels"]

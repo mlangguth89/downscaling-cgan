@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 
-from wloss import wasserstein_loss, CL_chooser
+from dsrnngan.wloss import wasserstein_loss, CL_chooser
 
 
 class VAE(keras.Model):
