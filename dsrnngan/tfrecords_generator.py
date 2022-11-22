@@ -236,7 +236,8 @@ def create_fixed_dataset(year=None,
 def _float_feature(list_of_floats):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-def write_data(years,
+def write_data(start_date: datetime.datetime,
+               end_date: datetime.datetime,
                forecast_data_source, 
                observational_data_source,
                hours=fcst_hours,
@@ -247,6 +248,7 @@ def write_data(years,
                log_precip=True,
                fcst_norm=True,
                data_paths=DATA_PATHS,
+               subfolder_name=None,
                constants=True,
                latitude_range=None,
                longitude_range=None):
@@ -254,11 +256,6 @@ def write_data(years,
     from .data_generator import DataGenerator
     logger.info('Start of write data')
     logger.info(locals())
-    
-    years = [years] if isinstance(years, int) else years
-    years = sorted(years)
-    start_date = datetime.datetime(year=int(years[0]), month=1, day=1)
-    end_date = datetime.datetime(year=int(years[-1]), month=12, day=31)
        
     dates = [item.date() for item in pd.date_range(start=start_date, end=end_date)]
     
@@ -282,10 +279,11 @@ def write_data(years,
     logger.info(f"Samples per image:{nsamples}")
     
     config = read_config.read_config()
-    relevant_args = ['forecast_data_source',  'observational_data_source', 'img_chunk_width', 'num_class', 'img_size', 'scaling_factor', \
+    relevant_args = ['start_date', 'end_date', 'forecast_data_source',  'observational_data_source', 
+                     'img_chunk_width', 'num_class', 'img_size', 'scaling_factor', \
                      'log_precip', 'fcst_norm','constants']
     args = locals()
-    arg_inputs = {k: args[k] for k in relevant_args}
+    arg_inputs = {k: str(args[k]) for k in relevant_args}
     
     all_params = {**config, **data_paths, **arg_inputs}
 
@@ -322,8 +320,11 @@ def write_data(years,
             for year in all_years:
                 fle_hdles[year] = []
                 for fh in range(num_class):
-                
-                    flename = os.path.join(hash_dir, f"{year}_{hour}.{fh}.tfrecords")
+                    if subfolder_name:
+                        flename = os.path.join(hash_dir, subfolder_name, f"{year}_{hour}.{fh}.tfrecords")
+                    else:
+                        flename = os.path.join(hash_dir, f"{year}_{hour}.{fh}.tfrecords")
+                        
                     fle_hdles[year].append(tf.io.TFRecordWriter(flename))
             
         for batch, date in tqdm(enumerate(dates)):
@@ -401,6 +402,22 @@ def write_data(years,
                 
     return hash_dir
 
+def write_train_test_data(*args, train_start_date, train_end_date, 
+                          validation_start_date=None, validation_end_date=None,
+                          test_start_date=None, test_end_date=None, **kwargs):
+    
+    
+    write_data(train_start_date, train_end_date, *args,
+               subfolder_name='train', **kwargs)
+    
+    if validation_start_date and validation_end_date:
+        write_data(validation_start_date, validation_end_date, *args,
+               subfolder_name='validation', **kwargs)
+        
+    if test_end_date and test_end_date:
+        write_data(test_start_date, test_end_date, *args,
+               subfolder_name='test', **kwargs)
+
 
 def save_dataset(tfrecords_dataset, flename, max_batches=None):
 
@@ -433,12 +450,18 @@ if __name__ == '__main__':
                         help='Source of forecast data')
     parser.add_argument('--obs-data-source', choices=['nimrod', 'imerg'], type=str,
                         help='Source of observational (ground truth) data')
-    # parser.add_argument('--start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-    #                     required=True, help="Start date in YYYYMMDD format")
-    # parser.add_argument('--end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-    #                     required=True, help="End date in YYYYMMDD format")
-    parser.add_argument('--years', default=2018, nargs='+',
-                        help='Year(s) to process (space separated)')
+    parser.add_argument('--train-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="Start date of training data in YYYYMMDD format")
+    parser.add_argument('--train-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="End date of training data in YYYYMMDD format")
+    parser.add_argument('--validation-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="Start date of validation data in YYYYMMDD format")
+    parser.add_argument('--validation-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="End date of validation data in YYYYMMDD format")
+    parser.add_argument('--test-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="Start date of test data in YYYYMMDD format")
+    parser.add_argument('--test-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
+                        required=True, help="End date of test data in YYYYMMDD format")
     parser.add_argument('--fcst-hours', nargs='+', default=np.arange(24), type=int, 
                     help='Hour(s) to process (space separated)')
     parser.add_argument('--log-precip', action='store_true')
@@ -458,17 +481,22 @@ if __name__ == '__main__':
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_data(args.years,
-                forecast_data_source=args.fcst_data_source, 
-                observational_data_source=args.obs_data_source,
-                hours=args.fcst_hours,
-                img_chunk_width=args.img_chunk_width,
-                num_class=args.num_classes,
-                img_size=args.img_size,
-                scaling_factor=args.scaling_factor,
-                log_precip=args.log_precip,
-                fcst_norm=args.fcst_norm,
-                data_paths=data_paths,
-                constants=not args.no_constants,
-                latitude_range=DEFAULT_LATITUDE_RANGE,
-                longitude_range=DEFAULT_LONGITUDE_RANGE)
+    write_train_test_data(train_start_date=args.train_start_date,
+                            train_end_date=args.train_end_date,
+                            validation_start_date=args.validation_start_date,
+                            validation_end_date=args.validation_end_date,
+                            test_start_date=args.test_start_date,
+                            test_end_date=args.test_end_date,
+                            forecast_data_source=args.fcst_data_source, 
+                            observational_data_source=args.obs_data_source,
+                            hours=args.fcst_hours,
+                            img_chunk_width=args.img_chunk_width,
+                            num_class=args.num_classes,
+                            img_size=args.img_size,
+                            scaling_factor=args.scaling_factor,
+                            log_precip=args.log_precip,
+                            fcst_norm=args.fcst_norm,
+                            data_paths=data_paths,
+                            constants=not args.no_constants,
+                            latitude_range=DEFAULT_LATITUDE_RANGE,
+                            longitude_range=DEFAULT_LONGITUDE_RANGE)

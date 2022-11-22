@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from glob import glob
 import numpy as np
-from datetime import datetime
+from datetime import datetime, date
 
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
@@ -33,27 +33,16 @@ class TestTfrecordsGenerator(unittest.TestCase):
                                     'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
                                     'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
                                     'CONSTANTS': str(test_data_dir / 'constants')},
-                          'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
-                        #   'TFRecords': {'tfrecords_path': tmpdirname}}
-            output_dir = write_data(2016,
-                forecast_data_source='ifs', 
-                observational_data_source='imerg',
-                hours=[0, 1, 2],
-                img_chunk_width=200,
-                img_size=200,
-                num_class=4,
-                log_precip=True,
-                fcst_norm=True,
-                scaling_factor=1,
-                latitude_range=np.arange(0, 1, 0.1),
-                    longitude_range=np.arange(33, 34, 0.1))
-        
-            output_dir = write_data(2017,
+                          'TFRecords': {'tfrecords_path': tmpdirname}}
+                        #   'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
+              
+            output_dir = write_data(start_date=datetime(2017,7, 4),
+                                    end_date=datetime(2017,12,31),
                     forecast_data_source='ifs', 
                     observational_data_source='imerg',
                     hours=[18],
-                    img_chunk_width=4,
-                    img_size=4,
+                    img_chunk_width=10,
+                    img_size=10,
                     num_class=4,
                     log_precip=True,
                     fcst_norm=True,
@@ -78,7 +67,8 @@ class TestTfrecordsGenerator(unittest.TestCase):
                                       'CONSTANTS': str(test_data_dir / 'constants')},
                         'TFRecords': {'tfrecords_path': tmpdirname}}
             
-            write_data(years=[2018, 2019],
+            write_data(start_date=datetime(2018, 1, 1),
+                       end_date=datetime(2019,1,31),
                         forecast_data_source='era5', 
                         observational_data_source='imerg',
                         hours=[18],
@@ -107,7 +97,8 @@ class TestTfrecordsGenerator(unittest.TestCase):
             # Check that it behaves correctly when radar data doesn't exist
 
         
-            write_data([2017],
+            write_data(start_date=date(2017,1,1),
+                       end_date=date(2017,3,1),
                 forecast_data_source='era5', 
                 observational_data_source='imerg',
                 hours=[12],

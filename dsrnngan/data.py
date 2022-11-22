@@ -828,33 +828,26 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=None,
                    imerg_data_dir=IMERG_PATH):
     dt_start = datetime(year, month, day, hour, 0, 0)
+    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B')
+    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{((2*hour + 1) * 30):04d}.V06B')
 
-    hourly_glob_str = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H*'))
-    fps = glob(hourly_glob_str)
+    fps = [fp1, fp2]
+    if os.path.isfile(fp1 + '.nc'):
+        file_ending = '.nc'#
+    else:
+        file_ending = '.HDF5'
     
-    if not fps:
-        raise FileNotFoundError(f"No file found for {dt_start.strftime('%Y%m%d-S%H*')}")
-
+    fps = [fp + file_ending for fp in fps]
+    
     datasets = []
     
-    # Check if these are hdfs5 files or nc files.
-    file_types = [item.split('.')[-1] for item in fps]
-    
-    if 'nc' in file_types or 'nc4' in file_types:
-        file_type = 'nc'
-    else:
-        file_type = file_types[0]
-
-    fps = [f for f in fps if f.endswith(file_type)]    
-    assert len(fps) == 2, f'Error: Not enough or too many files found for glob string {hourly_glob_str}'
-
     for fp in fps:
-        if file_type.lower() in ['nc', 'nc4']:
+        if file_ending.lower() == '.nc':
             datasets.append(xr.load_dataset(fp))
-        elif file_type.lower() == 'hdf5':
+        elif file_ending.lower() == '.hdf5':
             datasets.append(load_hdf5_file(fp, 'Grid'))
         else:
-            raise IOError(f'File formats {file_type} not supported')
+            raise IOError(f'File formats {file_ending} not supported')
 
     ds = xr.concat(datasets, dim='time').mean('time')
 

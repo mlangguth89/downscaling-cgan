@@ -2,6 +2,7 @@ import sys, os
 import unittest
 import tempfile
 import pickle
+import time
 from datetime import datetime
 import numpy as np
 import xarray as xr
@@ -31,7 +32,7 @@ ifs_path = str(data_folder / 'IFS')
 nimrod_path = str(data_folder / 'NIMROD')
 constants_path = str(data_folder / 'constants')
 era5_path = ERA5_PATH
-imerg_folder = IMERG_PATH
+imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 
 class TestLoad(unittest.TestCase):
     
@@ -425,6 +426,7 @@ class TestLoad(unittest.TestCase):
                             latitude_vals=latitude_vals,
                             longitude_vals=longitude_vals,
                             imerg_data_dir=imerg_folder)
+        
         self.assertIsInstance(ds, xr.Dataset)
         
         # Check that time dimmension already averaged over for the hour
