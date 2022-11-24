@@ -34,50 +34,54 @@ parser.add_argument('--evaluate', action='store_true',
 parser.add_argument('--plot-ranks', dest='plot_ranks', action='store_true',
                     help="Plot rank histograms")
 
-def main(training_records_folder, restart, do_training, evalnum, evaluate, plot_ranks,
+def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_ranks,
          seed=None):
     
-    setup_params = utils.load_yaml_file(os.path.join(training_records_folder, 'local_config.yaml'))
+    config = read_config.read_config()
+    records_folder = os.path.join(root_records_folder, utils.hash_dict(config))
     
+    if not os.path.isdir(records_folder):
+        raise ValueError('Data has not been prepared that matches this config')
+
     # TODO either change this to use a toml file or e.g. pydantic input validation
-    mode = setup_params["GENERAL"]["mode"]
-    arch = setup_params["MODEL"]["architecture"]
-    padding = setup_params["MODEL"]["padding"]
-    log_folder = setup_params["SETUP"]["log_folder"]
-    problem_type = setup_params["GENERAL"]["problem_type"]
-    downsample = setup_params["GENERAL"]["downsample"]
-    fcst_data_source=setup_params['DATA']['fcst_data_source']
-    obs_data_source=setup_params['DATA']['obs_data_source']
-    input_channels = setup_params['DATA']['input_channels']
-    constant_fields = setup_params['DATA']['constant_fields']
-    fcst_image_width = setup_params['DATA']['fcst_image_width']
-    output_image_width = setup_params['DATA']['output_image_width']
-    constants_image_width = setup_params['DATA']['constants_width']
-    load_constants = setup_params['DATA']['load_constants']
-    downscaling_steps = setup_params['DOWNSCALING']['steps']
-    downscaling_factor = setup_params['DOWNSCALING']['downscaling_factor']
-    filters_gen = setup_params["GENERATOR"]["filters_gen"]
-    lr_gen = float(setup_params["GENERATOR"]["learning_rate_gen"])
-    noise_channels = setup_params["GENERATOR"]["noise_channels"]
-    latent_variables = setup_params["GENERATOR"]["latent_variables"]
-    filters_disc = setup_params["DISCRIMINATOR"]["filters_disc"]
-    lr_disc = setup_params["DISCRIMINATOR"]["learning_rate_disc"]
-    train_years = setup_params["TRAIN"]["train_years"]
-    training_weights = setup_params["TRAIN"]["training_weights"]
-    num_samples = setup_params["TRAIN"]["num_samples"]
-    steps_per_checkpoint = setup_params["TRAIN"]["steps_per_checkpoint"]
-    batch_size = setup_params["TRAIN"]["batch_size"]
-    kl_weight = setup_params["TRAIN"]["kl_weight"]
-    ensemble_size = setup_params["TRAIN"]["ensemble_size"]
-    CLtype = setup_params["TRAIN"]["CL_type"]
-    content_loss_weight = setup_params["TRAIN"]["content_loss_weight"]
-    val_years = setup_params.get("VAL", {}).get("val_years")
-    val_size = setup_params.get("VAL", {}).get("val_size")
-    num_images = setup_params["EVAL"]["num_batches"]
-    add_noise = setup_params["EVAL"]["add_postprocessing_noise"]
-    noise_factor = setup_params["EVAL"]["postprocessing_noise_factor"]
-    max_pooling = setup_params["EVAL"]["max_pooling"]
-    avg_pooling = setup_params["EVAL"]["avg_pooling"]
+    mode = config["GENERAL"]["mode"]
+    arch = config["MODEL"]["architecture"]
+    padding = config["MODEL"]["padding"]
+    log_folder = config["SETUP"]["log_folder"]
+    problem_type = config["GENERAL"]["problem_type"]
+    downsample = config["GENERAL"]["downsample"]
+    fcst_data_source=config['DATA']['fcst_data_source']
+    obs_data_source=config['DATA']['obs_data_source']
+    input_channels = config['DATA']['input_channels']
+    constant_fields = config['DATA']['constant_fields']
+    fcst_image_width = config['DATA']['fcst_image_width']
+    output_image_width = config['DATA']['output_image_width']
+    constants_image_width = config['DATA']['constants_width']
+    load_constants = config['DATA']['load_constants']
+    downscaling_steps = config['DOWNSCALING']['steps']
+    downscaling_factor = config['DOWNSCALING']['downscaling_factor']
+    filters_gen = config["GENERATOR"]["filters_gen"]
+    lr_gen = float(config["GENERATOR"]["learning_rate_gen"])
+    noise_channels = config["GENERATOR"]["noise_channels"]
+    latent_variables = config["GENERATOR"]["latent_variables"]
+    filters_disc = config["DISCRIMINATOR"]["filters_disc"]
+    lr_disc = config["DISCRIMINATOR"]["learning_rate_disc"]
+    train_years = config["TRAIN"]["train_years"]
+    training_weights = config["TRAIN"]["training_weights"]
+    num_samples = config["TRAIN"]["num_samples"]
+    steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
+    batch_size = config["TRAIN"]["batch_size"]
+    kl_weight = config["TRAIN"]["kl_weight"]
+    ensemble_size = config["TRAIN"]["ensemble_size"]
+    CLtype = config["TRAIN"]["CL_type"]
+    content_loss_weight = config["TRAIN"]["content_loss_weight"]
+    val_years = config.get("VAL", {}).get("val_years")
+    val_size = config.get("VAL", {}).get("val_size")
+    num_images = config["EVAL"]["num_batches"]
+    add_noise = config["EVAL"]["add_postprocessing_noise"]
+    noise_factor = config["EVAL"]["postprocessing_noise_factor"]
+    max_pooling = config["EVAL"]["max_pooling"]
+    avg_pooling = config["EVAL"]["avg_pooling"]
     
     # otherwise these are of type string, e.g. '1e-5'
     lr_gen = float(lr_gen)
@@ -86,9 +90,6 @@ def main(training_records_folder, restart, do_training, evalnum, evaluate, plot_
     noise_factor = float(noise_factor)
     content_loss_weight = float(content_loss_weight)
 
-    if data_paths is None:
-        data_paths = read_config.get_data_paths()
-        
     if mode not in ['GAN', 'VAEGAN', 'det']:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
 
@@ -112,7 +113,7 @@ def main(training_records_folder, restart, do_training, evalnum, evaluate, plot_
     # save setup parameters
     save_config = os.path.join(log_folder, 'setup_params.yaml')
     with open(save_config, 'w') as outfile:
-        yaml.dump(setup_params, outfile, default_flow_style=False)
+        yaml.dump(config, outfile, default_flow_style=False)
 
     if do_training:
         # initialize GAN
@@ -145,7 +146,7 @@ def main(training_records_folder, restart, do_training, evalnum, evaluate, plot_
             fcst_data_source=fcst_data_source,
             obs_data_source=obs_data_source,
             val_size=val_size,
-            records_folder=data_paths["TFRecords"]["tfrecords_path"],
+            records_folder=records_folder,
             downsample=downsample,
             fcst_shape=fcst_shape,
             con_shape=con_shape,

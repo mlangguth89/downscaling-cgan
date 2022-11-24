@@ -3,7 +3,6 @@ BLUE_PEBBLE:
         IMERG: '/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final/'
         ERA5: '/bp1/geog-tropical/data/ERA-5/day'
         IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
-        NIMROD: ''
         OROGRAPHY: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/h_HRES_EAfrica.nc'
         LSM: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lsm_HRES_EAfrica.nc'
         CONSTANTS: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants'

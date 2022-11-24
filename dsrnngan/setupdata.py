@@ -1,17 +1,14 @@
 import gc
-import datetime
 
 from debugpy import listen
 
 from dsrnngan import tfrecords_generator
 from dsrnngan.tfrecords_generator import DataGenerator
-from dsrnngan.data import all_ifs_fields, DATA_PATHS
+from dsrnngan.data import all_ifs_fields
 
 
-def setup_batch_gen(train_start_date: datetime.datetime,
-                    train_end_date: datetime.datetime,
-                    val_start_date: datetime.datetime,
-                    val_end_date: datetime.datetime,
+def setup_batch_gen(train_years:list,
+                    val_years: list,
                     records_folder: str,
                     fcst_shape: tuple,
                     con_shape: tuple,
@@ -26,7 +23,7 @@ def setup_batch_gen(train_start_date: datetime.datetime,
 
     tfrecords_generator.return_dic = False
     print(f"downsample flag is {downsample}")
-    train = None if train_start_date is None \
+    train = None if train_years is None \
         else DataGenerator(train_years,
                            batch_size=batch_size,
                            fcst_shape=fcst_shape,
@@ -53,22 +50,18 @@ def setup_batch_gen(train_start_date: datetime.datetime,
     return train, None
 
 
-def setup_full_image_dataset(start_date,
-                             end_date,
+def setup_full_image_dataset(years,
                              fcst_data_source,
                              obs_data_source,
                              load_constants,
-                             data_paths=DATA_PATHS,
                              batch_size=1,
                              downsample=False):
 
     from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
     from dsrnngan.data import get_obs_dates
 
-    dates = get_obs_dates(start_date=start_date,
-                          end_date=end_date, 
-                          obs_data_source=obs_data_source,
-                          data_paths=data_paths)
+    dates = get_obs_dates(years, 
+                      obs_data_source=obs_data_source)
     data_full = DataGeneratorFull(dates=dates,
                                   forecast_data_source=fcst_data_source, 
                                   observational_data_source=obs_data_source,
@@ -78,18 +71,15 @@ def setup_full_image_dataset(start_date,
                                   constants=load_constants,
                                   hour='random',
                                   fcst_norm=True,
-                                  downsample=downsample,
-                                  data_paths=data_paths)
+                                  downsample=downsample)
     return data_full
 
 
 def setup_data(records_folder,
                fcst_data_source,
                obs_data_source,
-               train_start_date,
-               train_end_date,
-               val_start_date,
-               val_end_date,
+               train_years=None,
+               val_years=None,
                val_size=None,
                downsample=False,
                fcst_shape=(20, 20, 9),
@@ -102,17 +92,15 @@ def setup_data(records_folder,
                seed=None):
 
     if load_full_image:
-        batch_gen_train = None if train_start_date is None \
-            else setup_full_image_dataset(train_start_date,
-                                          train_end_date,
+        batch_gen_train = None if train_years is None \
+            else setup_full_image_dataset(train_years,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
                                           batch_size=batch_size,
                                           downsample=downsample,
                                           load_constants=load_constants)
-        batch_gen_valid = None if val_start_date is None \
-            else setup_full_image_dataset(val_start_date,
-                                          val_end_date,
+        batch_gen_valid = None if val_years is None \
+            else setup_full_image_dataset(val_years,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
                                           batch_size=batch_size,
@@ -121,10 +109,8 @@ def setup_data(records_folder,
 
     else:
         batch_gen_train, batch_gen_valid = setup_batch_gen(
-            train_start_date,
-            train_end_date,
-            val_start_date,
-            val_end_date,
+            train_years=train_years,
+            val_years=val_years,
             records_folder=records_folder,
             fcst_shape=fcst_shape,
             con_shape=con_shape,

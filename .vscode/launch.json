@@ -1,0 +1,51 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: main.py",
+            "type": "python",
+            "request": "launch",
+            "module": "dsrnngan.main",
+            "justMyCode": true,
+            "args": [
+                "--training-records-folder",
+                "/user/work/uz22147/tfrecords/ced292ce4b3d3652",
+                "--eval-blitz"
+            ],
+            "cwd": "/user/home/uz22147/repos/downscaling-cgan"
+        },
+        {
+            "name": "Python: tfrecords",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "module": "dsrnngan.tfrecords_generator",
+            "args": [
+                "--fcst-data-source",
+                "ifs",
+                "--obs-data-source",
+                "imerg",
+                "--train-start-date",
+                "20160301",
+                "--train-end-date",
+                "20170228",
+                "--log-precip",
+                "--fcst-norm",
+                "--img-size",
+                "200",
+                "--img-chunk-width",
+                "200",
+                "--scaling-factor",
+                "1",
+                "--records-folder",
+                "/user/work/uz22147/tfrecords"
+            ],
+            "cwd": "/user/home/uz22147/repos/downscaling-cgan"
+        }
+    ]
+}

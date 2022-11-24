@@ -25,10 +25,10 @@ DATA_PATHS = read_config.get_data_paths()
 
 # Raw paths for data that has not been regridded or cut down to correct lat/lon range
 
-IMERG_PATH = DATA_PATHS["GENERAL"].get("IMERG")
-NIMROD_PATH = DATA_PATHS["GENERAL"].get("NIMROD")
-ERA5_PATH = DATA_PATHS["GENERAL"].get("ERA5")
-IFS_PATH = DATA_PATHS["GENERAL"].get("IFS")
+IMERG_PATH = DATA_PATHS["GENERAL"].get("IMERG", '')
+NIMROD_PATH = DATA_PATHS["GENERAL"].get("NIMROD", '')
+ERA5_PATH = DATA_PATHS["GENERAL"].get("ERA5", '')
+IFS_PATH = DATA_PATHS["GENERAL"].get("IFS", '')
 OROGRAPHY_PATH = DATA_PATHS["GENERAL"].get("OROGRAPHY")
 LSM_PATH = DATA_PATHS["GENERAL"].get("LSM")
 CONSTANTS_PATH = DATA_PATHS["GENERAL"].get("CONSTANTS")
@@ -189,9 +189,9 @@ def file_exists(data_source, year, month, day, data_paths=DATA_PATHS):
                 return True
 
     elif data_source == 'ifs':
-        glob_str = get_ifs_filepath('tp', loaddate=datetime(year, month, day), 
-                                  loadtime='*', fcst_dir=data_path)
-        if len(glob(glob_str)) > 0:
+        fp = get_ifs_filepath('tp', loaddate=datetime(year, month, day), 
+                                  loadtime='12', fcst_dir=data_path)
+        if os.path.isfile(fp):
             return True
 
     elif data_source == 'era5':
@@ -228,6 +228,13 @@ def interpolate_dataset_on_lat_lon(ds, latitude_vals, longitude_vals,
 
     min_lon = min(longitude_vals)
     max_lon = max(longitude_vals)
+    
+    existing_latitude_vals = ds[lat_var_name].values
+    existing_longitude_vals = ds[lon_var_name].values
+    
+    if [item in existing_latitude_vals for item in latitude_vals] and [item in existing_longitude_vals for item in longitude_vals]:
+        ds = ds.sel({lat_var_name: latitude_vals}).sel({lon_var_name: longitude_vals})
+        return ds
     
     # Filter to correct lat/lon range (faster this way)
     # Add a buffer around it for interpolation
@@ -520,12 +527,11 @@ def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH,
     dt = datetime.strptime(date, "%Y%m%d")
     ds = load_ifs_raw(field, dt.year, dt.month, dt.day, hour, ifs_data_dir=fcst_dir,
                  latitude_vals=latitude_vals, longitude_vals=longitude_vals, interpolate=True)
-    
-    stats_dict = get_ifs_stats(field, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
-                                use_cached=True, ifs_data_dir=fcst_dir,
-                                output_dir=constants_path)
 
     if norm:
+        stats_dict = get_ifs_stats(field, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
+                            use_cached=True, ifs_data_dir=fcst_dir,
+                            output_dir=constants_path)
         # Normalisation here      
         ds = preprocess(field, ds, stats_dict=stats_dict, var_name_lookup=var_name_lookup)
     
@@ -582,7 +588,7 @@ def get_ifs_stats(field, latitude_vals, longitude_vals, output_dir=None,
             stats = pickle.load(f)
 
     else:
-
+        print('Calculating stats')
         all_dates = list(pd.date_range(start=f'{year}-01-01', end=f'{year}-12-01', freq='D'))
         all_dates = [item.date() for item in all_dates]
 

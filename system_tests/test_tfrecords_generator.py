@@ -28,14 +28,14 @@ class TestTfrecordsGenerator(unittest.TestCase):
             
             
             test_data_dir = HOME / 'system_tests' / 'data'
-            # data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
-            #                         'IFS': str(test_data_dir / 'IFS'),
-            #                         'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
-            #                         'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
-            #                         'CONSTANTS': str(test_data_dir / 'constants')},
-            #               'TFRecords': {'tfrecords_path': tmpdirname}}
-            #             #   'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
-              
+            
+            data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
+                                    'IFS': str(test_data_dir / 'IFS'),
+                                    'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
+                                    'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
+                                    'CONSTANTS': str(test_data_dir / 'constants')},
+                          'TFRecords': {'tfrecords_path': tmpdirname}}            
+
             output_dir = write_data(start_date=datetime(2017,7, 4),
                                     end_date=datetime(2017,12,31),
                     forecast_data_source='ifs', 

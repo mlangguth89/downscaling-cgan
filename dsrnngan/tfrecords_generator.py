@@ -237,8 +237,7 @@ def create_fixed_dataset(year=None,
 def _float_feature(list_of_floats):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-def write_data(start_date: datetime.datetime,
-               end_date: datetime.datetime,
+def write_data(years,
                forecast_data_source, 
                observational_data_source,
                hours=fcst_hours,
@@ -252,11 +251,17 @@ def write_data(start_date: datetime.datetime,
                subfolder_name=None,
                constants=True,
                latitude_range=None,
-               longitude_range=None):
+               longitude_range=None,
+               debug=False):
 
     from .data_generator import DataGenerator
     logger.info('Start of write data')
     logger.info(locals())
+    
+    years = [years] if isinstance(years, int) else years
+    years = sorted(years)
+    start_date = datetime.datetime(year=int(years[0]), month=1, day=1)
+    end_date = datetime.datetime(year=int(years[-1]), month=12, day=31)
        
     dates = [item.date() for item in pd.date_range(start=start_date, end=end_date)]
     
@@ -295,6 +300,9 @@ def write_data(start_date: datetime.datetime,
     # Write params in directory
     write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
     write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
+    
+    if debug:
+        dates = dates[:1]
 
     for hour in hours:
         print('Hour = ', hour)
@@ -378,7 +386,7 @@ def write_data(start_date: datetime.datetime,
                             raise ValueError('Unexpected NaN values in data')
                         
                         # Check for empty data
-                        if observations.sum() == 0 or forecast.sum() == 0 or const.sum() == 0:
+                        if forecast.sum() == 0 or const.sum() == 0:
                             raise ValueError('one or more of arrays is all zeros')
                         
                         # Check hi res data has same dimensions
@@ -409,21 +417,21 @@ def write_data(start_date: datetime.datetime,
                 
     return hash_dir
 
-def write_train_test_data(*args, train_start_date, train_end_date, 
-                          validation_start_date=None, validation_end_date=None,
-                          test_start_date=None, test_end_date=None, **kwargs):
+def write_train_test_data(*args, train_years,
+                          validation_years=None,
+                          test_years=None, **kwargs):
     
     
-    write_data(train_start_date, train_end_date, *args,
+    write_data(train_years, *args,
                subfolder_name='train', **kwargs)
     
-    if validation_start_date and validation_end_date:
-        write_data(validation_start_date, validation_end_date, *args,
+    if validation_years:
+        write_data(validation_years, *args,
                subfolder_name='validation', **kwargs)
         
-    if test_end_date and test_end_date:
-        write_data(test_start_date, test_end_date, *args,
-               subfolder_name='test', **kwargs)
+    if test_years:
+        write_data(test_years, *args,
+                   subfolder_name='test', **kwargs)
 
 
 def save_dataset(tfrecords_dataset, flename, max_batches=None):
@@ -462,17 +470,14 @@ if __name__ == '__main__':
 
     config = read_config.read_config()
     
-    train_start_date = config['TRAIN']['train_start_date']
-    train_end_date = config['TRAIN']['train_end_date']
-    validation_start_date = config['VAL'].get('valitation_start_date')
-    validation_end_date = config['VAL'].get('valitation_end_date')
-    test_start_date = config['EVAL'].get('test_start_date')
-    test_end_date = config['EVAL'].get('test_end_date')
+    train_years = config['TRAIN']['train_years']
+    val_years = config['VAL'].get('val_years')
+    test_years = config['EVAL'].get('test_years')
     
     fcst_data_source = config['DATA']['fcst_data_source']
     obs_data_source = config['DATA']['obs_data_source']
     log_precip = config['DATA']['log_precip']
-    fcst_norm = config['DATA']['fcst_norm']
+    fcst_norm = config['DATA'].get('fcst_norm', False)
     num_classes = config['DATA']['num_classes']
     img_size = config['DATA']['input_image_width']
     min_latitude = config['DATA']['min_latitude']
@@ -482,11 +487,9 @@ if __name__ == '__main__':
     max_longitude = config['DATA']['max_longitude']
     longitude_step_size = config['DATA']['longitude_step_size']
     
-    
-    img_chunk_width = config['TRAINING']['img_chunk_width']
-    
     scaling_factor =  config['DOWNSCALING']['downscaling_factor']
     load_constants = config['DATA']['load_constants']
+    img_chunk_width = config['TRAIN']['img_chunk_width']
     
     args = parser.parse_args()
     
@@ -494,12 +497,9 @@ if __name__ == '__main__':
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_train_test_data(train_start_date=train_start_date,
-                            train_end_date=train_end_date,
-                            validation_start_date=validation_start_date,
-                            validation_end_date=validation_end_date,
-                            test_start_date=test_start_date,
-                            test_end_date=test_end_date,
+    write_train_test_data(train_years=train_years,
+                            validation_years=val_years,
+                            test_years=test_years,
                             forecast_data_source=fcst_data_source, 
                             observational_data_source=obs_data_source,
                             hours=args.fcst_hours,
