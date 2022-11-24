@@ -8,6 +8,7 @@ import tensorflow as tf
 import logging
 import hashlib
 from argparse import ArgumentParser
+from calendar import monthrange
 from tqdm import tqdm
 import pandas as pd
 
@@ -24,11 +25,11 @@ DATA_PATHS = read_config.get_data_paths()
 records_folder = DATA_PATHS["TFRecords"]["tfrecords_path"]
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 
-def DataGenerator(year, batch_size, fcst_shape, con_shape, 
+def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
                   downsample=False, weights=None, 
                   records_folder=records_folder, seed=None):
-    return create_mixed_dataset(year, 
+    return create_mixed_dataset(data_label, 
                                 batch_size,
                                 fcst_shape,
                                 con_shape,
@@ -40,7 +41,7 @@ def DataGenerator(year, batch_size, fcst_shape, con_shape,
                                 seed=seed)
 
 
-def create_mixed_dataset(year: int,
+def create_mixed_dataset(data_label: str,
                          batch_size: int,
                          fcst_shape: tuple[int, int, int]=(20, 20, 9),
                          con_shape: tuple[int, int, int]=(200, 200, 2),
@@ -73,7 +74,7 @@ def create_mixed_dataset(year: int,
     classes = 4
     if weights is None:
         weights = [1./classes]*classes
-    datasets = [create_dataset(year,
+    datasets = [create_dataset(data_label,
                                i,
                                fcst_shape=fcst_shape,
                                con_shape=con_shape,
@@ -152,7 +153,7 @@ def _parse_batch(record_batch,
         return example['generator_input'], example['constants'], example['generator_output']
 
 
-def create_dataset(year: int,
+def create_dataset(data_label: str,
                    clss: str,
                    fcst_shape=(20, 20, 9),
                    con_shape=(200, 200, 2),
@@ -180,14 +181,7 @@ def create_dataset(year: int,
     # Use autotune to tune the prefetching of records in parrallel to processing to improve performance
     AUTOTUNE = tf.data.experimental.AUTOTUNE
 
-    if isinstance(year, (str, int)):
-        fl = glob.glob(f"{folder}/{year}_*.{clss}.tfrecords")
-    elif isinstance(year, list):
-        fl = []
-        for y in year:
-            fl += glob.glob(f"{folder}/{y}_*.{clss}.tfrecords")
-    else:
-        assert False, f"TFRecords not configure for type {type(year)}"
+    fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
     ds = tf.data.TFRecordDataset(fl,
                                  num_parallel_reads=AUTOTUNE)
@@ -237,7 +231,8 @@ def create_fixed_dataset(year=None,
 def _float_feature(list_of_floats):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-def write_data(years,
+def write_data(year_month_range,
+               data_label,
                forecast_data_source, 
                observational_data_source,
                hours=fcst_hours,
@@ -248,7 +243,6 @@ def write_data(years,
                log_precip=True,
                fcst_norm=True,
                data_paths=DATA_PATHS,
-               subfolder_name=None,
                constants=True,
                latitude_range=None,
                longitude_range=None,
@@ -257,11 +251,13 @@ def write_data(years,
     from .data_generator import DataGenerator
     logger.info('Start of write data')
     logger.info(locals())
-    
-    years = [years] if isinstance(years, int) else years
-    years = sorted(years)
-    start_date = datetime.datetime(year=int(years[0]), month=1, day=1)
-    end_date = datetime.datetime(year=int(years[-1]), month=12, day=31)
+        
+    start_date = datetime.datetime(year=int(year_month_range[0][:4]), month=int(year_month_range[0][4:6]), day=1)
+    end_year = int(year_month_range[1][:4])
+    end_month = int(year_month_range[1][4:6])
+    end_date = datetime.datetime(year=end_year, 
+                                 month=end_month, 
+                                 day=monthrange(end_year, end_month)[1])
        
     dates = [item.date() for item in pd.date_range(start=start_date, end=end_date)]
     
@@ -273,7 +269,7 @@ def write_data(years,
     dates = [item for item in dates if file_exists(data_source=forecast_data_source, year=item.year,
                                                         month=item.month, day=item.day,
                                                         data_paths=data_paths)]
-    if not dates[0] == start_date.date():
+    if not dates[0] == start_date.date() and not debug:
         # Means there likely isn't forecast data for the day before
         dates = dates[1:]
         
@@ -327,16 +323,7 @@ def write_data(years,
             for year in all_years:
                 fle_hdles[year] = []
                 for fh in range(num_class):
-                    if subfolder_name:
-                        output_dir = os.path.join(hash_dir, subfolder_name)
-                    
-                        if not os.path.isdir(output_dir):
-                            os.mkdir(output_dir)
-                            
-                        flename = os.path.join(output_dir, f"{year}_{hour}.{fh}.tfrecords")
-                    else:
-                        flename = os.path.join(hash_dir, f"{year}_{hour}.{fh}.tfrecords")
-                        
+                    flename = os.path.join(hash_dir, f"{data_label}_{hour}.{fh}.tfrecords")
                     fle_hdles[year].append(tf.io.TFRecordWriter(flename))
         
         print(f'File initialization took {time.time() - start_time}')
@@ -417,21 +404,24 @@ def write_data(years,
                 
     return hash_dir
 
-def write_train_test_data(*args, train_years,
-                          validation_years=None,
-                          test_years=None, **kwargs):
+def write_train_test_data(*args, training_range,
+                          validation_range=None,
+                          test_range=None, **kwargs):
     
     
-    write_data(train_years, *args,
-               subfolder_name='train', **kwargs)
+    write_data(training_range, *args,
+               data_label='train', **kwargs)
     
-    if validation_years:
-        write_data(validation_years, *args,
-               subfolder_name='validation', **kwargs)
+    if validation_range:
+        print('\n*** Writing validation data')
+        write_data(validation_range, *args,
+               data_label='validation', **kwargs)
         
-    if test_years:
-        write_data(test_years, *args,
-                   subfolder_name='test', **kwargs)
+    if test_range:
+        print('\n*** Writing test data')
+
+        write_data(test_range, *args,
+                   data_label='test', **kwargs)
 
 
 def save_dataset(tfrecords_dataset, flename, max_batches=None):
@@ -470,9 +460,15 @@ if __name__ == '__main__':
 
     config = read_config.read_config()
     
-    train_years = config['TRAIN']['train_years']
-    val_years = config['VAL'].get('val_years')
-    test_years = config['EVAL'].get('test_years')
+    training_range = config['TRAIN']['training_range']
+    val_range = config['VAL'].get('val_range')
+    test_range = config['EVAL'].get('test_range')
+    
+    training_range = [str(item) for item in training_range]
+    if val_range:
+        val_range = [str(item) for item in val_range]
+    if test_range:
+        test_range = [str(item) for item in test_range]
     
     fcst_data_source = config['DATA']['fcst_data_source']
     obs_data_source = config['DATA']['obs_data_source']
@@ -488,7 +484,7 @@ if __name__ == '__main__':
     longitude_step_size = config['DATA']['longitude_step_size']
     
     scaling_factor =  config['DOWNSCALING']['downscaling_factor']
-    load_constants = config['DATA']['load_constants']
+    load_constants = config['DATA'].get('load_constants', True)
     img_chunk_width = config['TRAIN']['img_chunk_width']
     
     args = parser.parse_args()
@@ -497,9 +493,9 @@ if __name__ == '__main__':
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_train_test_data(train_years=train_years,
-                            validation_years=val_years,
-                            test_years=test_years,
+    write_train_test_data(training_range=training_range,
+                          validation_range=val_range,
+                          test_range=test_range,
                             forecast_data_source=fcst_data_source, 
                             observational_data_source=obs_data_source,
                             hours=args.fcst_hours,

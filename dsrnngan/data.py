@@ -232,7 +232,7 @@ def interpolate_dataset_on_lat_lon(ds, latitude_vals, longitude_vals,
     existing_latitude_vals = ds[lat_var_name].values
     existing_longitude_vals = ds[lon_var_name].values
     
-    if [item in existing_latitude_vals for item in latitude_vals] and [item in existing_longitude_vals for item in longitude_vals]:
+    if all([item in existing_latitude_vals for item in latitude_vals]) and all([item in existing_longitude_vals for item in longitude_vals]):
         ds = ds.sel({lat_var_name: latitude_vals}).sel({lon_var_name: longitude_vals})
         return ds
     
@@ -465,15 +465,15 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
     time = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
 
     # Get the correct forecast starttime
-    if time.hour <= 6:
+    if time.hour < 6:
         tmpdate = time - timedelta(days=1)
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'
-    elif 6 < time.hour <= 18:
+    elif 6 <= time.hour < 18:
         tmpdate = time
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=6)
         loadtime = '00'
-    elif 18 < time.hour < 24:
+    elif 18 <= time.hour < 24:
         tmpdate = time
         loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'

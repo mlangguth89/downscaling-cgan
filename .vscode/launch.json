@@ -11,8 +11,8 @@
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--training-records-folder",
-                "/user/work/uz22147/tfrecords/ced292ce4b3d3652",
+                "--root-records-folder",
+                "/user/work/uz22147/tfrecords/",
                 "--eval-blitz"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
@@ -21,29 +21,10 @@
             "name": "Python: tfrecords",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
             "justMyCode": true,
             "module": "dsrnngan.tfrecords_generator",
             "args": [
-                "--fcst-data-source",
-                "ifs",
-                "--obs-data-source",
-                "imerg",
-                "--train-start-date",
-                "20160301",
-                "--train-end-date",
-                "20170228",
-                "--log-precip",
-                "--fcst-norm",
-                "--img-size",
-                "200",
-                "--img-chunk-width",
-                "200",
-                "--scaling-factor",
-                "1",
-                "--records-folder",
-                "/user/work/uz22147/tfrecords"
+                "--fcst-hour", "18", "--records-folder", "/user/work/uz22147/tfrecords"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         }

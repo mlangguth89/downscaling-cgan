@@ -1,5 +1,5 @@
 import gc
-
+import os
 from debugpy import listen
 
 from dsrnngan import tfrecords_generator
@@ -24,14 +24,14 @@ def setup_batch_gen(train_years:list,
     tfrecords_generator.return_dic = False
     print(f"downsample flag is {downsample}")
     train = None if train_years is None \
-        else DataGenerator(train_years,
+        else DataGenerator('train',
                            batch_size=batch_size,
                            fcst_shape=fcst_shape,
                            con_shape=con_shape,
                            out_shape=out_shape,
                            downsample=downsample, 
                            weights=weights, 
-                           records_folder=records_folder, 
+                           records_folder=os.path.join(records_folder, 'train'), 
                            seed=seed)
 
     # note -- using create_fixed_dataset with a batch size not divisible by 16 will cause problems [is this true?]

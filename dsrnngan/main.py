@@ -17,9 +17,10 @@ from dsrnngan import setupdata
 from dsrnngan import setupmodel
 from dsrnngan import train
 from dsrnngan import utils
+from dsrnngan import data
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--training-records-folder', type=str,
+parser.add_argument('--root-records-folder', type=str, default=data.DATA_PATHS['TFRecords']['tfrecords_path'],
                     help="Folder from which to gather the tensorflow records")
 parser.add_argument('--no-train', dest='do_training', action='store_false',
                     help="Do NOT carry out training, only perform eval")
@@ -50,16 +51,16 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
     log_folder = config["SETUP"]["log_folder"]
     problem_type = config["GENERAL"]["problem_type"]
     downsample = config["GENERAL"]["downsample"]
+    downscaling_steps = config['DOWNSCALING']['steps']
+    downscaling_factor = config['DOWNSCALING']['downscaling_factor']
     fcst_data_source=config['DATA']['fcst_data_source']
     obs_data_source=config['DATA']['obs_data_source']
     input_channels = config['DATA']['input_channels']
     constant_fields = config['DATA']['constant_fields']
-    fcst_image_width = config['DATA']['fcst_image_width']
-    output_image_width = config['DATA']['output_image_width']
-    constants_image_width = config['DATA']['constants_width']
+    input_image_width = config['DATA']['input_image_width']
+    output_image_width = downscaling_factor * input_image_width
+    constants_image_width = input_image_width
     load_constants = config['DATA']['load_constants']
-    downscaling_steps = config['DOWNSCALING']['steps']
-    downscaling_factor = config['DOWNSCALING']['downscaling_factor']
     filters_gen = config["GENERATOR"]["filters_gen"]
     lr_gen = float(config["GENERATOR"]["learning_rate_gen"])
     noise_channels = config["GENERATOR"]["noise_channels"]
@@ -135,7 +136,7 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
             CLtype=CLtype,
             content_loss_weight=content_loss_weight)
         
-        fcst_shape=(fcst_image_width, fcst_image_width, input_channels)
+        fcst_shape=(input_image_width, input_image_width, input_channels)
         
         con_shape=(constants_image_width, constants_image_width, constant_fields)
         out_shape=(output_image_width, output_image_width, 1)
@@ -276,10 +277,7 @@ if __name__ == "__main__":
     if args.evalnum is None and (args.rank or args.qual):
         raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', or '--eval_blitz' to specify length of evaluation")
 
-    setup_params = read_config.read_config()
-
-    main(training_records_folder=args.training_records_folder, restart=args.restart, do_training=args.do_training, 
+    main(root_records_folder=args.root_records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
         evaluate=args.evaluate,
-        plot_ranks=args.plot_ranks,
-        setup_params=setup_params)
+        plot_ranks=args.plot_ranks)

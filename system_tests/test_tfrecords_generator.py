@@ -26,7 +26,6 @@ class TestTfrecordsGenerator(unittest.TestCase):
         
         with tempfile.TemporaryDirectory() as tmpdirname:
             
-            
             test_data_dir = HOME / 'system_tests' / 'data'
             
             data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
@@ -36,8 +35,8 @@ class TestTfrecordsGenerator(unittest.TestCase):
                                     'CONSTANTS': str(test_data_dir / 'constants')},
                           'TFRecords': {'tfrecords_path': tmpdirname}}            
 
-            output_dir = write_data(start_date=datetime(2017,7, 4),
-                                    end_date=datetime(2017,12,31),
+            output_dir = write_data(['201707', '201712'],
+                                    data_label='train',
                     forecast_data_source='ifs', 
                     observational_data_source='imerg',
                     hours=[18],
@@ -47,9 +46,11 @@ class TestTfrecordsGenerator(unittest.TestCase):
                     log_precip=True,
                     fcst_norm=True,
                     scaling_factor=1,
-                    latitude_range=np.arange(0, 1, 0.1),
-                    longitude_range=np.arange(33, 34, 0.1))
-            files_0 = glob(os.path.join(output_dir, '*2017*'))
+                    data_paths=data_paths,
+                    debug=True,
+                    latitude_range=np.arange(0.05, 1.05, 0.1),
+                    longitude_range=np.arange(33.05, 34.05, 0.1))
+            files_0 = glob(os.path.join(output_dir, '*train*'))
             self.assertGreater(len(files_0), 0)
 
     def test_write_era5_data(self):
