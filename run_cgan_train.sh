@@ -28,7 +28,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval_blitz --qual --rank
+srun python -m dsrnngan.main --evaluate --eval_blitz 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

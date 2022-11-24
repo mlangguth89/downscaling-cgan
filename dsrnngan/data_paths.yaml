@@ -1,6 +1,6 @@
 BLUE_PEBBLE:
     GENERAL:
-        IMERG: '/bp1/geog-tropical/data/Obs/IMERG/half_hourly/final/'
+        IMERG: '/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final/'
         ERA5: '/bp1/geog-tropical/data/ERA-5/day'
         IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
         NIMROD: ''

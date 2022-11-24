@@ -89,12 +89,9 @@ VAR_LOOKUP_IFS = {field: IFS_NORMALISATION_STRATEGY[re.sub(r'([0-9]*[a-z]+)[0-9]
 
 all_era5_fields = list(VAR_LOOKUP_ERA5.keys())
 
-# Defaults are set for east africa
-# TODO: put this in the config (probably after refactoring config)
-DEFAULT_LATITUDE_RANGE = np.arange(-10, 10, 0.1)
-DEFAULT_LONGITUDE_RANGE = np.arange(26, 46, 0.1)
+config = read_config.read_config()
 
-LAST_TRAIN_YEAR = read_config.read_config()['TRAIN']['train_years'][-1]
+NORMALISATION_YEAR = config['TRAIN']['normalisation_year']
 
 char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 
@@ -136,31 +133,19 @@ def standardise_dataset(ds):
     
     return ds
 
-def get_obs_dates(year, obs_data_source):
+def get_obs_dates(start_date: datetime, 
+                  end_date: datetime, obs_data_source, data_paths):
     """
     Return dates where we have radar data
     """
-    from glob import glob
-
-    if obs_data_source == 'nimrod':
-        obs_data_path=NIMROD_PATH
-        glob_str = os.path.join(obs_data_path, f"{year}/*.nc")
-
-    else:
-        obs_data_path=IMERG_PATH
-        glob_str = os.path.join(obs_data_path, f"*IMERG.{year}*.HDF5*")
-        
-    files = glob(glob_str)
-    dates = set()
-
-    if obs_data_source == 'nimrod':
-        for f in files:
-                dates.add(f[:-3].split('_')[-1])
-    else:
-        for f in files:
-            dates.add(f.split('.')[-4][:8])
-
-    return sorted(dates)
+    date_range = pd.date_range(start=start_date, end=end_date)
+    date_range = [item.date() for item in date_range]
+    
+    obs_dates = set([item for item in date_range if file_exists(data_source=obs_data_source, year=item.year,
+                                                    month=item.month, day=item.day,
+                                                    data_paths=data_paths)])
+    
+    return sorted(obs_dates)
 
 def get_dates(years, obs_data_source, fcst_data_source,
               data_paths=DATA_PATHS):
@@ -192,30 +177,33 @@ def file_exists(data_source, year, month, day, data_paths=DATA_PATHS):
     
     if not data_path:
         raise ValueError(f'No path specified for {data_source} in data_paths')
-    
-    files = []
+
     if data_source == 'nimrod':
         glob_str = os.path.join(data_path, f"{year}/*.nc")
-        files += glob(glob_str)
+        if len(glob(glob_str)) > 0:
+            return True
     elif data_source == 'imerg':
-        for file_type in ['HDF5', 'nc', 'nc4']:
-            glob_str = os.path.join(data_path, f"3B-HHR.MS.MRG.3IMERG.{year}{month:02d}{day:02d}*.{file_type}")
-            files += glob(glob_str)
+        for file_type in ['.HDF5', '.nc']:
+            fps = get_imerg_filepaths(year, month, day, 0, file_ending=file_type)
+            if os.path.isfile(fps[0]):
+                return True
 
     elif data_source == 'ifs':
         glob_str = get_ifs_filepath('tp', loaddate=datetime(year, month, day), 
                                   loadtime='*', fcst_dir=data_path)
-        files += glob(glob_str)
+        if len(glob(glob_str)) > 0:
+            return True
 
     elif data_source == 'era5':
         # These are just meaningless dates to get the filepath
         era5_fp = get_era5_path('tp', year=year, month=month, era_data_dir=data_path)
         glob_str = era5_fp
-        files += glob(glob_str)
+        if len(glob(glob_str)) > 0:
+            return True
     else:
         raise ValueError(f'Unrecognised data source: {data_source}')
     
-    return len(files) > 0
+    return False
                 
 def filter_by_lat_lon(ds, lon_range, lat_range, lon_var_name='lon', lat_var_name='lat'):
 
@@ -574,7 +562,7 @@ def load_fcst_stack(data_source, fields, date, hour, fcst_dir, constants_dir=CON
 
 
 def get_ifs_stats(field, latitude_vals, longitude_vals, output_dir=None, 
-                   use_cached=True, year=LAST_TRAIN_YEAR,
+                   use_cached=True, year=NORMALISATION_YEAR,
                    ifs_data_dir=IFS_PATH, hours=fcst_hours):
 
     min_lat = int(min(latitude_vals))
@@ -733,7 +721,7 @@ def load_era5_day_raw(variable, year, month, day, latitude_vals=None, longitude_
     return day_ds
 
 
-def get_era5_stats(variable, longitude_vals, latitude_vals, year=LAST_TRAIN_YEAR, output_dir=None,
+def get_era5_stats(variable, longitude_vals, latitude_vals, year=NORMALISATION_YEAR, output_dir=None,
                    era_data_dir=ERA5_PATH, use_cached=False):
     
     min_lat = int(min(latitude_vals))
@@ -824,20 +812,18 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 
     return y
 
-
-def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=None,
-                   imerg_data_dir=IMERG_PATH):
-    dt_start = datetime(year, month, day, hour, 0, 0)
-    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B')
-    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{((2*hour + 1) * 30):04d}.V06B')
-
-    fps = [fp1, fp2]
-    if os.path.isfile(fp1 + '.nc'):
-        file_ending = '.nc'#
-    else:
-        file_ending = '.HDF5'
+def get_imerg_filepaths(year, month, day, hour, imerg_data_dir=IMERG_PATH, file_ending='.nc'):
     
-    fps = [fp + file_ending for fp in fps]
+    dt_start = datetime(year, month, day, hour, 0, 0)
+    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B{file_ending}')
+    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{((2*hour + 1) * 30):04d}.V06B{file_ending}')
+
+    return [fp1, fp2]
+    
+def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=None,
+                   imerg_data_dir=IMERG_PATH, file_ending='.nc'):
+
+    fps = get_imerg_filepaths(year, month, day, hour, imerg_data_dir=imerg_data_dir, file_ending=file_ending)
     
     datasets = []
     

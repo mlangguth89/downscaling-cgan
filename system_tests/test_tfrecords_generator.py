@@ -10,7 +10,7 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.tfrecords_generator import write_data, create_dataset
-from dsrnngan.data import all_ifs_fields, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, all_era5_fields, IMERG_PATH, ERA5_PATH
+from dsrnngan.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -28,13 +28,13 @@ class TestTfrecordsGenerator(unittest.TestCase):
             
             
             test_data_dir = HOME / 'system_tests' / 'data'
-            data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
-                                    'IFS': str(test_data_dir / 'IFS'),
-                                    'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
-                                    'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
-                                    'CONSTANTS': str(test_data_dir / 'constants')},
-                          'TFRecords': {'tfrecords_path': tmpdirname}}
-                        #   'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
+            # data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
+            #                         'IFS': str(test_data_dir / 'IFS'),
+            #                         'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
+            #                         'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
+            #                         'CONSTANTS': str(test_data_dir / 'constants')},
+            #               'TFRecords': {'tfrecords_path': tmpdirname}}
+            #             #   'TFRecords': {'tfrecords_path':  str(test_data_dir / 'tmp')}}
               
             output_dir = write_data(start_date=datetime(2017,7, 4),
                                     end_date=datetime(2017,12,31),
@@ -46,7 +46,6 @@ class TestTfrecordsGenerator(unittest.TestCase):
                     num_class=4,
                     log_precip=True,
                     fcst_norm=True,
-                    data_paths=data_paths,
                     scaling_factor=1,
                     latitude_range=np.arange(0, 1, 0.1),
                     longitude_range=np.arange(33, 34, 0.1))

@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 
-from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
 from dsrnngan import read_config
 return_dic = True
 
@@ -11,8 +11,8 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
     def __init__(self, dates, batch_size, forecast_data_source, observational_data_source, data_paths=DATA_PATHS,
-                 log_precip=True, shuffle=True, constants=True, hour='random', longitude_range=DEFAULT_LONGITUDE_RANGE,
-                 latitude_range=DEFAULT_LATITUDE_RANGE, fcst_norm=True,
+                 log_precip=True, shuffle=True, constants=True, hour='random', longitude_range=None,
+                 latitude_range=None, fcst_norm=True,
                  downsample=False, seed=9999):
 
         self.dates = dates

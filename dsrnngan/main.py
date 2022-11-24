@@ -16,8 +16,11 @@ from dsrnngan import read_config
 from dsrnngan import setupdata
 from dsrnngan import setupmodel
 from dsrnngan import train
+from dsrnngan import utils
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--training-records-folder', type=str,
+                    help="Folder from which to gather the tensorflow records")
 parser.add_argument('--no-train', dest='do_training', action='store_false',
                     help="Do NOT carry out training, only perform eval")
 parser.add_argument('--restart', dest='restart', action='store_true',
@@ -31,8 +34,10 @@ parser.add_argument('--evaluate', action='store_true',
 parser.add_argument('--plot-ranks', dest='plot_ranks', action='store_true',
                     help="Plot rank histograms")
 
-def main(restart, do_training, evalnum, evaluate, plot_ranks,
-         setup_params, data_paths=None, seed=None):
+def main(training_records_folder, restart, do_training, evalnum, evaluate, plot_ranks,
+         seed=None):
+    
+    setup_params = utils.load_yaml_file(os.path.join(training_records_folder, 'local_config.yaml'))
     
     # TODO either change this to use a toml file or e.g. pydantic input validation
     mode = setup_params["GENERAL"]["mode"]
@@ -261,7 +266,7 @@ if __name__ == "__main__":
     gpu_devices = tf.config.list_physical_devices('GPU')
     
     if len(gpu_devices) == 0:
-        raise SystemError('GPU devices are not being seen')
+        print('GPU devices are not being seen')
     
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 
@@ -272,7 +277,7 @@ if __name__ == "__main__":
 
     setup_params = read_config.read_config()
 
-    main(restart=args.restart, do_training=args.do_training, 
+    main(training_records_folder=args.training_records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
         evaluate=args.evaluate,
         plot_ranks=args.plot_ranks,

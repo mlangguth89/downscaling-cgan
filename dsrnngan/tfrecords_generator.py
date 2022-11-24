@@ -2,6 +2,7 @@ import os
 import glob
 import datetime
 import random
+import time
 import numpy as np
 import tensorflow as tf
 import logging
@@ -11,7 +12,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from dsrnngan import read_config
-from dsrnngan.data import file_exists, fcst_hours, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+from dsrnngan.data import file_exists, fcst_hours
 from dsrnngan.utils import hash_dict, write_to_yaml
 
 logger = logging.getLogger(__file__)
@@ -279,30 +280,25 @@ def write_data(start_date: datetime.datetime,
     logger.info(f"Samples per image:{nsamples}")
     
     config = read_config.read_config()
-    relevant_args = ['start_date', 'end_date', 'forecast_data_source',  'observational_data_source', 
-                     'img_chunk_width', 'num_class', 'img_size', 'scaling_factor', \
-                     'log_precip', 'fcst_norm','constants']
-    args = locals()
-    arg_inputs = {k: str(args[k]) for k in relevant_args}
-    
-    all_params = {**config, **data_paths, **arg_inputs}
 
     if not os.path.isdir(records_folder):
         os.mkdir(records_folder)
     
     #  Create directory that is hash of setup params, so that we know it's the right data later on
-    hash_dir = os.path.join(records_folder, hash_dict(all_params))
+    hash_dir = os.path.join(records_folder, hash_dict(config))
     
     if not os.path.isdir(hash_dir):
         os.mkdir(hash_dir)
+    
+    print(f'Output folder will be {hash_dir}')
         
     # Write params in directory
     write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
     write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
-    write_to_yaml(os.path.join(hash_dir, 'input_args.yaml'), arg_inputs)
 
     for hour in hours:
         print('Hour = ', hour)
+        start_time = time.time()
         dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
                             forecast_data_source=forecast_data_source, 
                             observational_data_source=observational_data_source,
@@ -315,23 +311,34 @@ def write_data(start_date: datetime.datetime,
                             fcst_norm=fcst_norm,
                             longitude_range=longitude_range,
                             latitude_range=latitude_range)
+        print(f'Data generator initialization took {time.time() - start_time}')
+        
+        start_time = time.time()
         fle_hdles = {}
         if dates:
             for year in all_years:
                 fle_hdles[year] = []
                 for fh in range(num_class):
                     if subfolder_name:
-                        flename = os.path.join(hash_dir, subfolder_name, f"{year}_{hour}.{fh}.tfrecords")
+                        output_dir = os.path.join(hash_dir, subfolder_name)
+                    
+                        if not os.path.isdir(output_dir):
+                            os.mkdir(output_dir)
+                            
+                        flename = os.path.join(output_dir, f"{year}_{hour}.{fh}.tfrecords")
                     else:
                         flename = os.path.join(hash_dir, f"{year}_{hour}.{fh}.tfrecords")
                         
                     fle_hdles[year].append(tf.io.TFRecordWriter(flename))
-            
-        for batch, date in tqdm(enumerate(dates)):
+        
+        print(f'File initialization took {time.time() - start_time}')
+        print('starting fetching batches')
+        for batch, date in tqdm(enumerate(dates), total=len(dates)):
             
             logger.debug(f"hour={hour}, batch={batch}")
             
             try:
+                
                 sample = dgc.__getitem__(batch)
             
                 year = date.year  
@@ -446,57 +453,63 @@ def save_dataset(tfrecords_dataset, flename, max_batches=None):
 if __name__ == '__main__':
     
     parser = ArgumentParser(description='Write data to tf records.')
-    parser.add_argument('--fcst-data-source', choices=['ifs', 'era5'], type=str,
-                        help='Source of forecast data')
-    parser.add_argument('--obs-data-source', choices=['nimrod', 'imerg'], type=str,
-                        help='Source of observational (ground truth) data')
-    parser.add_argument('--train-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="Start date of training data in YYYYMMDD format")
-    parser.add_argument('--train-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="End date of training data in YYYYMMDD format")
-    parser.add_argument('--validation-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="Start date of validation data in YYYYMMDD format")
-    parser.add_argument('--validation-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="End date of validation data in YYYYMMDD format")
-    parser.add_argument('--test-start-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="Start date of test data in YYYYMMDD format")
-    parser.add_argument('--test-end-date', type=lambda s: datetime.datetime.strptime(s, '%Y%m%d'),
-                        required=True, help="End date of test data in YYYYMMDD format")
+
     parser.add_argument('--fcst-hours', nargs='+', default=np.arange(24), type=int, 
                     help='Hour(s) to process (space separated)')
-    parser.add_argument('--log-precip', action='store_true')
-    parser.add_argument('--fcst-norm', action='store_true')
-    parser.add_argument('--no-constants', action='store_false')
-    parser.add_argument('--num-classes', type=int, default=4)
-    parser.add_argument('--img-size', type=int, default=94)
-    parser.add_argument('--img-chunk-width', type=int, default=20)
-    parser.add_argument('--scaling-factor', type=int, default=10)
     parser.add_argument('--records-folder', type=str, default=None)
     
+    # Load relevant parameters from local config
+
+    config = read_config.read_config()
+    
+    train_start_date = config['TRAIN']['train_start_date']
+    train_end_date = config['TRAIN']['train_end_date']
+    validation_start_date = config['VAL'].get('valitation_start_date')
+    validation_end_date = config['VAL'].get('valitation_end_date')
+    test_start_date = config['EVAL'].get('test_start_date')
+    test_end_date = config['EVAL'].get('test_end_date')
+    
+    fcst_data_source = config['DATA']['fcst_data_source']
+    obs_data_source = config['DATA']['obs_data_source']
+    log_precip = config['DATA']['log_precip']
+    fcst_norm = config['DATA']['fcst_norm']
+    num_classes = config['DATA']['num_classes']
+    img_size = config['DATA']['input_image_width']
+    min_latitude = config['DATA']['min_latitude']
+    max_latitude = config['DATA']['max_latitude']
+    latitude_step_size = config['DATA']['latitude_step_size']
+    min_longitude = config['DATA']['min_longitude']
+    max_longitude = config['DATA']['max_longitude']
+    longitude_step_size = config['DATA']['longitude_step_size']
+    
+    
+    img_chunk_width = config['TRAINING']['img_chunk_width']
+    
+    scaling_factor =  config['DOWNSCALING']['downscaling_factor']
+    load_constants = config['DATA']['load_constants']
     
     args = parser.parse_args()
     
-    fcst_data_source = args.fcst_data_source
     data_paths = DATA_PATHS
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_train_test_data(train_start_date=args.train_start_date,
-                            train_end_date=args.train_end_date,
-                            validation_start_date=args.validation_start_date,
-                            validation_end_date=args.validation_end_date,
-                            test_start_date=args.test_start_date,
-                            test_end_date=args.test_end_date,
-                            forecast_data_source=args.fcst_data_source, 
-                            observational_data_source=args.obs_data_source,
+    write_train_test_data(train_start_date=train_start_date,
+                            train_end_date=train_end_date,
+                            validation_start_date=validation_start_date,
+                            validation_end_date=validation_end_date,
+                            test_start_date=test_start_date,
+                            test_end_date=test_end_date,
+                            forecast_data_source=fcst_data_source, 
+                            observational_data_source=obs_data_source,
                             hours=args.fcst_hours,
-                            img_chunk_width=args.img_chunk_width,
-                            num_class=args.num_classes,
-                            img_size=args.img_size,
-                            scaling_factor=args.scaling_factor,
-                            log_precip=args.log_precip,
-                            fcst_norm=args.fcst_norm,
+                            img_chunk_width=img_chunk_width,
+                            num_class=num_classes,
+                            img_size=img_size,
+                            scaling_factor=scaling_factor,
+                            log_precip=log_precip,
+                            fcst_norm=fcst_norm,
                             data_paths=data_paths,
-                            constants=not args.no_constants,
-                            latitude_range=DEFAULT_LATITUDE_RANGE,
-                            longitude_range=DEFAULT_LONGITUDE_RANGE)
+                            constants=load_constants,
+                            latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size),
+                            longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size))
