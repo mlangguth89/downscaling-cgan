@@ -20,7 +20,7 @@ from dsrnngan import utils
 from dsrnngan import data
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root-records-folder', type=str, default=data.DATA_PATHS['TFRecords']['tfrecords_path'],
+parser.add_argument('--records-folder', type=str, default=None,
                     help="Folder from which to gather the tensorflow records")
 parser.add_argument('--no-train', dest='do_training', action='store_false',
                     help="Do NOT carry out training, only perform eval")
@@ -35,14 +35,20 @@ parser.add_argument('--evaluate', action='store_true',
 parser.add_argument('--plot-ranks', dest='plot_ranks', action='store_true',
                     help="Plot rank histograms")
 
-def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_ranks,
+def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=None,
          seed=None):
     
-    config = read_config.read_config()
-    records_folder = os.path.join(root_records_folder, utils.hash_dict(config))
+    if records_folder is None:
+        
+        config = read_config.read_config()
+        data_paths = read_config.get_data_paths()
+        
+        records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(config))
+        if not os.path.isdir(records_folder):
+            raise ValueError('Data has not been prepared that matches this config')
+    else:
+        config = utils.load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
     
-    if not os.path.isdir(records_folder):
-        raise ValueError('Data has not been prepared that matches this config')
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
     mode = config["GENERAL"]["mode"]
@@ -60,14 +66,15 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
     input_image_width = config['DATA']['input_image_width']
     output_image_width = downscaling_factor * input_image_width
     constants_image_width = input_image_width
-    load_constants = config['DATA']['load_constants']
+    load_constants = config['DATA'].get('load_constants', True)
     filters_gen = config["GENERATOR"]["filters_gen"]
     lr_gen = float(config["GENERATOR"]["learning_rate_gen"])
     noise_channels = config["GENERATOR"]["noise_channels"]
     latent_variables = config["GENERATOR"]["latent_variables"]
     filters_disc = config["DISCRIMINATOR"]["filters_disc"]
     lr_disc = config["DISCRIMINATOR"]["learning_rate_disc"]
-    train_years = config["TRAIN"]["train_years"]
+    training_range = config['TRAIN']['training_range']
+    
     training_weights = config["TRAIN"]["training_weights"]
     num_samples = config["TRAIN"]["num_samples"]
     steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
@@ -76,7 +83,8 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
     ensemble_size = config["TRAIN"]["ensemble_size"]
     CLtype = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
-    val_years = config.get("VAL", {}).get("val_years")
+    
+    val_range = config['VAL'].get('val_range')
     val_size = config.get("VAL", {}).get("val_size")
     num_images = config["EVAL"]["num_batches"]
     add_noise = config["EVAL"]["add_postprocessing_noise"]
@@ -98,7 +106,7 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
         if CLtype not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
-    if evaluate and val_years is None:
+    if evaluate and val_range is None:
         raise ValueError('Must specify at least one validation year when using --qual flag')
     
     assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
@@ -142,8 +150,8 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
         out_shape=(output_image_width, output_image_width, 1)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
-            train_years=train_years,
-            val_years=val_years,
+            training_range=training_range,
+            validation_range=val_range,
             fcst_data_source=fcst_data_source,
             obs_data_source=obs_data_source,
             val_size=val_size,
@@ -243,7 +251,7 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
     if evaluate:
         evaluation.evaluate_multiple_checkpoints(mode=mode,
                                                  arch=arch,
-                                                 val_years=val_years,
+                                                 validation_range=val_range,
                                                  log_fname=eval_fname,
                                                  weights_dir=model_weights_root,
                                                  downsample=downsample,
@@ -261,7 +269,7 @@ def main(root_records_folder, restart, do_training, evalnum, evaluate, plot_rank
                                                  ensemble_size=10)
 
     if plot_ranks:
-        plots.plot_histograms(log_folder, val_years, ranks=ranks_to_save, N_ranks=11)
+        plots.plot_histograms(log_folder, val_range, ranks=ranks_to_save, N_ranks=11)
 
 if __name__ == "__main__":
     
@@ -277,7 +285,7 @@ if __name__ == "__main__":
     if args.evalnum is None and (args.rank or args.qual):
         raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', or '--eval_blitz' to specify length of evaluation")
 
-    main(root_records_folder=args.root_records_folder, restart=args.restart, do_training=args.do_training, 
+    main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
         evaluate=args.evaluate,
         plot_ranks=args.plot_ranks)

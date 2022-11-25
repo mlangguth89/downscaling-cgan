@@ -19,7 +19,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m scripts.unpack_ifs_data 
+srun python -m scripts.unpack_ifs_data --years 2019 2018
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

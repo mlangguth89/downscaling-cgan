@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=0-80:00:00
-#SBATCH --mem=50gb
+#SBATCH --mem=100gb
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-train
@@ -28,7 +28,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --eval_blitz 
+srun python -m dsrnngan.main --evaluate --eval-blitz 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

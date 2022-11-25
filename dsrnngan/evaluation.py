@@ -24,7 +24,7 @@ def setup_inputs(*,
                  mode,
                  arch,
                  downscaling_steps,
-                 val_years,
+                 validation_range,
                  downsample,
                  input_channels,
                  filters_gen,
@@ -50,7 +50,7 @@ def setup_inputs(*,
     print('Loading full sized image dataset')
     _, data_gen_valid = setupdata.setup_data(
         load_full_image=True,
-        val_years=val_years,
+        validation_range=validation_range,
         batch_size=1,
         downsample=downsample)
     return gen, data_gen_valid
@@ -263,7 +263,7 @@ def log_line(log_fname, line):
 def evaluate_multiple_checkpoints(*,
                                   mode,
                                   arch,
-                                  val_years,
+                                  validation_range,
                                   log_fname,
                                   weights_dir,
                                   downsample,
@@ -285,7 +285,7 @@ def evaluate_multiple_checkpoints(*,
     gen, data_gen_valid = setup_inputs(mode=mode,
                                        arch=arch,
                                        downscaling_steps=df_dict["steps"],
-                                       val_years=val_years,
+                                       validation_range=validation_range,
                                        downsample=downsample,
                                        input_channels=input_channels,
                                        filters_gen=filters_gen,
@@ -337,7 +337,7 @@ def evaluate_multiple_checkpoints(*,
         ranks_folder = os.path.dirname(log_fname)
 
         if model_number in ranks_to_save:
-            fname = f"ranksnew-{val_years}-{model_number}.npz"
+            fname = f"ranksnew-{'-'.join(validation_range)}_{model_number}.npz"
             np.savez_compressed(os.path.join(ranks_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
 
 

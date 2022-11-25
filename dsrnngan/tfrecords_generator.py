@@ -14,7 +14,7 @@ import pandas as pd
 
 from dsrnngan import read_config
 from dsrnngan.data import file_exists, fcst_hours
-from dsrnngan.utils import hash_dict, write_to_yaml
+from dsrnngan.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
@@ -250,16 +250,10 @@ def write_data(year_month_range,
 
     from .data_generator import DataGenerator
     logger.info('Start of write data')
-    logger.info(locals())
-        
-    start_date = datetime.datetime(year=int(year_month_range[0][:4]), month=int(year_month_range[0][4:6]), day=1)
-    end_year = int(year_month_range[1][:4])
-    end_month = int(year_month_range[1][4:6])
-    end_date = datetime.datetime(year=end_year, 
-                                 month=end_month, 
-                                 day=monthrange(end_year, end_month)[1])
-       
-    dates = [item.date() for item in pd.date_range(start=start_date, end=end_date)]
+    logger.info(locals())     
+      
+    dates = date_range_from_year_month_range(year_month_range)
+    start_date = dates[0]
     
     # This is super slow! So removing it for now, there are checls further on that deal with it
     # dates = [item for item in dates if file_exists(data_source=observational_data_source, year=item.year,
@@ -269,140 +263,138 @@ def write_data(year_month_range,
     dates = [item for item in dates if file_exists(data_source=forecast_data_source, year=item.year,
                                                         month=item.month, day=item.day,
                                                         data_paths=data_paths)]
-    if not dates[0] == start_date.date() and not debug:
-        # Means there likely isn't forecast data for the day before
-        dates = dates[1:]
-        
-    all_years = set([item.year for item in dates])
-    
-    records_folder = data_paths["TFRecords"]["tfrecords_path"]
+    if dates:
+        if not dates[0] == start_date and not debug:
+            # Means there likely isn't forecast data for the day before
+            dates = dates[1:]
+            
+        records_folder = data_paths["TFRecords"]["tfrecords_path"]
 
-    nsamples = (img_size // img_chunk_width)**2
-    logger.info(f"Samples per image:{nsamples}")
-    
-    config = read_config.read_config()
-
-    if not os.path.isdir(records_folder):
-        os.mkdir(records_folder)
-    
-    #  Create directory that is hash of setup params, so that we know it's the right data later on
-    hash_dir = os.path.join(records_folder, hash_dict(config))
-    
-    if not os.path.isdir(hash_dir):
-        os.mkdir(hash_dir)
-    
-    print(f'Output folder will be {hash_dir}')
+        nsamples = (img_size // img_chunk_width)**2
+        logger.info(f"Samples per image:{nsamples}")
         
-    # Write params in directory
-    write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
-    write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
-    
-    if debug:
-        dates = dates[:1]
+        config = read_config.read_config()
 
-    for hour in hours:
-        print('Hour = ', hour)
-        start_time = time.time()
-        dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
-                            forecast_data_source=forecast_data_source, 
-                            observational_data_source=observational_data_source,
-                            data_paths=data_paths,
-                            batch_size=1,
-                            log_precip=log_precip,
-                            shuffle=False,
-                            constants=constants,
-                            hour=hour,
-                            fcst_norm=fcst_norm,
-                            longitude_range=longitude_range,
-                            latitude_range=latitude_range)
-        print(f'Data generator initialization took {time.time() - start_time}')
+        if not os.path.isdir(records_folder):
+            os.mkdir(records_folder)
         
-        start_time = time.time()
-        fle_hdles = {}
-        if dates:
-            for year in all_years:
-                fle_hdles[year] = []
+        #  Create directory that is hash of setup params, so that we know it's the right data later on
+        hash_dir = os.path.join(records_folder, hash_dict(config))
+        
+        if not os.path.isdir(hash_dir):
+            os.mkdir(hash_dir)
+        
+        print(f'Output folder will be {hash_dir}')
+            
+        # Write params in directory
+        write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
+        write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
+        
+        if debug:
+            dates = dates[:1]
+
+        for hour in hours:
+            print('Hour = ', hour)
+            start_time = time.time()
+            dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
+                                forecast_data_source=forecast_data_source, 
+                                observational_data_source=observational_data_source,
+                                data_paths=data_paths,
+                                batch_size=1,
+                                log_precip=log_precip,
+                                shuffle=False,
+                                constants=constants,
+                                hour=hour,
+                                fcst_norm=fcst_norm,
+                                longitude_range=longitude_range,
+                                latitude_range=latitude_range)
+            print(f'Data generator initialization took {time.time() - start_time}')
+            
+            start_time = time.time()
+            fle_hdles = {}
+            if dates:
+                fle_hdles = []
                 for fh in range(num_class):
                     flename = os.path.join(hash_dir, f"{data_label}_{hour}.{fh}.tfrecords")
-                    fle_hdles[year].append(tf.io.TFRecordWriter(flename))
-        
-        print(f'File initialization took {time.time() - start_time}')
-        print('starting fetching batches')
-        for batch, date in tqdm(enumerate(dates), total=len(dates)):
+                    fle_hdles.append(tf.io.TFRecordWriter(flename))
             
-            logger.debug(f"hour={hour}, batch={batch}")
-            
-            try:
+            print(f'File initialization took {time.time() - start_time}')
+            print('starting fetching batches')
+            for batch, date in tqdm(enumerate(dates), total=len(dates)):
                 
-                sample = dgc.__getitem__(batch)
-            
-                year = date.year  
-                # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
-                #TODO: Try a different way of sampling, depending on size of nsamples.
-                # Or given nsamples is fixed, just choose all the possible indices?
+                logger.debug(f"hour={hour}, batch={batch}")
                 
-                # valid_indices = list(range(0, img_size-img_chunk_width))   
-                # idx_selection = random.sample(valid_indices, nsamples)
-                # idy_selection = random.sample(valid_indices, nsamples)
+                try:
+                    
+                    sample = dgc.__getitem__(batch)
                 
-                for k in range(sample[1]['output'].shape[0]):
-                    for ii in range(nsamples):
-                        idx = random.randint(0, img_size-img_chunk_width)
-                        idy = random.randint(0, img_size-img_chunk_width)
-                        # idx = idx_selection[ii]
-                        # idy = idy_selection[ii]
-                        
-                        # TODO: Check that there is data and error if not throw error
-
-                        observations = sample[1]['output'][k,
-                                                    idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
-                                                    idy*scaling_factor:(idy+img_chunk_width)*scaling_factor].flatten()
-
-                        forecast = sample[0]['lo_res_inputs'][k,
-                                                            idx:idx+img_chunk_width,
-                                                            idy:idy+img_chunk_width,
-                                                            :].flatten()
-                        
-                        const = sample[0]['hi_res_inputs'][k,
-                                                            idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
-                                                            idy*scaling_factor:(idy+img_chunk_width)*scaling_factor,
-                                                            :].flatten()
+                    # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
+                    #TODO: Try a different way of sampling, depending on size of nsamples.
+                    # Or given nsamples is fixed, just choose all the possible indices?
+                    
+                    # valid_indices = list(range(0, img_size-img_chunk_width))   
+                    # idx_selection = random.sample(valid_indices, nsamples)
+                    # idy_selection = random.sample(valid_indices, nsamples)
+                    
+                    for k in range(sample[1]['output'].shape[0]):
+                        for ii in range(nsamples):
+                            idx = random.randint(0, img_size-img_chunk_width)
+                            idy = random.randint(0, img_size-img_chunk_width)
+                            # idx = idx_selection[ii]
+                            # idy = idy_selection[ii]
                             
-                        # Check no Null values
-                        if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                            raise ValueError('Unexpected NaN values in data')
-                        
-                        # Check for empty data
-                        if forecast.sum() == 0 or const.sum() == 0:
-                            raise ValueError('one or more of arrays is all zeros')
-                        
-                        # Check hi res data has same dimensions
+                            # TODO: Check that there is data and error if not throw error
+
+                            observations = sample[1]['output'][k,
+                                                        idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
+                                                        idy*scaling_factor:(idy+img_chunk_width)*scaling_factor].flatten()
+
+                            forecast = sample[0]['lo_res_inputs'][k,
+                                                                idx:idx+img_chunk_width,
+                                                                idy:idy+img_chunk_width,
+                                                                :].flatten()
                             
-                        feature = {
-                            'generator_input': _float_feature(forecast),
-                            'constants': _float_feature(const),
-                            'generator_output': _float_feature(observations)
-                        }
+                            const = sample[0]['hi_res_inputs'][k,
+                                                                idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
+                                                                idy*scaling_factor:(idy+img_chunk_width)*scaling_factor,
+                                                                :].flatten()
+                                
+                            # Check no Null values
+                            if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                                raise ValueError('Unexpected NaN values in data')
+                            
+                            # Check for empty data
+                            if forecast.sum() == 0 or const.sum() == 0:
+                                raise ValueError('one or more of arrays is all zeros')
+                            
+                            # Check hi res data has same dimensions
+                                
+                            feature = {
+                                'generator_input': _float_feature(forecast),
+                                'constants': _float_feature(const),
+                                'generator_output': _float_feature(observations)
+                            }
 
-                        features = tf.train.Features(feature=feature)
-                        example = tf.train.Example(features=features)
-                        example_to_string = example.SerializeToString()
-                        
-                        # Removing this for the moment while we figure out appropriate threshold
-                        clss = random.choice(range(num_class))
-                        # clss = min(int(np.floor(((observations > 0.1).mean()*num_class))), num_class-1)  # all class binning is here!
+                            features = tf.train.Features(feature=feature)
+                            example = tf.train.Example(features=features)
+                            example_to_string = example.SerializeToString()
+                            
+                            # Removing this for the moment while we figure out appropriate threshold
+                            clss = random.choice(range(num_class))
+                            # clss = min(int(np.floor(((observations > 0.1).mean()*num_class))), num_class-1)  # all class binning is here!
 
-                        fle_hdles[year][clss].write(example_to_string)
-                        
-                        #TODO: write config to folder as well
-            except FileNotFoundError as e:
-                print(f"Error loading hour={hour}, date={date}")
-        
-        for fle_hdles_list in fle_hdles.values():
-            for fh in fle_hdles_list:
+                            fle_hdles[clss].write(example_to_string)
+                            
+                            #TODO: write config to folder as well
+                except FileNotFoundError as e:
+                    print(f"Error loading hour={hour}, date={date}")
+            
+            for fh in fle_hdles:
                 fh.close()
-                
-    return hash_dir
+                    
+        return hash_dir
+    else:
+        print('No dates found')
 
 def write_train_test_data(*args, training_range,
                           validation_range=None,
