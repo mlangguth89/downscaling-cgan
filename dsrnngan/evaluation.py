@@ -23,15 +23,23 @@ ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 def setup_inputs(*,
                  mode,
                  arch,
+                 records_folder,
+                 fcst_data_source,
+                 obs_data_source,
+                 latitude_range,
+                 longitude_range,
                  downscaling_steps,
                  validation_range,
                  downsample,
+                 hour,
                  input_channels,
                  filters_gen,
                  filters_disc,
                  noise_channels,
                  latent_variables,
-                 padding):
+                 padding,
+                 constant_fields,
+                 data_paths):
 
     # initialise model
     model = setupmodel.setup_model(mode=mode,
@@ -42,17 +50,25 @@ def setup_inputs(*,
                                    filters_disc=filters_disc,
                                    noise_channels=noise_channels,
                                    latent_variables=latent_variables,
-                                   padding=padding)
+                                   padding=padding,
+                                   constant_fields=constant_fields)
 
     gen = model.gen
 
     # always uses full-sized images
     print('Loading full sized image dataset')
     _, data_gen_valid = setupdata.setup_data(
+        records_folder,
+        fcst_data_source,
+        obs_data_source,
+        hour=hour,
+        latitude_range=latitude_range,
+        longitude_range=longitude_range,
         load_full_image=True,
         validation_range=validation_range,
         batch_size=1,
-        downsample=downsample)
+        downsample=downsample,
+        data_paths=data_paths)
     return gen, data_gen_valid
 
 
@@ -263,9 +279,15 @@ def log_line(log_fname, line):
 def evaluate_multiple_checkpoints(*,
                                   mode,
                                   arch,
+                                  fcst_data_source,
+                                  obs_data_source,
+                                  latitude_range,
+                                  longitude_range,
                                   validation_range,
+                                  hour,
                                   log_fname,
                                   weights_dir,
+                                  records_folder,
                                   downsample,
                                   add_noise,
                                   noise_factor,
@@ -284,6 +306,12 @@ def evaluate_multiple_checkpoints(*,
 
     gen, data_gen_valid = setup_inputs(mode=mode,
                                        arch=arch,
+                                       records_folder=records_folder,
+                                       fcst_data_source=fcst_data_source,
+                                       obs_data_source=obs_data_source,
+                                       latitude_range=latitude_range,
+                                       longitude_range=longitude_range,
+                                       hour=hour,
                                        downscaling_steps=df_dict["steps"],
                                        validation_range=validation_range,
                                        downsample=downsample,

@@ -1,5 +1,6 @@
 import sys, os
 import unittest
+import copy
 import tempfile
 from pathlib import Path
 from glob import glob
@@ -10,7 +11,7 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.tfrecords_generator import write_data, create_dataset
-from dsrnngan.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH
+from dsrnngan.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -52,7 +53,35 @@ class TestTfrecordsGenerator(unittest.TestCase):
                     longitude_range=np.arange(33.05, 34.05, 0.1))
             files_0 = glob(os.path.join(output_dir, '*train*'))
             self.assertGreater(len(files_0), 0)
+            
+            
+    def test_write_ifs_data2(self):
+        
+        from dsrnngan.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+        data_paths = copy.copy(DATA_PATHS)
+        
+        
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            data_paths['TFRecords']['tfrecords_path'] = tmpdirname
+            
+            test_data_dir = HOME / 'system_tests' / 'data'      
 
+            output_dir = write_data(['201807', '201808'],
+                                    data_label='train',
+                    forecast_data_source='ifs', 
+                    observational_data_source='imerg',
+                    hours=[18],
+                    img_chunk_width=200,
+                    img_size=200,
+                    num_class=4,
+                    log_precip=True,
+                    fcst_norm=True,
+                    scaling_factor=1,
+                    data_paths=data_paths,
+                    debug=True,
+                    latitude_range=DEFAULT_LATITUDE_RANGE,
+                    longitude_range=DEFAULT_LONGITUDE_RANGE)
+            
     def test_write_era5_data(self):
         
         #TODO: this test needs some subsampled ERA5 and iMERG data to not take ages

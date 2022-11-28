@@ -93,6 +93,15 @@ config = read_config.read_config()
 
 NORMALISATION_YEAR = config['TRAIN']['normalisation_year']
 
+min_latitude = config['DATA']['min_latitude']
+max_latitude = config['DATA']['max_latitude']
+latitude_step_size = config['DATA']['latitude_step_size']
+min_longitude = config['DATA']['min_longitude']
+max_longitude = config['DATA']['max_longitude']
+longitude_step_size = config['DATA']['longitude_step_size']
+DEFAULT_LATITUDE_RANGE=np.arange(min_latitude, max_latitude, latitude_step_size)
+DEFAULT_LONGITUDE_RANGE=np.arange(min_longitude, max_longitude, longitude_step_size)
+
 char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 
 def denormalise(x):
@@ -134,7 +143,7 @@ def standardise_dataset(ds):
     return ds
 
 def get_obs_dates(start_date: datetime, 
-                  end_date: datetime, obs_data_source, data_paths):
+                  end_date: datetime, obs_data_source, data_paths=DATA_PATHS):
     """
     Return dates where we have radar data
     """
@@ -460,7 +469,6 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
                  latitude_vals=None, longitude_vals=None, interpolate=True):
     
     assert field in all_ifs_fields, ValueError(f"field must be one of {all_ifs_fields}")
-    
     # Get the time required (compensating for IFS forecast saving precip at the end of the timestep)
     time = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
 
@@ -524,8 +532,10 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
 def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH, var_name_lookup=VAR_LOOKUP_IFS,
              latitude_vals=None, longitude_vals=None, constants_path=CONSTANTS_PATH):
     
-    dt = datetime.strptime(date, "%Y%m%d")
-    ds = load_ifs_raw(field, dt.year, dt.month, dt.day, hour, ifs_data_dir=fcst_dir,
+    if isinstance(date, str):
+        date = datetime.strptime(date, "%Y%m%d")
+        
+    ds = load_ifs_raw(field, date.year, date.month, date.day, hour, ifs_data_dir=fcst_dir,
                  latitude_vals=latitude_vals, longitude_vals=longitude_vals, interpolate=True)
 
     if norm:
@@ -874,8 +884,10 @@ def load_imerg(date, hour=18, data_dir=IMERG_PATH,
      Returns:
 
      """
-    dt = datetime(year=int(date[:4]), month=int(date[4:6]), day=int(date[6:8]))
-    ds = load_imerg_raw(year=dt.year, month=dt.month, day=dt.day, hour=hour,
+    if isinstance(date, str):
+        date = datetime.strptime(date, '%Y%m%d')
+        
+    ds = load_imerg_raw(year=date.year, month=date.month, day=date.day, hour=hour,
                         latitude_vals=latitude_vals, longitude_vals=longitude_vals, imerg_data_dir=data_dir)
 
     # Take mean since data mayt be half hourly

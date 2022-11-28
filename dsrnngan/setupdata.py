@@ -4,7 +4,7 @@ from debugpy import listen
 
 from dsrnngan import tfrecords_generator
 from dsrnngan.tfrecords_generator import DataGenerator
-from dsrnngan.data import all_ifs_fields
+from dsrnngan.data import all_ifs_fields, DATA_PATHS
 from dsrnngan.utils import date_range_from_year_month_range
 
 
@@ -53,33 +53,44 @@ def setup_full_image_dataset(year_month_range,
                              fcst_data_source,
                              obs_data_source,
                              load_constants,
+                             data_paths,
+                             latitude_range,
+                             longitude_range,
                              batch_size=1,
-                             downsample=False):
+                             downsample=False,
+                             hour='random'
+                             ):
 
     from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
     from dsrnngan.data import get_obs_dates
 
     date_range = date_range_from_year_month_range(year_month_range)
     dates = get_obs_dates(date_range[0], date_range[-1], 
-                          obs_data_source=obs_data_source)
+                          obs_data_source=obs_data_source, data_paths=data_paths)
     data_full = DataGeneratorFull(dates=dates,
                                   forecast_data_source=fcst_data_source, 
                                   observational_data_source=obs_data_source,
+                                  latitude_range=latitude_range,
+                                  longitude_range=longitude_range,
                                   batch_size=batch_size,
                                   log_precip=True,
                                   shuffle=True,
                                   constants=load_constants,
-                                  hour='random',
+                                  hour=hour,
                                   fcst_norm=True,
-                                  downsample=downsample)
+                                  downsample=downsample,
+                                  data_paths=data_paths)
     return data_full
 
 
 def setup_data(records_folder,
                fcst_data_source,
                obs_data_source,
+               latitude_range,
+               longitude_range,
                training_range=None,
                validation_range=None,
+               hour='random',
                val_size=None,
                downsample=False,
                fcst_shape=(20, 20, 9),
@@ -89,23 +100,32 @@ def setup_data(records_folder,
                weights=None,
                batch_size=None,
                load_full_image=False,
-               seed=None):
+               seed=None,
+               data_paths=DATA_PATHS):
 
     if load_full_image:
         batch_gen_train = None if training_range is None \
             else setup_full_image_dataset(training_range,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
+                                          latitude_range=latitude_range,
+                                          longitude_range=longitude_range,
                                           batch_size=batch_size,
                                           downsample=downsample,
-                                          load_constants=load_constants)
+                                          load_constants=load_constants,
+                                          data_paths=data_paths,
+                                          hour=hour)
         batch_gen_valid = None if validation_range is None \
             else setup_full_image_dataset(validation_range,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
+                                          latitude_range=latitude_range,
+                                          longitude_range=longitude_range,
                                           batch_size=batch_size,
                                           downsample=downsample,
-                                          load_constants=load_constants)
+                                          load_constants=load_constants,
+                                          data_paths=data_paths,
+                                          hour=hour)
 
     else:
         batch_gen_train, batch_gen_valid = setup_batch_gen(
