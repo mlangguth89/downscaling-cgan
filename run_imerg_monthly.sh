@@ -19,10 +19,6 @@ do
     outfile="/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/monthly/${SLURM_ARRAY_TASK_ID}${month_str}.nc"
 
     echo "Concatenating"
-    srun cdo cat ${infile} ${tmp_file};
-    echo "Calculating mean"
-    srun cdo -O -b F32 monmean ${tmp_file} ${outfile}; 
-    echo "cleaning up"
-    srun rm tmp_file;
+    srun cdo cat ${infile} ${tmp_file}; cdo -O -b F32 monmean ${tmp_file} ${outfile}; rm ${tmp_file};
 done
 
