@@ -31,7 +31,6 @@ def setup_inputs(*,
                  downscaling_steps,
                  validation_range,
                  downsample,
-                 hour,
                  input_channels,
                  filters_gen,
                  filters_disc,
@@ -61,7 +60,6 @@ def setup_inputs(*,
         records_folder,
         fcst_data_source,
         obs_data_source,
-        hour=hour,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
         load_full_image=True,
@@ -96,6 +94,7 @@ def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
 def eval_one_chkpt(*,
                    mode,
                    gen,
+                   fcst_data_source,
                    data_gen,
                    noise_channels,
                    latent_variables,
@@ -117,7 +116,8 @@ def eval_one_chkpt(*,
     ralsd_all = []
 
     data_gen_iter = iter(data_gen)
-    tpidx = data.all_fcst_fields.index('tp')
+    tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
+    
     batch_size = 1  # do one full-size image at a time
 
     if mode == "det":
@@ -132,32 +132,40 @@ def eval_one_chkpt(*,
     rng = np.random.default_rng()
 
     for kk in range(num_images):
+        
         # load truth images
         inputs, outputs = next(data_gen_iter)
         cond = inputs['lo_res_inputs']
         const = inputs['hi_res_inputs']
         truth = outputs['output']
         truth = np.expand_dims(np.array(truth), axis=-1)  # must be 4D tensor for pooling NHWC
+        
         if denormalise_data:
             truth = data.denormalise(truth)
 
         # generate predictions, depending on model type
         samples_gen = []
         if mode == "GAN":
+            
             noise_shape = np.array(cond)[0, ..., 0].shape + (noise_channels,)
             noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
             for ii in range(ensemble_size):
                 nn = noise_gen()
                 sample_gen = gen.predict([cond, const, nn])
                 samples_gen.append(sample_gen.astype("float32"))
+                
         elif mode == "det":
+            
             sample_gen = gen.predict([cond, const])
             samples_gen.append(sample_gen.astype("float32"))
+            
         elif mode == 'VAEGAN':
+            
             # call encoder once
             mean, logvar = gen.encoder([cond, const])
             noise_shape = np.array(cond)[0, ..., 0].shape + (latent_variables,)
             noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
+            
             for ii in range(ensemble_size):
                 nn = noise_gen()
                 # generate ensemble of preds with decoder
@@ -166,6 +174,7 @@ def eval_one_chkpt(*,
 
         # samples generated, now process them (e.g., undo log transform) and calculate MAE etc
         for ii in range(ensemble_size):
+            
             sample_gen = samples_gen[ii]
             # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
             if denormalise_data:
@@ -214,7 +223,10 @@ def eval_one_chkpt(*,
             if method not in crps_scores:
                 crps_scores[method] = []
             crps_scores[method].append(crps_score)
-
+        
+        # Assess 
+        
+        
         # calculate ranks; only calculated without pooling
 
         # Add noise to truth and generated samples to make 0-handling fairer
@@ -284,7 +296,6 @@ def evaluate_multiple_checkpoints(*,
                                   latitude_range,
                                   longitude_range,
                                   validation_range,
-                                  hour,
                                   log_fname,
                                   weights_dir,
                                   records_folder,
@@ -300,9 +311,11 @@ def evaluate_multiple_checkpoints(*,
                                   latent_variables,
                                   noise_channels,
                                   padding,
-                                  ensemble_size):
+                                  ensemble_size,
+                                  constant_fields,
+                                  data_paths):
 
-    df_dict = read_config.read_downscaling_factor()
+    df_dict = read_config.read_config()['DOWNSCALING']
 
     gen, data_gen_valid = setup_inputs(mode=mode,
                                        arch=arch,
@@ -311,7 +324,6 @@ def evaluate_multiple_checkpoints(*,
                                        obs_data_source=obs_data_source,
                                        latitude_range=latitude_range,
                                        longitude_range=longitude_range,
-                                       hour=hour,
                                        downscaling_steps=df_dict["steps"],
                                        validation_range=validation_range,
                                        downsample=downsample,
@@ -320,7 +332,9 @@ def evaluate_multiple_checkpoints(*,
                                        filters_disc=filters_disc,
                                        noise_channels=noise_channels,
                                        latent_variables=latent_variables,
-                                       padding=padding)
+                                       padding=padding,
+                                       constant_fields=constant_fields,
+                                       data_paths=data_paths)
 
     log_line(log_fname, f"Samples per image: {ensemble_size}")
     log_line(log_fname, f"Initial dates/times: {data_gen_valid.dates[0:4]}, {data_gen_valid.hours[0:4]}")
@@ -340,6 +354,7 @@ def evaluate_multiple_checkpoints(*,
         arrays, crps, other = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
+                                             fcst_data_source=fcst_data_source,
                                              noise_channels=noise_channels,
                                              latent_variables=latent_variables,
                                              num_images=num_images,

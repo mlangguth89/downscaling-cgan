@@ -51,7 +51,8 @@ all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950',
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
                   'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700']
 
-fcst_hours = np.array(range(24))
+# fcst_hours = np.array(range(24))
+fcst_hours = [18]
 
 # TODO: change this to behave like the IFS data load (to allow other vals of v, u etc)
 # TODO: move to a config
@@ -89,6 +90,8 @@ VAR_LOOKUP_IFS = {field: IFS_NORMALISATION_STRATEGY[re.sub(r'([0-9]*[a-z]+)[0-9]
 
 all_era5_fields = list(VAR_LOOKUP_ERA5.keys())
 
+input_field_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
+
 config = read_config.read_config()
 
 NORMALISATION_YEAR = config['TRAIN']['normalisation_year']
@@ -125,16 +128,15 @@ def infer_lat_lon_names(ds):
     return lat_var_name[0], lon_var_name[0]
 
 def order_coordinates(ds):
+    
     lat_var_name, lon_var_name = infer_lat_lon_names(ds)
     
-    if 'time' in list(ds.coords):
-        return ds[['time', lat_var_name, lon_var_name] + list(ds.data_vars)]
+    if 'time' in list(ds.dims):
+        return ds.transpose('time', lat_var_name, lon_var_name)
     else:
-        return ds[[lat_var_name, lon_var_name] + list(ds.data_vars)]
+        return ds.transpose(lat_var_name, lon_var_name)
 
 def standardise_dataset(ds):
-    
-    ds = order_coordinates(ds)
     
     latitude_var, longitude_var = infer_lat_lon_names(ds)
     ds = ds.sortby(latitude_var, ascending=True)
@@ -467,31 +469,28 @@ def get_ifs_filepath(field, loaddate, loadtime, fcst_dir=IFS_PATH):
 
 def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
                  latitude_vals=None, longitude_vals=None, interpolate=True):
-    
+     
     assert field in all_ifs_fields, ValueError(f"field must be one of {all_ifs_fields}")
-    # Get the time required (compensating for IFS forecast saving precip at the end of the timestep)
-    time = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
+    
+    time = datetime(year=year, month=month, day=day, hour=hour)
+    time_plus_one = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
+    time_minus_one = datetime(year=year, month=month, day=day, hour=hour) - timedelta(hours=1)
 
-    # Get the correct forecast starttime
+    # Get the nearest forecast starttime
     if time.hour < 6:
         tmpdate = time - timedelta(days=1)
-        loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'
     elif 6 <= time.hour < 18:
         tmpdate = time
-        loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=6)
         loadtime = '00'
     elif 18 <= time.hour < 24:
         tmpdate = time
-        loaddate = datetime(year=tmpdate.year, month=tmpdate.month, day=tmpdate.day, hour=18)
         loadtime = '12'
     else:
         assert False, "Not acceptable time"
-
-    assert int((time - loaddate).total_seconds() // 3600) >= 1, "Cannot use first hour of retrival"
     
     fp = get_ifs_filepath(field=field,
-                          loaddate=loaddate,
+                          loaddate=tmpdate,
                           loadtime=loadtime,
                           fcst_dir=ifs_data_dir
                           )
@@ -507,25 +506,25 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
        
     # Account for cumulative fields
     if var_name in ['tp', 'cp', 'cdir', 'tisr']:
-        time_minus_1 = time - timedelta(hours=1)
-        ds =  ds.sel(time=time) - ds.sel(time=time_minus_1)
+        ds =  0.5* ((ds.sel(time=time) - ds.sel(time=time_minus_one)) + (ds.sel(time=time_plus_one) - ds.sel(time=time)))
     else:
         ds = ds.sel(time=time)
 
-    if var_name in ['tp', 'tclw', 'cape', 'tisr', 'tcwv', 'cp']:
-        interpolation_method = 'conservative'
-    else:
-        interpolation_method = 'bilinear'
-
     if latitude_vals is not None and longitude_vals is not None:
         if interpolate:
+            if var_name in ['tp', 'tclw', 'cape', 'tisr', 'tcwv', 'cp']:
+                interpolation_method = 'conservative'
+            else:
+                interpolation_method = 'bilinear'
             ds = interpolate_dataset_on_lat_lon(ds, latitude_vals=latitude_vals,
                                                 longitude_vals=longitude_vals,
                                                 interp_method=interpolation_method)
         else:
-            ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
+            ds = ds.sel(longitude=longitude_vals, method='backfill')
+            ds = ds.sel(latitude=latitude_vals, method='backfill')
     
     ds = standardise_dataset(ds)
+    ds = ds.transpose('latitude', 'longitude')
              
     return ds
 
@@ -830,10 +829,17 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 
 def get_imerg_filepaths(year, month, day, hour, imerg_data_dir=IMERG_PATH, file_ending='.nc'):
     
-    dt_start = datetime(year, month, day, hour, 0, 0)
-    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B{file_ending}')
-    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{((2*hour + 1) * 30):04d}.V06B{file_ending}')
-
+    dt_mid = datetime(year, month, day, hour, 0, 0)
+    dt_start = datetime(year, month, day, hour, 0, 0) - timedelta(minutes=30)
+    
+    if hour == 0:
+        suffix_pre = 1410
+    else:
+        suffix_pre = (2*hour - 1) * 30
+        
+    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{suffix_pre:04d}.V06B{file_ending}')
+    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_mid.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B{file_ending}')
+    
     return [fp1, fp2]
     
 def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=None,
@@ -855,14 +861,16 @@ def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=No
 
     # Note we use method nearest; the iMERG data isn't interpolated to be on
     # the same grid as the input forecast necessarily (they don't need to match exactly)
+    # Use backfill otherwise it may be non-deterministic as to which side it chooses
     if longitude_vals is not None:
-        ds = ds.sel(lon=longitude_vals, method='nearest')
+        ds = ds.sel(lon=longitude_vals, method='backfill')
 
     if latitude_vals is not None:
-        ds = ds.sel(lat=latitude_vals, method='nearest')
+        ds = ds.sel(lat=latitude_vals, method='backfill')
         
     # Make sure dataset is consistent with others
     ds = standardise_dataset(ds)
+    ds = ds.transpose('lat', 'lon', 'latv', 'lonv')
 
     return ds
 
@@ -890,7 +898,7 @@ def load_imerg(date, hour=18, data_dir=IMERG_PATH,
     ds = load_imerg_raw(year=date.year, month=date.month, day=date.day, hour=hour,
                         latitude_vals=latitude_vals, longitude_vals=longitude_vals, imerg_data_dir=data_dir)
 
-    # Take mean since data mayt be half hourly
+    # Take mean since data may be half hourly
     precip = ds['precipitationCal'].values
     ds.close()
     
@@ -925,8 +933,8 @@ if __name__ == '__main__':
     
     years = [args.years] if isinstance(args.years, int) else args.years
 
-    latitude_vals = range(args.min_latitude, args.max_latitude + 1)
-    longitude_vals = range(args.min_longitude, args.max_longitude + 1)
+    latitude_vals = range(args.min_latitude -1, args.max_latitude + 1)
+    longitude_vals = range(args.min_longitude -1, args.max_longitude + 1)
 
     if not os.path.isdir(args.output_dir):
         raise IOError('Output directory does not exist! Please create it or specify a different one')
@@ -970,7 +978,8 @@ if __name__ == '__main__':
 
         year, month, day, hour = date_item
 
-        fps = glob(os.path.join(IMERG_PATH, f'3B-HHR.MS.MRG.3IMERG.{year}{month:02d}{day:02d}-S{hour:02d}*'))
+        fps = glob(os.path.join('/bp1/geog-tropical/data/Obs/IMERG/half_hourly/final', 
+                                f'3B-HHR.MS.MRG.3IMERG.{year}{month:02d}{day:02d}-S{hour:02d}*'))
         
         for fp in fps:
             ds =load_hdf5_file(fp)
@@ -981,22 +990,22 @@ if __name__ == '__main__':
             ds.to_netcdf(imerg_path)
             ds.close()
 
-    print("starting forcast data gathering")
-    all_era5_dates = []
-    for year in years:
-        for month in args.months:
-            all_era5_dates.append((year, month))
+    # print("starting forcast data gathering")
+    # all_era5_dates = []
+    # for year in years:
+    #     for month in args.months:
+    #         all_era5_dates.append((year, month))
             
-    for date_item in tqdm(all_era5_dates, total=len(all_era5_dates)): 
-        year, month = date_item              
-        for variable in VAR_LOOKUP_ERA5:
-            input_era5_path = get_era5_path(variable, year, month)
-            era5_ds = xr.load_dataset(input_era5_path)
-            era5_ds = filter_by_lat_lon(era5_ds, 
-                                        lat_range=latitude_vals, lon_range=longitude_vals)
-            prefix = get_era5_filepath_prefix(variable=variable, 
-                                              era_data_dir=era5_output_dir)
-            output_era5_path = f'{prefix}_{year}{month:02d}.nc'
+    # for date_item in tqdm(all_era5_dates, total=len(all_era5_dates)): 
+    #     year, month = date_item              
+    #     for variable in VAR_LOOKUP_ERA5:
+    #         input_era5_path = get_era5_path(variable, year, month)
+    #         era5_ds = xr.load_dataset(input_era5_path)
+    #         era5_ds = filter_by_lat_lon(era5_ds, 
+    #                                     lat_range=latitude_vals, lon_range=longitude_vals)
+    #         prefix = get_era5_filepath_prefix(variable=variable, 
+    #                                           era_data_dir=era5_output_dir)
+    #         output_era5_path = f'{prefix}_{year}{month:02d}.nc'
 
-            era5_ds.to_netcdf(output_era5_path)
-            era5_ds.close()
+    #         era5_ds.to_netcdf(output_era5_path)
+    #         era5_ds.close()

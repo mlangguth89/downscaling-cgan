@@ -5,6 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=tfrecords-creation
 #SBATCH --partition short
+#SBATCH --array=0-23
 
 source ~/.bashrc
 echo Running on host `hostname`
@@ -20,7 +21,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.tfrecords_generator --fcst-hours 18 --records-folder /user/work/uz22147/tfrecords
+srun python -m dsrnngan.tfrecords_generator --records-folder /user/work/uz22147/tfrecords --fcst-hours ${SLURM_ARRAY_TASK_ID}
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

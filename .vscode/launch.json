@@ -11,7 +11,7 @@
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--eval-blitz"
+                "--eval-blitz", "--no-train", "--evaluate"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },

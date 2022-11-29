@@ -282,7 +282,9 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
                                                  latent_variables=latent_variables,
                                                  noise_channels=noise_channels,
                                                  padding=padding,
-                                                 ensemble_size=10)
+                                                 ensemble_size=10,
+                                                 constant_fields=constant_fields,
+                                                 data_paths=data_paths)
 
     if plot_ranks:
         plots.plot_histograms(log_folder, val_range, ranks=ranks_to_save, N_ranks=11)

@@ -5,6 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=monthly_rainfall
 #SBATCH --partition short
+#SBATCH --array=2016-2019
 
 source ~/.bashrc
 echo Running on host `hostname`
@@ -20,7 +21,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m scripts.imerg_monthly_rainfall
+srun python -m scripts.imerg_monthly_rainfall --year ${SLURM_ARRAY_TASK_ID}
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

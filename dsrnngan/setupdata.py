@@ -76,7 +76,6 @@ def setup_full_image_dataset(year_month_range,
                                   log_precip=True,
                                   shuffle=True,
                                   constants=load_constants,
-                                  hour=hour,
                                   fcst_norm=True,
                                   downsample=downsample,
                                   data_paths=data_paths)

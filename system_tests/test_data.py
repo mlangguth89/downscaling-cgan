@@ -17,8 +17,8 @@ sys.path.append(str(HOME))
 
 from dsrnngan.data import infer_lat_lon_names, load_ifs, FIELD_TO_HEADER_LOOKUP_IFS, load_hires_constants, load_imerg_raw, load_era5_day_raw, \
     VAR_LOOKUP_ERA5, interpolate_dataset_on_lat_lon, \
-    get_era5_stats, preprocess, load_nimrod, load_fcst_stack, all_ifs_fields, all_era5_fields, load_era5, \
-    load_ifs, IMERG_PATH, ERA5_PATH, get_ifs_filepath, \
+    get_era5_stats, load_fcst_stack, all_ifs_fields, all_era5_fields, load_era5, \
+    load_ifs, get_imerg_filepaths, ERA5_PATH, get_ifs_filepath, \
     load_fcst_radar_batch, log_precipitation, filter_by_lat_lon, load_ifs_raw, \
     VAR_LOOKUP_IFS, get_ifs_stats, file_exists, get_dates, load_land_sea_mask, load_orography
 
@@ -99,23 +99,29 @@ class TestLoad(unittest.TestCase):
         month = 7
         day = 5
         hour = 4
-
-        # year = 2016
-        # month = 3
-        # day=1
-        # hour = 0
         
+        latitude_vals = [0.05, 0.15, 0.25]
+        longitude_vals = [33, 34]
+
         lat_coords = []
         lon_coords = []
         
         for field in all_ifs_fields:
             
-            ds = load_ifs_raw(field, year, month, day, hour, ifs_data_dir=str(ifs_path))
+            ds = load_ifs_raw(field, year, month, day, hour, ifs_data_dir=str(ifs_path),
+                              latitude_vals=latitude_vals, longitude_vals=longitude_vals, 
+                              interpolate=False)
             
             self.assertIsInstance(ds, xr.Dataset)
             
-            # Check only lat/lon coord, not time
-            self.assertEqual(ds[list(ds.data_vars)[0]].values.shape, (40, 30))
+            data_var = list(ds.data_vars)[0]
+            
+            # Check only lat/lon coord, not time, and that dims are correctly ordered
+            self.assertEqual(ds[data_var].values.shape, (len(latitude_vals), len(longitude_vals)))
+        
+            # this also checks that the longitude values are in ascending order
+            testing.assert_allclose(ds.latitude.values, np.array([0.05, 0.15, 0.25]), atol=1e-7)
+            testing.assert_allclose(ds.longitude.values, np.array([33.05, 34.05]), atol=1e-7)        
             
             lat_var_name, lon_var_name = infer_lat_lon_names(ds)
             
@@ -237,9 +243,9 @@ class TestLoad(unittest.TestCase):
         
         ds_raw = load_ifs_raw('tp', year=year, month=month, day=day, hour=hour,
                                    latitude_vals=[0, 0.1], longitude_vals=[33, 33.1],
-                                   ifs_data_dir=str(ifs_path))
+                                   ifs_data_dir=str(ifs_path), interpolate=False)
         
-        testing.assert_allclose(ds_raw['tp'].values, np.array([[0.00100846, 0.00119257],[0.00021166, 0.00039665]]), atol=1e-8)
+        testing.assert_allclose(ds_raw['tp'].values, np.array([[0.0, 0.0], [1.08778477e-06, 0.0]]), atol=1e-8)
 
     def test_era5_load_norm_logs(self):
 
@@ -412,14 +418,20 @@ class TestLoad(unittest.TestCase):
         ##
         # Check interpolation to smaller grid with era5
 
-
+    def test_imerg_fps(self):
+        
+        fps = get_imerg_filepaths(2019, 1, 1, 0, file_ending='.nc')
+        
+        self.assertEqual(fps[0].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20181231-S233000-E235959.1410.V06B.nc')
+        self.assertEqual(fps[1].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20190101-S000000-E002959.0000.V06B.nc')
+        
     def test_load_imerg(self):
 
         year = 2018
         month = 12
         day = 30
         hour = 18
-        latitude_vals = [0, 1]
+        latitude_vals = [0, 0.1, 0.2]
         longitude_vals = [33, 34]
 
         ds = load_imerg_raw(year=year, month=month, day=day, hour=hour,
@@ -429,10 +441,12 @@ class TestLoad(unittest.TestCase):
         
         self.assertIsInstance(ds, xr.Dataset)
         
-        # Check that time dimmension already averaged over for the hour
-        self.assertListEqual(list(ds.coords), ['lat', 'lon'])
-        # this also checks that the order
-        testing.assert_allclose(ds.lat.values, np.array([0.05, 1.05]), atol=1e-7)
+        # Check that dimensions are ordered properly
+        self.assertListEqual(list(ds['precipitationCal'].dims), ['lat', 'lon'])
+        self.assertEqual(ds['precipitationCal'].values.shape, (len(latitude_vals), len(longitude_vals)))
+        
+        # this also checks that the longitude values are in ascending order
+        testing.assert_allclose(ds.lat.values, np.array([0.05, 0.15, 0.25]), atol=1e-7)
         testing.assert_allclose(ds.lon.values, np.array([33.05, 34.05]), atol=1e-7)
         
         # Check for NaNs

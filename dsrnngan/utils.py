@@ -5,10 +5,9 @@ import datetime
 import pandas as pd
 from calendar import monthrange
 
-h = hashlib.shake_256()
 
 def hash_dict(params: dict):
-        
+    h = hashlib.shake_256()
     h.update(json.dumps(params).encode('utf-8'))
     return h.hexdigest(8)
 
