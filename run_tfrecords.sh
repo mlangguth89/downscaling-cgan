@@ -7,7 +7,8 @@
 #SBATCH --partition short
 #SBATCH --array=0-23
 
-source ~/.bashrc
+echo `which python`
+export LD_LIBRARY_PATH=/user/work/uz22147/miniconda3/lib/:$LD_LIBRARY_PATH
 echo Running on host `hostname`
 echo Time is `date`
 echo Directory is `pwd`
