@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from calendar import monthrange
 from tqdm import tqdm
 import pandas as pd
+import git
 
 from dsrnngan import read_config
 from dsrnngan.data import file_exists, fcst_hours
@@ -290,6 +291,11 @@ def write_data(year_month_range,
         write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
         write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
         
+        with open(os.path.join(hash_dir, 'git_commit.txt'), 'w+') as ofh:
+            repo = git.Repo(search_parent_directories=True)
+            sha = repo.head.object.hexsha
+            ofh.write(sha)
+        
         if debug:
             dates = dates[:1]
 
@@ -320,7 +326,7 @@ def write_data(year_month_range,
             
             print(f'File initialization took {time.time() - start_time}')
             print('starting fetching batches')
-            for batch, date in tqdm(enumerate(dates), total=len(dates)):
+            for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
                 
                 logger.debug(f"hour={hour}, batch={batch}")
                 

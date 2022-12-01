@@ -5,13 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: data.py",
+            "type": "python",
+            "request": "launch",
+            "module": "dsrnngan.data",
+            "justMyCode": true,
+            "args": ["--years", "2011", "--months", "10", "12","--obs-data-source", "imerg", "--output-dir", 
+            "/bp1/geog-tropical/users/uz22147/east_africa_data", "--min-latitude", "-12", 
+            "--max-latitude", "16", "--min-longitude", "22", "--max-longitude", "50"],
+            "cwd": "/user/home/uz22147/repos/downscaling-cgan"
+        },
+        {
             "name": "Python: main.py",
             "type": "python",
             "request": "launch",
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--eval-blitz", "--no-train", "--evaluate"
+                "--eval-blitz",
+                "--no-train",
+                "--evaluate"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
@@ -22,7 +35,10 @@
             "justMyCode": true,
             "module": "dsrnngan.tfrecords_generator",
             "args": [
-                "--fcst-hour", "18", "--records-folder", "/user/work/uz22147/tfrecords"
+                "--fcst-hour",
+                "18",
+                "--records-folder",
+                "/user/work/uz22147/tfrecords"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         }

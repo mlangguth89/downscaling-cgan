@@ -506,6 +506,7 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
        
     # Account for cumulative fields
     if var_name in ['tp', 'cp', 'cdir', 'tisr']:
+        # Output rainfall per hour
         ds =  0.5* ((ds.sel(time=time) - ds.sel(time=time_minus_one)) + (ds.sel(time=time_plus_one) - ds.sel(time=time)))
     else:
         ds = ds.sel(time=time)
@@ -974,12 +975,15 @@ if __name__ == '__main__':
                     all_imerg_dates.append((year, month, day, hour))
     
     print('starting observational data gathering')
-    for date_item in tqdm(all_imerg_dates, total=len(all_imerg_dates)):
+    for date_item in tqdm(all_imerg_dates, total=len(all_imerg_dates), position=0, leave=True):
 
         year, month, day, hour = date_item
 
         fps = glob(os.path.join('/bp1/geog-tropical/data/Obs/IMERG/half_hourly/final', 
                                 f'3B-HHR.MS.MRG.3IMERG.{year}{month:02d}{day:02d}-S{hour:02d}*'))
+        
+        if len(fps) == 0:
+            print(f'No files found for {year}{month:02d}{day:02d}-S{hour:02d}')
         
         for fp in fps:
             ds =load_hdf5_file(fp)

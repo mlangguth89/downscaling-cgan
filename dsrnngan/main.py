@@ -3,6 +3,7 @@ import json
 import os
 import yaml
 import math
+import git
 from pathlib import Path
 import tensorflow as tf
 
@@ -129,9 +130,12 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     Path(model_weights_root).mkdir(parents=True, exist_ok=True)
 
     # save setup parameters
-    save_config = os.path.join(log_folder, 'setup_params.yaml')
-    with open(save_config, 'w') as outfile:
-        yaml.dump(config, outfile, default_flow_style=False)
+    utils.write_to_yaml(os.path.join(log_folder, 'setup_params.yaml'), config)
+        
+    with open(os.path.join(log_folder, 'git_commit.txt'), 'w+') as ofh:
+        repo = git.Repo(search_parent_directories=True)
+        sha = repo.head.object.hexsha
+        ofh.write(sha)
 
     if do_training:
         # initialize GAN

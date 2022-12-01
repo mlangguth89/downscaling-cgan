@@ -10,10 +10,14 @@ Works on Linux, possibly not on Windows.
 
 Note that to set up this to work with a GPU you may also need to run:
 
-`pip uninstall tensorflow; pip install tensorflow-gpu`
+`conda install pippip uninstall tensorflow; pip install tensorflow-gpu==2.8.2`
 
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
+
+Install pre-commit hook by running (once python environment is activated):
+`pre-commit install`
+This makes sure that notebook outputs are cleared before commits.
 
 # High-level data overview
 

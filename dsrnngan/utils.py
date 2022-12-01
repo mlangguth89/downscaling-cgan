@@ -21,7 +21,7 @@ def load_yaml_file(fpath: str):
 def write_to_yaml(fpath: str, data: dict):
     
     with open(fpath, 'w+') as ofh:
-        yaml.dump(data, ofh)
+        yaml.dump(data, ofh, default_flow_style=False)
         
 def date_range_from_year_month_range(year_month_range):
     

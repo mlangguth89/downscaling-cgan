@@ -28,4 +28,5 @@ dependencies:
   - pytest
   - numpy
   - xesmf
+  - gitpython
 
