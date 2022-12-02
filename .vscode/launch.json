@@ -23,8 +23,7 @@
             "justMyCode": true,
             "args": [
                 "--eval-blitz",
-                "--no-train",
-                "--evaluate"
+                "--evaluate", "--records-folder", "/user/work/uz22147/tfrecords/d34d309eb0e00b04"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },

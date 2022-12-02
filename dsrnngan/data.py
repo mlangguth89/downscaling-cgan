@@ -51,8 +51,7 @@ all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950',
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
                   'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700']
 
-# fcst_hours = np.array(range(24))
-fcst_hours = [18]
+all_fcst_hours = np.array(range(24))
 
 # TODO: change this to behave like the IFS data load (to allow other vals of v, u etc)
 # TODO: move to a config
@@ -193,6 +192,7 @@ def file_exists(data_source, year, month, day, data_paths=DATA_PATHS):
         glob_str = os.path.join(data_path, f"{year}/*.nc")
         if len(glob(glob_str)) > 0:
             return True
+        
     elif data_source == 'imerg':
         for file_type in ['.HDF5', '.nc']:
             fps = get_imerg_filepaths(year, month, day, 0, file_ending=file_type)
@@ -430,7 +430,8 @@ def load_fcst_radar_batch(batch_dates,
 
     if type(hour) == str:
         if hour == 'random':
-            hours = fcst_hours[np.random.randint(len(fcst_hours), size=[len(batch_dates)])]
+            all_fcst_hours = np.array(range(24))
+            hours = all_fcst_hours[np.random.randint(24, size=[len(batch_dates)])]
         else:
             assert False, f"Not configured for {hour}"
     elif np.issubdtype(type(hour), np.integer):
@@ -579,7 +580,7 @@ def load_fcst_stack(data_source, fields, date, hour, fcst_dir, constants_dir=CON
 
 def get_ifs_stats(field, latitude_vals, longitude_vals, output_dir=None, 
                    use_cached=True, year=NORMALISATION_YEAR,
-                   ifs_data_dir=IFS_PATH, hours=fcst_hours):
+                   ifs_data_dir=IFS_PATH, hours=all_fcst_hours):
 
     min_lat = int(min(latitude_vals))
     max_lat = int(max(latitude_vals))

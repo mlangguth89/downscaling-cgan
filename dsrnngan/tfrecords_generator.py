@@ -14,7 +14,7 @@ import pandas as pd
 import git
 
 from dsrnngan import read_config
-from dsrnngan.data import file_exists, fcst_hours
+from dsrnngan.data import file_exists
 from dsrnngan.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 
 logger = logging.getLogger(__file__)
@@ -236,7 +236,7 @@ def write_data(year_month_range,
                data_label,
                forecast_data_source, 
                observational_data_source,
-               hours=fcst_hours,
+               hours,
                img_chunk_width=20,
                num_class=4,
                img_size = 94,

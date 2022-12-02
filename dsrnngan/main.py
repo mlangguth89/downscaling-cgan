@@ -6,10 +6,12 @@ import math
 import git
 from pathlib import Path
 import tensorflow as tf
+from tqdm.keras import TqdmCallback
 
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
+from calendar import monthrange
 
 from dsrnngan import evaluation
 from dsrnngan import plots
@@ -55,7 +57,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     mode = config["GENERAL"]["mode"]
     arch = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
-    log_folder = os.path.join(config["SETUP"]["log_folder"], utils.hash_dict(config))
+    root_log_folder = os.path.join(config["SETUP"]["log_folder"], utils.hash_dict(config))
     problem_type = config["GENERAL"]["problem_type"]
     downsample = config["GENERAL"]["downsample"]
     downscaling_steps = config['DOWNSCALING']['steps']
@@ -77,7 +79,8 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     training_range = config['TRAIN']['training_range']
     
     training_weights = config["TRAIN"]["training_weights"]
-    num_samples = config["TRAIN"]["num_samples"]
+    num_epochs = config["TRAIN"].get("num_epochs")
+    num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
     steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
     batch_size = config["TRAIN"]["batch_size"]
     kl_weight = config["TRAIN"]["kl_weight"]
@@ -120,21 +123,32 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         raise ValueError('Must specify at least one validation year when using --qual flag')
     
     assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
-     
-    num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
+    
+    # Calculate number of samples from epochs:
+    if num_samples is None:
+        if num_epochs is None:
+            raise ValueError('Must specify either num_epochs or num_samples')
+        num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
+        num_samples = num_data_points * num_epochs
+        
+    # num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
     checkpoint = 1
+    
+    # Get Git commit hash
+    repo = git.Repo(search_parent_directories=True)
+    sha = repo.head.object.hexsha
 
-    # create log folder and model save/load subfolder if they don't exist
-    Path(log_folder).mkdir(parents=True, exist_ok=True)
+    # create root log folder / log folder / models subfolder if they don't exist
+    Path(root_log_folder).mkdir(parents=True, exist_ok=True)
+    log_folder = os.path.join(root_log_folder, sha[:8])
+    
     model_weights_root = os.path.join(log_folder, "models")
     Path(model_weights_root).mkdir(parents=True, exist_ok=True)
 
     # save setup parameters
-    utils.write_to_yaml(os.path.join(log_folder, 'setup_params.yaml'), config)
+    utils.write_to_yaml(os.path.join(root_log_folder, 'setup_params.yaml'), config)
         
     with open(os.path.join(log_folder, 'git_commit.txt'), 'w+') as ofh:
-        repo = git.Repo(search_parent_directories=True)
-        sha = repo.head.object.hexsha
         ofh.write(sha)
 
     if do_training:

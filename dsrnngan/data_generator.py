@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 
-from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
+from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
 from dsrnngan import read_config
 return_dic = True
 
@@ -19,8 +19,8 @@ class DataGenerator(Sequence):
 
         if isinstance(hour, str):
             if hour == 'random':
-                self.hours = np.repeat(fcst_hours, len(self.dates))
-                self.dates = np.tile(self.dates, len(fcst_hours))
+                self.hours = np.repeat(all_fcst_hours, len(self.dates))
+                self.dates = np.tile(self.dates, len(all_fcst_hours))
             else:
                 assert False, f"Unsupported hour {hour}"
 

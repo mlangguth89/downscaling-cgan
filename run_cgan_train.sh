@@ -10,6 +10,7 @@
 # GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
 
 source ~/.bashrc
+
 echo Running on host `hostname`
 echo Time is `date`
 echo Directory is `pwd`
