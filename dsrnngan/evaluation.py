@@ -1,7 +1,7 @@
 import gc
 import os
 import warnings
-
+from datetime import datetime, timedelta
 import numpy as np
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
@@ -13,6 +13,7 @@ from dsrnngan import setupmodel
 from dsrnngan.noise import NoiseGenerator
 from dsrnngan.pooling import pool
 from dsrnngan.rapsd import rapsd
+from dsrnngan.scoring import rmse, mse, calculate_pearsonr
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -56,7 +57,7 @@ def setup_inputs(*,
 
     # always uses full-sized images
     print('Loading full sized image dataset')
-    _, data_gen_valid = setupdata.setup_data(
+    _, data_gen_valid, date_range = setupdata.setup_data(
         records_folder,
         fcst_data_source,
         obs_data_source,
@@ -67,7 +68,8 @@ def setup_inputs(*,
         batch_size=1,
         downsample=downsample,
         data_paths=data_paths)
-    return gen, data_gen_valid
+    
+    return gen, data_gen_valid, date_range
 
 
 def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
@@ -99,6 +101,8 @@ def eval_one_chkpt(*,
                    noise_channels,
                    latent_variables,
                    num_images,
+                   latitude_range,
+                   longitude_range,
                    add_noise,
                    ensemble_size,
                    noise_factor,
@@ -139,6 +143,15 @@ def eval_one_chkpt(*,
         const = inputs['hi_res_inputs']
         truth = outputs['output']
         truth = np.expand_dims(np.array(truth), axis=-1)  # must be 4D tensor for pooling NHWC
+        dates = inputs['dates']
+        hours = inputs['hours']
+        
+        dt = datetime(dates[0].year, dates[0].month, dates[0].day, hours[0]) - timedelta(hours=12)
+        imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, longitude_vals=longitude_range, log_precip=not denormalise_data)
+        
+        assert imerg_persisted_fcst.shape == truth.shape, ValueError('Shape mismatch in iMERG persistent and truth')
+        assert len(dates) > 1, ValueError('Currently must be run with a batch size of 1')
+        assert len(dates) == len(hours), ValueError('This is strange, why are they different sizes?')
         
         if denormalise_data:
             truth = data.denormalise(truth)
@@ -175,14 +188,15 @@ def eval_one_chkpt(*,
         # samples generated, now process them (e.g., undo log transform) and calculate MAE etc
         for ii in range(ensemble_size):
             
-            sample_gen = samples_gen[ii]
+            sample_gen = samples_gen[ii][0, :, :, 0]
+            
             # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
             if denormalise_data:
                 sample_gen = data.denormalise(sample_gen)
 
             # Calculate MAE, MSE for this sample
-            mae = ((np.abs(truth - sample_gen)).mean(axis=(1, 2)))
-            mse = ((truth - sample_gen)**2).mean(axis=(1, 2))
+            mae = mae(truth[0, :, :, 0], sample_gen[0, :, :, 0])
+            mse = mse(truth[0, :, :, 0], sample_gen[0, :, :, 0])
 
             mae_all.append(mae.flatten())
             mse_all.append(mse.flatten())
@@ -360,7 +374,9 @@ def evaluate_multiple_checkpoints(*,
                                              num_images=num_images,
                                              add_noise=add_noise,
                                              ensemble_size=ensemble_size,
-                                             noise_factor=noise_factor)
+                                             noise_factor=noise_factor,
+                                             latitude_range=latitude_range,
+                                             longitude_range=longitude_range)
         ranks, lowress, hiress = arrays
         OP = rank_OP(ranks)
         CRPS_pixel = np.asarray(crps['no_pooling']).mean()

@@ -54,14 +54,17 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
-    mode = config["GENERAL"]["mode"]
-    arch = config["MODEL"]["architecture"]
+
+    architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
-    root_log_folder = os.path.join(config["SETUP"]["log_folder"], utils.hash_dict(config))
-    problem_type = config["GENERAL"]["problem_type"]
-    downsample = config["GENERAL"]["downsample"]
+    root_log_folder = os.path.join(config["MODEL"]["log_folder"], utils.hash_dict(config))
+    mode = config["MODEL"]["mode"]
+    problem_type = config["MODEL"]["problem_type"] ## TODO: check if this is used anywhere
+    downsample = config["MODEL"]["downsample"]
+    
     downscaling_steps = config['DOWNSCALING']['steps']
     downscaling_factor = config['DOWNSCALING']['downscaling_factor']
+    
     fcst_data_source=config['DATA']['fcst_data_source']
     obs_data_source=config['DATA']['obs_data_source']
     input_channels = config['DATA']['input_channels']
@@ -69,15 +72,17 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     input_image_width = config['DATA']['input_image_width']
     output_image_width = downscaling_factor * input_image_width
     constants_image_width = input_image_width
-    load_constants = config['DATA'].get('load_constants', True)
+    load_constants = config['DATA'].get('load_constants', True)    
+    
     filters_gen = config["GENERATOR"]["filters_gen"]
     lr_gen = float(config["GENERATOR"]["learning_rate_gen"])
     noise_channels = config["GENERATOR"]["noise_channels"]
     latent_variables = config["GENERATOR"]["latent_variables"]
+    
     filters_disc = config["DISCRIMINATOR"]["filters_disc"]
     lr_disc = config["DISCRIMINATOR"]["learning_rate_disc"]
-    training_range = config['TRAIN']['training_range']
     
+    training_range = config['TRAIN']['training_range']
     training_weights = config["TRAIN"]["training_weights"]
     num_epochs = config["TRAIN"].get("num_epochs")
     num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
@@ -85,25 +90,19 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     batch_size = config["TRAIN"]["batch_size"]
     kl_weight = config["TRAIN"]["kl_weight"]
     ensemble_size = config["TRAIN"]["ensemble_size"]
-    CLtype = config["TRAIN"]["CL_type"]
+    CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
     
     val_range = config['VAL'].get('val_range')
     val_size = config.get("VAL", {}).get("val_size")
+    
     num_images = config["EVAL"]["num_batches"]
     add_noise = config["EVAL"]["add_postprocessing_noise"]
     noise_factor = config["EVAL"]["postprocessing_noise_factor"]
     max_pooling = config["EVAL"]["max_pooling"]
     avg_pooling = config["EVAL"]["avg_pooling"]
     
-    min_latitude = config['DATA']['min_latitude']
-    max_latitude = config['DATA']['max_latitude']
-    latitude_step_size = config['DATA']['latitude_step_size']
-    min_longitude = config['DATA']['min_longitude']
-    max_longitude = config['DATA']['max_longitude']
-    longitude_step_size = config['DATA']['longitude_step_size']
-    latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-    longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+    latitude_range, longitude_range = utils.get_lat_lon_range_from_config(config)
     
     # otherwise these are of type string, e.g. '1e-5'
     lr_gen = float(lr_gen)
@@ -116,7 +115,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
 
     if ensemble_size is not None:
-        if CLtype not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
+        if CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
     if evaluate and val_range is None:
@@ -131,7 +130,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
         num_samples = num_data_points * num_epochs
         
-    # num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
+    num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
     checkpoint = 1
     
     # Get Git commit hash
@@ -155,7 +154,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         # initialize GAN
         model = setupmodel.setup_model(
             mode=mode,
-            arch=arch,
+            arch=architecture,
             downscaling_steps=downscaling_steps,
             input_channels=input_channels,
             constant_fields=constant_fields,
@@ -168,7 +167,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
             lr_gen=lr_gen,
             kl_weight=kl_weight,
             ensemble_size=ensemble_size,
-            CLtype=CLtype,
+            CL_type=CL_type,
             content_loss_weight=content_loss_weight)
         
         fcst_shape=(input_image_width, input_image_width, input_channels)
@@ -176,7 +175,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         con_shape=(constants_image_width, constants_image_width, constant_fields)
         out_shape=(output_image_width, output_image_width, 1)
 
-        batch_gen_train, batch_gen_valid = setupdata.setup_data(
+        batch_gen_train, batch_gen_valid, _ = setupdata.setup_data(
             training_range=training_range,
             validation_range=val_range,
             fcst_data_source=fcst_data_source,
@@ -279,7 +278,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     # evaluate model performance
     if evaluate:
         evaluation.evaluate_multiple_checkpoints(mode=mode,
-                                                 arch=arch,
+                                                 arch=architecture,
                                                  fcst_data_source=fcst_data_source,
                                                  obs_data_source=obs_data_source,
                                                  validation_range=val_range,

@@ -173,3 +173,7 @@ def discriminator(arch,
     disc = Model(inputs=[generator_input, const_input, generator_output], outputs=disc_output, name='disc')
 
     return disc
+
+    
+    
+    

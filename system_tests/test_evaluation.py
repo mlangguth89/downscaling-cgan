@@ -17,12 +17,12 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 
-from dsrnngan import data, read_config
+from dsrnngan import data, read_config, setupdata
 from dsrnngan.noise import NoiseGenerator
-from dsrnngan.evaluation import setup_inputs
+from dsrnngan.evaluation import setup_inputs, eval_one_chkpt
 from dsrnngan.data import DATA_PATHS
 
-model_folder='/user/home/uz22147/logs/cgan'
+model_folder='/user/home/uz22147/logs/cgan/d34d309eb0e00b04'
 
 model_weights_root = os.path.join(model_folder, "models")
 config_path = os.path.join(model_folder, 'setup_params.yaml')
@@ -70,8 +70,7 @@ class TestEvaluation(unittest.TestCase):
     
     def test_setup_inputs(self):
         
-        
-
+    
         most_recent_model = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
         
         print('setting up inputs')
@@ -117,58 +116,32 @@ class TestEvaluation(unittest.TestCase):
 
         for ii in range(rank_samples):
             img_gen = gen.predict([cond, const, noise_gen()])
-    
-#     def test_quality_metrics_by_time(self):
+
+    def test_eval_one_chkpt(self):
         
-#         # This works currently only after the test_main bits have been run
-#         log_folder = str(HOME / 'system_tests' / 'data' / 'tmp')
-#         quality_metrics_by_time(mode="GAN",
-#                                 arch='forceconv',
-#                                 fcst_data_source='era5',
-#                                 obs_data_source='imerg',
-#                                 load_constants=False,
-#                                 val_years=2019,
-#                                 log_fname=os.path.join(log_folder, 'qual.txt'),
-#                                 weights_dir=os.path.join(log_folder, 'models'),
-#                                 downsample=False,
-#                                 model_numbers=[4],
-#                                 batch_size=1,  # do inference 1 at a time, in case of memory issues
-#                                 num_batches=2,
-#                                 filters_gen=2,
-#                                 filters_disc=2,
-#                                 input_channels=5,
-#                                 constant_fields=1,
-#                                 latent_variables=1,
-#                                 noise_channels=4,
-#                                 rank_samples=2,
-#                                 padding='reflect')
+        gen = setupdata.load_model_from_folder(model_folder='/user/home/uz22147/logs/cgan/d34d309eb0e00b04', model_number=38400)
+
+        records_folder = '/user/work/uz22147/tfrecords/d34d309eb0e00b04/'
+        _, data_gen_valid = setupdata.load_data_from_folder('/user/work/uz22147/tfrecords/d34d309eb0e00b04/')
+
+        config = read_config.read_config(os.path.join(records_folder, 'local_config.yaml'))
+        latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
         
-#     def test_rank_metrics_by_time(self):
+        noise_factor = config["EVAL"]["postprocessing_noise_factor"]
         
-#         log_folder = str(HOME / 'system_tests' / 'data' / 'tmp')
-#         rank_metrics_by_time(mode="GAN",
-#                                 arch='forceconv',
-#                                 fcst_data_source='era5',
-#                                 obs_data_source='imerg',
-#                                 val_years=2019,
-#                                 constant_fields=1,
-#                                 load_constants=False,
-#                                 log_fname=os.path.join(log_folder, 'rank.txt'),
-#                                 weights_dir=os.path.join(log_folder, 'models'),
-#                                 downsample=False,
-#                                 weights=[0.4, 0.3, 0.2, 0.1],
-#                                 add_noise=True,
-#                                 noise_factor=0.001,
-#                                 model_numbers=[4],
-#                                 ranks_to_save=[4],
-#                                 batch_size=1,  # ditto
-#                                 num_batches=2,
-#                                 filters_gen=2,
-#                                 filters_disc=2,
-#                                 input_channels=5,
-#                                 latent_variables=1,
-#                                 noise_channels=4,
-#                                 padding='reflect',
-#                                 rank_samples=10,
-#                                 max_pooling=True,
-#                                 avg_pooling=True)
+        eval_one_chkpt(
+                   mode=mode,
+                   gen=gen,
+                   fcst_data_source=fcst_data_source,
+                   data_gen=data_gen_valid,
+                   noise_channels=noise_channels,
+                   latent_variables=latent_variables,
+                   num_images=2,
+                   latitude_range=latitude_range,
+                   longitude_range=longitude_range,
+                   add_noise=add_noise,
+                   ensemble_size=2,
+                   noise_factor=noise_factor,
+                   denormalise_data=True,
+                   normalize_ranks=True,
+                   show_progress=True,)

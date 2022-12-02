@@ -10,7 +10,7 @@ from dsrnngan.vaegantrain import VAE
 
 def setup_model(*,
                 mode,
-                arch,
+                architecture,
                 downscaling_steps,
                 input_channels,
                 filters_gen,
@@ -29,24 +29,24 @@ def setup_model(*,
     if mode in ("GAN", "VAEGAN"):
         gen_to_use = {"normal": models.generator,
                       "forceconv": models.generator,
-                      "forceconv-long": models.generator}[arch]
+                      "forceconv-long": models.generator}[architecture]
         disc_to_use = {"normal": models.discriminator,
                        "forceconv": models.discriminator,
-                       "forceconv-long": models.discriminator}[arch]
+                       "forceconv-long": models.discriminator}[architecture]
     elif mode == "det":
         gen_to_use = {"normal": models.generator,
-                      "forceconv": models.generator}[arch]
+                      "forceconv": models.generator}[architecture]
 
     if mode == 'GAN':
         gen = gen_to_use(mode=mode,
-                         arch=arch,
+                         arch=architecture,
                          downscaling_steps=downscaling_steps,
                          input_channels=input_channels,
                          constant_fields=constant_fields,
                          noise_channels=noise_channels,
                          filters_gen=filters_gen,
                          padding=padding)
-        disc = disc_to_use(arch=arch,
+        disc = disc_to_use(arch=architecture,
                            downscaling_steps=downscaling_steps,
                            input_channels=input_channels,
                            constant_fields=constant_fields,
@@ -58,13 +58,13 @@ def setup_model(*,
                            content_loss_weight=content_loss_weight)
     elif mode == 'VAEGAN':
         (encoder, decoder) = gen_to_use(mode=mode,
-                                        arch=arch,
+                                        arch=architecture,
                                         downscaling_steps=downscaling_steps,
                                         input_channels=input_channels,
                                         latent_variables=latent_variables,
                                         filters_gen=filters_gen,
                                         padding=padding)
-        disc = disc_to_use(arch=arch,
+        disc = disc_to_use(arch=architecture,
                            downscaling_steps=downscaling_steps,
                            input_channels=input_channels,
                            filters_disc=filters_disc,
@@ -77,7 +77,7 @@ def setup_model(*,
                            content_loss_weight=content_loss_weight)
     elif mode == 'det':
         gen = gen_to_use(mode=mode,
-                         arch=arch,
+                         arch=architecture,
                          downscaling_steps=downscaling_steps,
                          input_channels=input_channels,
                          filters_gen=filters_gen,

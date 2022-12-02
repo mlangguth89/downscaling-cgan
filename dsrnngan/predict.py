@@ -3,6 +3,8 @@ import gc
 import os
 import pickle
 import yaml
+import copy
+
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,9 +13,9 @@ import seaborn as sns
 from matplotlib import colorbar, colors, gridspec
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import ListedColormap
-from dsrnngan import data
+from dsrnngan import data, setupdata
 from dsrnngan import read_config
-from dsrnngan.data import all_fcst_fields, get_dates, fcst_norm
+from dsrnngan.data import get_dates
 from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
 from dsrnngan.evaluation import _init_VAEGAN
 from dsrnngan.noise import NoiseGenerator
@@ -24,6 +26,8 @@ from dsrnngan.tfrecords_generator import create_fixed_dataset
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 downscaling_steps = read_config.read_config()['DOWNSCALING']["steps"]
+
+
 
 # plotting parameters
 value_range_precip = (0.1, 15)
@@ -46,23 +50,23 @@ cmap_lsm = plt.get_cmap('terrain')
 cmap_lsm = truncate_colourmap(cmap_lsm, 0, 0.8)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--log_folder', type=str,
+parser.add_argument('--log-folder', type=str,
                     help="directory where model weights are saved")
-parser.add_argument('--model_number', type=str,
+parser.add_argument('--model-number', type=str,
                     help="model iteration to load", default='0313600')
-parser.add_argument('--predict_year', type=int,
+parser.add_argument('--predict-year', type=int,
                     help="year to predict on", default=2019)
-parser.add_argument('--num_samples', type=int,
+parser.add_argument('--num-samples', type=int,
                     help="number of images to generate predictions for", default=5)
-parser.add_argument('--pred_ensemble_size', type=int,
+parser.add_argument('--pred-ensemble_size', type=int,
                     help="size of prediction ensemble", default=3)
-parser.add_argument('--batch_size', type=int,
+parser.add_argument('--batch-size', type=int,
                     help="batch size", default=4)
 parser.set_defaults(predict_full_image=False)
 parser.set_defaults(plot_rapsd=False)
-parser.add_argument('--predict_full_image', dest='predict_full_image', action='store_true',
+parser.add_argument('--predict-full-image', action='store_true',
                     help="Predict on full images")
-parser.add_argument('--plot_rapsd', dest='plot_rapsd', action='store_true',
+parser.add_argument('--plot-rapsd', action='store_true',
                     help="Plot Radially Averaged Power Spectral Density")
 args = parser.parse_args()
 
@@ -110,23 +114,7 @@ elif problem_type == "superresolution":
     input_channels = 1  # superresolution problem doesn't have all 9 input fields
 
 # load appropriate dataset
-if args.predict_full_image:
-    plot_label = 'large'
-    data_predict = DataGeneratorFull(dates=dates,
-                                     fcst_fields=all_fcst_fields,
-                                     batch_size=batch_size,
-                                     log_precip=True,
-                                     shuffle=True,
-                                     constants=True,
-                                     hour='random',
-                                     fcst_norm=True,
-                                     downsample=downsample)
-
-else:
-    plot_label = 'small'
-    data_predict = create_fixed_dataset(predict_year,
-                                        batch_size=batch_size,
-                                        downsample=downsample)
+_, data_predict = setupdata.load_data_from_folder(log_folder)
 
 # initialise model
 model = setup_model(mode=mode,
@@ -154,6 +142,8 @@ data_benchmarks = DataGeneratorFull(dates=dates,
                                     fcst_norm=False,
                                     downsample=downsample)
 
+###########
+
 pred = []
 seq_real = []
 seq_cond = []
@@ -179,8 +169,8 @@ for i in range(num_samples):
 
     if problem_type != 'superresolution':
         #  denormalise wind inputs
-        input_conditions[..., -2] = inputs['lo_res_inputs'][..., -2]*fcst_norm['u700'][1] + fcst_norm['u700'][0]
-        input_conditions[..., -1] = inputs['lo_res_inputs'][..., -1]*fcst_norm['v700'][1] + fcst_norm['v700'][0]
+        input_conditions[..., -2] = inputs['lo_res_inputs'][..., -2] * fcst_norm['u700'][1] + fcst_norm['u700'][0]
+        input_conditions[..., -1] = inputs['lo_res_inputs'][..., -1] * fcst_norm['v700'][1] + fcst_norm['v700'][0]
     seq_cond.append(input_conditions)
 
     # make sure ground truth image has correct dimensions
@@ -206,13 +196,19 @@ for i in range(num_samples):
         if mode == 'VAEGAN':
             # call encoder once
             mean, logvar = gen.encoder([inputs['lo_res_inputs'], inputs['hi_res_inputs']])
+            
         for j in range(pred_ensemble_size):
+            
             inputs['noise_input'] = noise_gen()
+            
             if mode == 'GAN':
+                
                 gan_inputs = [inputs['lo_res_inputs'], inputs['hi_res_inputs'], inputs['noise_input']]
                 pred_ensemble.append(data.denormalise(gen.predict(gan_inputs)))
+                
                 print(f"sample number {i+1}")
                 print(f"max predicted value is {np.amax(data.denormalise(gen.predict(gan_inputs)))}")
+                
             elif mode == 'VAEGAN':
                 dec_inputs = [mean, logvar, inputs['noise_input'], inputs['hi_res_inputs']]
                 pred_ensemble.append(data.denormalise(gen.decoder.predict(dec_inputs)))

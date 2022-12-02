@@ -109,10 +109,11 @@ class DataGenerator(Sequence):
         
         if return_dic:
             return {"lo_res_inputs": data_x_batch,
-                    "hi_res_inputs": self.constants},\
+                    "hi_res_inputs": self.constants,
+                    "dates": dates_batch, "hours": hours_batch},\
                     {"output": data_y_batch}
         else:
-            return data_x_batch, self.constants, data_y_batch
+            return data_x_batch, self.constants, data_y_batch, dates_batch
 
     def shuffle_data(self):
         assert len(self.hours) == len(self.dates)

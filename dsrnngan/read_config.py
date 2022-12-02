@@ -1,19 +1,20 @@
 import os
 import sys
 import tensorflow as tf
+import numpy as np
 
 from dsrnngan.utils import load_yaml_file
 
 def read_config(config_filename='local_config.yaml'):
-    
+        
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_filename)
     try:
         localconfig = load_yaml_file(config_path)
     except FileNotFoundError as e:
         print(e)
         print(f"You must set {config_filename} in the main folder. Copy local_config-example.yaml and adjust appropriately.")
-        sys.exit(1)
-
+        sys.exit(1)       
+    
     return localconfig
 
 
@@ -56,3 +57,23 @@ def set_gpu_mode():
     else:
         # if use_gpu False
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+        
+def get_lat_lon_range_from_config(config=None):
+    
+    if config is None:
+        config = read_config()
+    
+    if isinstance(config, str):
+        config = load_yaml_file(config)
+    
+    min_latitude = config['DATA']['min_latitude']
+    max_latitude = config['DATA']['max_latitude']
+    latitude_step_size = config['DATA']['latitude_step_size']
+    min_longitude = config['DATA']['min_longitude']
+    max_longitude = config['DATA']['max_longitude']
+    longitude_step_size = config['DATA']['longitude_step_size']
+    
+    latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
+    longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+    
+    return latitude_range, longitude_range
