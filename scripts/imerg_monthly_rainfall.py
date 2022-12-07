@@ -17,8 +17,8 @@ from calendar import monthrange
 
 hours = range(24)
 
-latitude_vals = np.arange(-12, 16, 0.25)
-longitude_vals = np.arange(22, 49, 0.25) # Asymettric ranges to make sure lat and lon are correct orientation
+latitude_vals = np.arange(-11.95, 16.05, 0.1)
+longitude_vals = np.arange(22.05, 50.05, 0.1) # Asymettric ranges to make sure lat and lon are correct orientation
 
 parser = ArgumentParser(description='Gather monthly rainfall data.')
 parser.add_argument('--year', type=int, help='Years to process')
@@ -47,7 +47,7 @@ for month in tqdm(np.arange(1, 13)):
             # This sselects with method = 'backfill' so grid resolution should match era5
             ds_hr = load_imerg_raw(year, month, day, hour, 
                                     imerg_data_dir='/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final')
-            ds_hr = ds_hr.sel(lat=latitude_vals, method='backfill').sel(lon=longitude_vals, method='backfill')
+            ds_hr = ds_hr.sel(lat=latitude_vals).sel(lon=longitude_vals)
 
             precip_hourly_values = ds_hr['precipitationCal']
             hourly_rainfall.append(precip_hourly_values)
@@ -61,17 +61,17 @@ for month in tqdm(np.arange(1, 13)):
         monthly_rainfall += daily_rainfall
     monthly_rainfall_dict[month] = monthly_rainfall
     
-    # era5
-    era5_ds = load_era5_month_raw('tp', year=year, month=month, era_data_dir='/bp1/geog-tropical/users/uz22147/east_africa_data/ERA5')
-    era5_ds = era5_ds.sel(latitude=latitude_vals, method='backfill').sel(longitude=longitude_vals, method='backfill')
+    # # era5
+    # era5_ds = load_era5_month_raw('tp', year=year, month=month, era_data_dir='/bp1/geog-tropical/users/uz22147/east_africa_data/ERA5')
+    # era5_ds = era5_ds.sel(latitude=latitude_vals, method='backfill').sel(longitude=longitude_vals, method='backfill')
     
-    era5_ds_monthly = era5_ds.sum('time')                             
-    assert len(era5_ds.latitude.values) == len(tmp_lat_vals)
-    assert len(era5_ds.longitude.values) == len(tmp_lon_vals)
+    # era5_ds_monthly = era5_ds.sum('time')                             
+    # assert len(era5_ds.latitude.values) == len(tmp_lat_vals)
+    # assert len(era5_ds.longitude.values) == len(tmp_lon_vals)
     
-    monthly_rainfall_dict_era5[month] = era5_ds_monthly['tp'].values
-    era5_ds.close()
-    era5_ds_monthly.close()
+    # monthly_rainfall_dict_era5[month] = era5_ds_monthly['tp'].values
+    # era5_ds.close()
+    # era5_ds_monthly.close()
 
     with open(os.path.join(args.output_dir, f'total_rainfall_{year}.pkl'), 'wb+') as ofh:
         pickle.dump(total_rainfall_dict, ofh)
@@ -79,5 +79,5 @@ for month in tqdm(np.arange(1, 13)):
     with open(os.path.join(args.output_dir, f'monthly_rainfall_{year}.pkl'), 'wb+') as ofh:
         pickle.dump(monthly_rainfall_dict, ofh)
         
-    with open(os.path.join(args.output_dir, f'monthly_rainfall_era5_{year}.pkl'), 'wb+') as ofh:
-        pickle.dump(monthly_rainfall_dict_era5, ofh)
+    # with open(os.path.join(args.output_dir, f'monthly_rainfall_era5_{year}.pkl'), 'wb+') as ofh:
+    #     pickle.dump(monthly_rainfall_dict_era5, ofh)

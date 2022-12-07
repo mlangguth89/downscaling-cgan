@@ -5,6 +5,8 @@ import xarray as xr
 import xesmf as xe
 import os
 import sys
+import tempfile
+
 from pathlib import Path
 from tqdm import tqdm
 from glob import glob
@@ -19,7 +21,7 @@ sys.path.append(str(HOME))
 
 from dsrnngan import data, read_config, setupdata
 from dsrnngan.noise import NoiseGenerator
-from dsrnngan.evaluation import setup_inputs, eval_one_chkpt
+from dsrnngan.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
 from dsrnngan.data import DATA_PATHS
 
 model_folder='/user/home/uz22147/logs/cgan/d34d309eb0e00b04'
@@ -141,7 +143,55 @@ class TestEvaluation(unittest.TestCase):
                    longitude_range=longitude_range,
                    add_noise=add_noise,
                    ensemble_size=2,
-                   noise_factor=noise_factor,
+                   noise_factor=1e-3,
                    denormalise_data=True,
                    normalize_ranks=True,
                    show_progress=True,)
+        
+    def test_eval_multiple_checkpoints(self):
+        
+        records_folder = '/user/work/uz22147/tfrecords/d34d309eb0e00b04/'
+        config = read_config.read_config(os.path.join(records_folder, 'local_config.yaml'))
+        latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
+        
+
+        fcst_data_source=config['DATA']['fcst_data_source']
+        obs_data_source=config['DATA']['obs_data_source']
+        input_channels = config['DATA']['input_channels']
+        constant_fields = config['DATA']['constant_fields']
+
+        filters_gen = config["GENERATOR"]["filters_gen"]
+        noise_channels = config["GENERATOR"]["noise_channels"]
+        latent_variables = config["GENERATOR"]["latent_variables"]
+        
+        filters_disc = config["DISCRIMINATOR"]["filters_disc"]
+
+        ensemble_size = config["TRAIN"]["ensemble_size"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = os.path.join(temp_dir, 'eval.txt')
+            evaluate_multiple_checkpoints(mode='GAN',
+                                        arch='forceconv',
+                                        fcst_data_source=fcst_data_source,
+                                        obs_data_source=obs_data_source,
+                                        latitude_range=latitude_range,
+                                        longitude_range=longitude_range,
+                                    validation_range=['201811', '201812'],
+                                    log_fname=log_file,
+                                    weights_dir='/user/home/uz22147/logs/cgan/d34d309eb0e00b04/models',
+                                    records_folder=records_folder,
+                                    downsample=False,
+                                    add_noise=True,
+                                    noise_factor=1e-3,
+                                    model_numbers=[38400],
+                                    ranks_to_save=[38400],
+                                    num_images=2,
+                                    filters_gen=filters_gen,
+                                    filters_disc=filters_disc,
+                                    input_channels=input_channels,
+                                    latent_variables=latent_variables,
+                                    noise_channels=noise_channels,
+                                    padding='reflect',
+                                    ensemble_size=ensemble_size,
+                                    constant_fields=constant_fields,
+                                    data_paths=DATA_PATHS)

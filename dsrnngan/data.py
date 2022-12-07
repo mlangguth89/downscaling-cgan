@@ -468,6 +468,24 @@ def get_ifs_filepath(field, loaddate, loadtime, fcst_dir=IFS_PATH):
         
     return fp
 
+def get_ifs_forecast_time(year, month, day, hour):
+    
+    time = datetime(year=year, month=month, day=day, hour=hour)
+    
+    if time.hour < 6:
+        loaddate = time - timedelta(days=1)
+        loadtime = '12'
+    elif 6 <= time.hour < 18:
+        loaddate = time
+        loadtime = '00'
+    elif 18 <= time.hour < 24:
+        loaddate = time
+        loadtime = '12'
+    else:
+        raise ValueError("Not acceptable time")
+    
+    return loaddate, loadtime
+    
 def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
                  latitude_vals=None, longitude_vals=None, interpolate=True):
      
@@ -478,20 +496,10 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
     time_minus_one = datetime(year=year, month=month, day=day, hour=hour) - timedelta(hours=1)
 
     # Get the nearest forecast starttime
-    if time.hour < 6:
-        tmpdate = time - timedelta(days=1)
-        loadtime = '12'
-    elif 6 <= time.hour < 18:
-        tmpdate = time
-        loadtime = '00'
-    elif 18 <= time.hour < 24:
-        tmpdate = time
-        loadtime = '12'
-    else:
-        assert False, "Not acceptable time"
+    loaddate, loadtime = get_ifs_forecast_time(year, month, day, hour)
     
     fp = get_ifs_filepath(field=field,
-                          loaddate=tmpdate,
+                          loaddate=loaddate,
                           loadtime=loadtime,
                           fcst_dir=ifs_data_dir
                           )

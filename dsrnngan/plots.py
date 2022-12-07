@@ -5,9 +5,10 @@ import cartopy.crs as ccrs
 import matplotlib as mpl
 import numpy as np
 import seaborn as sns
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
+from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
 
 from dsrnngan import data, read_config
@@ -30,17 +31,22 @@ spacing = 10
 cmap = ListedColormap(sns.color_palette(palette, 256))
 cmap.set_under('white')
 
-def plot_precipitation(ax, img, value_range, cmap=default_cmap, extent=default_extent, 
-                       alpha=alpha, linewidth =default_linewidth):
+def plot_precip(np_array, ax, levels, linewidth=default_linewidth, extent=default_extent):
+    precip_cmap = ListedColormap(metpy_plots.ctables.colortables["precipitation"][:len(levels)-1], 'precipitation')
+    precip_norm = BoundaryNorm(levels, precip_cmap.N)
     
     ax.coastlines(resolution='10m', color='black', linewidth=linewidth)
-    plot_img_log_coastlines(img,
-                            value_range_precip=value_range,
-                            cmap=cmap,
-                            extent=extent,
-                            alpha=alpha)
+    im = ax.imshow(np_array,
+               interpolation='nearest',
+               norm=precip_norm,
+               cmap=precip_cmap,
+               origin='lower',
+               extent=extent,
+               transform=ccrs.PlateCarree(),
+               alpha=alpha)
     ax.add_feature(cfeature.BORDERS)
-    return ax
+    return im
+
     
 # def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
 #                        lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,

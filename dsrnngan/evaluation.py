@@ -13,7 +13,7 @@ from dsrnngan import setupmodel
 from dsrnngan.noise import NoiseGenerator
 from dsrnngan.pooling import pool
 from dsrnngan.rapsd import rapsd
-from dsrnngan.scoring import rmse, mse, calculate_pearsonr
+from dsrnngan.scoring import rmse, mse, mae, calculate_pearsonr
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -43,7 +43,7 @@ def setup_inputs(*,
 
     # initialise model
     model = setupmodel.setup_model(mode=mode,
-                                   arch=arch,
+                                   architecture=arch,
                                    downscaling_steps=downscaling_steps,
                                    input_channels=input_channels,
                                    filters_gen=filters_gen,
@@ -57,7 +57,7 @@ def setup_inputs(*,
 
     # always uses full-sized images
     print('Loading full sized image dataset')
-    _, data_gen_valid, date_range = setupdata.setup_data(
+    _, data_gen_valid = setupdata.setup_data(
         records_folder,
         fcst_data_source,
         obs_data_source,
@@ -69,7 +69,7 @@ def setup_inputs(*,
         downsample=downsample,
         data_paths=data_paths)
     
-    return gen, data_gen_valid, date_range
+    return gen, data_gen_valid
 
 
 def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
@@ -116,8 +116,12 @@ def eval_one_chkpt(*,
     crps_scores = {}
     mae_all = []
     mse_all = []
+    corr_all = []
     emmse_all = []
+    fcst_emmse_all = []
     ralsd_all = []
+    ensemble_mean_correlation_all = []
+    correlation_fcst_all = []
 
     data_gen_iter = iter(data_gen)
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
@@ -146,11 +150,14 @@ def eval_one_chkpt(*,
         dates = inputs['dates']
         hours = inputs['hours']
         
-        dt = datetime(dates[0].year, dates[0].month, dates[0].day, hours[0]) - timedelta(hours=12)
-        imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, longitude_vals=longitude_range, log_precip=not denormalise_data)
+        # Get observations at time of forecast
+        loaddate, loadtime = data.get_ifs_forecast_time(dates[0].year, dates[0].month, dates[0].day, hours[0])
+        dt = datetime(loaddate.year, loaddate.month, loaddate.day, int(loadtime))
+        imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, 
+                                               longitude_vals=longitude_range, log_precip=not denormalise_data)
         
-        assert imerg_persisted_fcst.shape == truth.shape, ValueError('Shape mismatch in iMERG persistent and truth')
-        assert len(dates) > 1, ValueError('Currently must be run with a batch size of 1')
+        assert imerg_persisted_fcst.shape == truth.shape[1:3], ValueError('Shape mismatch in iMERG persistent and truth')
+        assert len(dates) == 1, ValueError('Currently must be run with a batch size of 1')
         assert len(dates) == len(hours), ValueError('This is strange, why are they different sizes?')
         
         if denormalise_data:
@@ -188,18 +195,20 @@ def eval_one_chkpt(*,
         # samples generated, now process them (e.g., undo log transform) and calculate MAE etc
         for ii in range(ensemble_size):
             
-            sample_gen = samples_gen[ii][0, :, :, 0]
+            sample_gen = samples_gen[ii]
             
             # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
             if denormalise_data:
                 sample_gen = data.denormalise(sample_gen)
 
             # Calculate MAE, MSE for this sample
-            mae = mae(truth[0, :, :, 0], sample_gen[0, :, :, 0])
-            mse = mse(truth[0, :, :, 0], sample_gen[0, :, :, 0])
+            mae_val = mae(truth[0, :, :, 0], sample_gen[0, :, :, 0])
+            mse_val = mse(truth[0, :, :, 0], sample_gen[0, :, :, 0])
+            corr = calculate_pearsonr(truth[0, :, :,0], sample_gen[0, :, :, 0])
 
-            mae_all.append(mae.flatten())
-            mse_all.append(mse.flatten())
+            mae_all.append(mae_val)
+            mse_all.append(mse_val)
+            corr_all.append(corr)
 
             if ii == 0:
                 # reset on first ensemble member
@@ -211,8 +220,19 @@ def eval_one_chkpt(*,
 
         # Calculate Ensemble Mean MSE
         ensmean /= ensemble_size
-        emmse = ((truth - ensmean)**2).mean(axis=(1, 2))
-        emmse_all.append(emmse.flatten())
+        emmse = mse(truth[0, :, :,0], ensmean[0, :, :, 0])
+        emmse_all.append(emmse)
+        
+        # MSE to forecast
+        fcst_emmse = mse(truth[0, :, :,0], cond[0, :, :, tpidx])
+        fcst_emmse_all.append(fcst_emmse)
+                
+        # Correlation between ensemble mean and truth
+        corr = calculate_pearsonr(truth[0, :, :,0], ensmean[0, :, :, 0])
+        ensemble_mean_correlation_all.append(corr)
+        
+        corr_fcst = calculate_pearsonr(truth[0, :, :,0], cond[0, :, :, tpidx])
+        correlation_fcst_all.append(corr_fcst)
 
         # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
         ralsd = calculate_ralsd_rmse(np.squeeze(truth, axis=-1), samples_gen)
@@ -238,8 +258,6 @@ def eval_one_chkpt(*,
                 crps_scores[method] = []
             crps_scores[method].append(crps_score)
         
-        # Assess 
-        
         
         # calculate ranks; only calculated without pooling
 
@@ -261,22 +279,23 @@ def eval_one_chkpt(*,
         gc.collect()
 
         if show_progress:
-            emmse_so_far = np.sqrt(np.mean(np.concatenate(emmse_all)))
+            emmse_so_far = np.sqrt(np.mean(emmse_all))
             crps_mean = np.mean(crps_scores['no_pooling'])
             losses = [("EM-MSE", emmse_so_far), ("CRPS", crps_mean)]
             progbar.add(1, values=losses)
 
-    mae_all = np.concatenate(mae_all)
-    mse_all = np.concatenate(mse_all)
-    emmse_all = np.concatenate(emmse_all)
     ralsd_all = np.concatenate(ralsd_all)
 
     other = {}
     other['mae'] = mae_all
     other['mse'] = mse_all
     other['emmse'] = emmse_all
+    other['emmse_fcst'] = fcst_emmse_all
     other['ralsd'] = ralsd_all
-
+    other['corr'] = corr_all
+    other['corr_ensemble_mean'] = ensemble_mean_correlation_all
+    other['corr_fcst'] = correlation_fcst_all
+    
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
     hiress = np.concatenate(hiress)
@@ -352,7 +371,7 @@ def evaluate_multiple_checkpoints(*,
 
     log_line(log_fname, f"Samples per image: {ensemble_size}")
     log_line(log_fname, f"Initial dates/times: {data_gen_valid.dates[0:4]}, {data_gen_valid.hours[0:4]}")
-    log_line(log_fname, "N CRPS CRPS_max_4 CRPS_max_16 CRPS_avg_4 CRPS_avg_16 RMSE EMRMSE RALSD MAE OP")
+    log_line(log_fname, "N CRPS CRPS_max_4 CRPS_max_16 CRPS_avg_4 CRPS_avg_16 RMSE EMRMSE EMRMSE_FCST RALSD MAE OP CORR CORR_ENS CORR_FCST")
 
     for model_number in model_numbers:
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -385,12 +404,16 @@ def evaluate_multiple_checkpoints(*,
         CRPS_avg_4 = np.asarray(crps['avg_4']).mean()
         CRPS_avg_16 = np.asarray(crps['avg_16']).mean()
 
-        mae = other['mae'].mean()
-        rmse = np.sqrt(other['mse'].mean())
-        emrmse = np.sqrt(other['emmse'].mean())
+        mae = np.mean(other['mae'])
+        rmse = np.sqrt(np.mean(other['mse']))
+        emrmse = np.sqrt(np.mean(other['emmse']))
+        emrmse_fcst = np.sqrt(np.mean(other['emmse_fcst']))
         ralsd = np.nanmean(other['ralsd'])
+        corr = np.mean(other['corr'])
+        corr_ens = np.mean(other['corr_ensemble_mean'])
+        corr_fcst = np.mean(other['corr_fcst'])
 
-        log_line(log_fname, f"{model_number} {CRPS_pixel:.6f} {CRPS_max_4:.6f} {CRPS_max_16:.6f} {CRPS_avg_4:.6f} {CRPS_avg_16:.6f} {rmse:.6f} {emrmse:.6f} {ralsd:.6f} {mae:.6f} {OP:.6f}")
+        log_line(log_fname, f"{model_number} {CRPS_pixel:.6f} {CRPS_max_4:.6f} {CRPS_max_16:.6f} {CRPS_avg_4:.6f} {CRPS_avg_16:.6f} {rmse:.6f} {emrmse:.6f} {emrmse_fcst:.6f} {ralsd:.6f} {mae:.6f} {OP:.6f} {corr:.6f} {corr_ens:.6f} {corr_fcst:.6f}")
 
         # save one directory up from model weights, in same dir as logfile
         ranks_folder = os.path.dirname(log_fname)

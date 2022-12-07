@@ -51,16 +51,18 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
             raise ValueError('Data has not been prepared that matches this config')
     else:
         config = utils.load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
+        data_paths = utils.load_yaml_file(os.path.join(records_folder, 'data_paths.yaml'))
     
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
 
     architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
-    root_log_folder = os.path.join(config["MODEL"]["log_folder"], utils.hash_dict(config))
-    mode = config["MODEL"]["mode"]
-    problem_type = config["MODEL"]["problem_type"] ## TODO: check if this is used anywhere
-    downsample = config["MODEL"]["downsample"]
+    log_folder = config['SETUP'].get('log_folder', False) or config["MODEL"]["log_folder"] 
+    root_log_folder = os.path.join(log_folder, utils.hash_dict(config))
+    mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
+    problem_type = config["MODEL"].get("problem_type", False) or config['GENERAL']['problem_type'] ## TODO: check if this is used anywhere
+    downsample = config["MODEL"].get("downsample", False) or config['GENERAL']['downsample']
     
     downscaling_steps = config['DOWNSCALING']['steps']
     downscaling_factor = config['DOWNSCALING']['downscaling_factor']
@@ -102,7 +104,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     max_pooling = config["EVAL"]["max_pooling"]
     avg_pooling = config["EVAL"]["avg_pooling"]
     
-    latitude_range, longitude_range = utils.get_lat_lon_range_from_config(config)
+    latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
     
     # otherwise these are of type string, e.g. '1e-5'
     lr_gen = float(lr_gen)

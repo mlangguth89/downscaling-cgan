@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=monthly_rainfall
 #SBATCH --partition short
-#SBATCH --array=2016-2019
+#SBATCH --array=2000-2020
 
 source ~/.bashrc
 echo Running on host `hostname`
