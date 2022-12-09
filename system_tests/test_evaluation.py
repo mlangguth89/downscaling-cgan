@@ -54,8 +54,7 @@ filters_gen = setup_params["GENERATOR"]["filters_gen"]
 noise_channels = setup_params["GENERATOR"]["noise_channels"]
 latent_variables = setup_params["GENERATOR"]["latent_variables"]
 filters_disc = setup_params["DISCRIMINATOR"]["filters_disc"]
-num_batches = setup_params["EVAL"]["num_batches"]
-add_noise = setup_params["EVAL"]["add_postprocessing_noise"]
+
 
 val_range = setup_params['VAL'].get('val_range')
 
@@ -121,16 +120,14 @@ class TestEvaluation(unittest.TestCase):
 
     def test_eval_one_chkpt(self):
         
-        gen = setupdata.load_model_from_folder(model_folder='/user/home/uz22147/logs/cgan/d34d309eb0e00b04', model_number=38400)
+        gen = setupdata.load_model_from_folder(model_folder='/user/home/uz22147/logs/cgan/38fba564f1c9852b', model_number=38400)
 
         records_folder = '/user/work/uz22147/tfrecords/d34d309eb0e00b04/'
         _, data_gen_valid = setupdata.load_data_from_folder('/user/work/uz22147/tfrecords/d34d309eb0e00b04/')
 
         config = read_config.read_config(os.path.join(records_folder, 'local_config.yaml'))
         latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
-        
-        noise_factor = config["EVAL"]["postprocessing_noise_factor"]
-        
+                
         eval_one_chkpt(
                    mode=mode,
                    gen=gen,
@@ -141,7 +138,6 @@ class TestEvaluation(unittest.TestCase):
                    num_images=2,
                    latitude_range=latitude_range,
                    longitude_range=longitude_range,
-                   add_noise=add_noise,
                    ensemble_size=2,
                    noise_factor=1e-3,
                    denormalise_data=True,
@@ -181,7 +177,6 @@ class TestEvaluation(unittest.TestCase):
                                     weights_dir='/user/home/uz22147/logs/cgan/d34d309eb0e00b04/models',
                                     records_folder=records_folder,
                                     downsample=False,
-                                    add_noise=True,
                                     noise_factor=1e-3,
                                     model_numbers=[38400],
                                     ranks_to_save=[38400],

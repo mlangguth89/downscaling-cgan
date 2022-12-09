@@ -1,17 +1,14 @@
 import argparse
 import json
 import os
-import yaml
 import math
 import git
 from pathlib import Path
 import tensorflow as tf
-from tqdm.keras import TqdmCallback
 
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
-from calendar import monthrange
 
 from dsrnngan import evaluation
 from dsrnngan import plots
@@ -20,7 +17,6 @@ from dsrnngan import setupdata
 from dsrnngan import setupmodel
 from dsrnngan import train
 from dsrnngan import utils
-from dsrnngan import data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--records-folder', type=str, default=None,
@@ -37,9 +33,16 @@ parser.add_argument('--evaluate', action='store_true',
                     help="Boolean: if true will run evaluation")
 parser.add_argument('--plot-ranks', dest='plot_ranks', action='store_true',
                     help="Plot rank histograms")
+parser.add_argument('--num-samples', type=int,
+                    help="Override of num samples")
+parser.add_argument('--num-images', type=int, default=20,
+                    help="Number of images to evaluate on")
+parser.add_argument('--noise-factor', type=float, default=1e-3,
+                    help="Multiplicative noise factor for rank histogram")
 
-def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=None,
-         seed=None):
+def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
+         noise_factor, records_folder=None,
+         seed=None, num_samples_override=None, ):
     
     if records_folder is None:
         
@@ -59,7 +62,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
     log_folder = config['SETUP'].get('log_folder', False) or config["MODEL"]["log_folder"] 
-    root_log_folder = os.path.join(log_folder, utils.hash_dict(config))
+    log_folder = os.path.join(log_folder, utils.hash_dict(config))
     mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
     problem_type = config["MODEL"].get("problem_type", False) or config['GENERAL']['problem_type'] ## TODO: check if this is used anywhere
     downsample = config["MODEL"].get("downsample", False) or config['GENERAL']['downsample']
@@ -98,12 +101,6 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     val_range = config['VAL'].get('val_range')
     val_size = config.get("VAL", {}).get("val_size")
     
-    num_images = config["EVAL"]["num_batches"]
-    add_noise = config["EVAL"]["add_postprocessing_noise"]
-    noise_factor = config["EVAL"]["postprocessing_noise_factor"]
-    max_pooling = config["EVAL"]["max_pooling"]
-    avg_pooling = config["EVAL"]["avg_pooling"]
-    
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
     
     # otherwise these are of type string, e.g. '1e-5'
@@ -126,11 +123,14 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
     
     # Calculate number of samples from epochs:
-    if num_samples is None:
-        if num_epochs is None:
-            raise ValueError('Must specify either num_epochs or num_samples')
-        num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
-        num_samples = num_data_points * num_epochs
+    if num_samples_override is not None:
+        num_samples = num_samples_override
+    else:
+        if num_samples is None:
+            if num_epochs is None:
+                raise ValueError('Must specify either num_epochs or num_samples')
+            num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
+            num_samples = num_data_points * num_epochs
         
     num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
     checkpoint = 1
@@ -140,14 +140,14 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     sha = repo.head.object.hexsha
 
     # create root log folder / log folder / models subfolder if they don't exist
-    Path(root_log_folder).mkdir(parents=True, exist_ok=True)
-    log_folder = os.path.join(root_log_folder, sha[:8])
+    # Path(root_log_folder).mkdir(parents=True, exist_ok=True)
+    # log_folder = os.path.join(root_log_folder, sha[:8])
     
     model_weights_root = os.path.join(log_folder, "models")
     Path(model_weights_root).mkdir(parents=True, exist_ok=True)
 
     # save setup parameters
-    utils.write_to_yaml(os.path.join(root_log_folder, 'setup_params.yaml'), config)
+    utils.write_to_yaml(os.path.join(log_folder, 'setup_params.yaml'), config)
         
     with open(os.path.join(log_folder, 'git_commit.txt'), 'w+') as ofh:
         ofh.write(sha)
@@ -156,7 +156,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         # initialize GAN
         model = setupmodel.setup_model(
             mode=mode,
-            arch=architecture,
+            architecture=architecture,
             downscaling_steps=downscaling_steps,
             input_channels=input_channels,
             constant_fields=constant_fields,
@@ -169,7 +169,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
             lr_gen=lr_gen,
             kl_weight=kl_weight,
             ensemble_size=ensemble_size,
-            CL_type=CL_type,
+            CLtype=CL_type,
             content_loss_weight=content_loss_weight)
         
         fcst_shape=(input_image_width, input_image_width, input_channels)
@@ -177,7 +177,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         con_shape=(constants_image_width, constants_image_width, constant_fields)
         out_shape=(output_image_width, output_image_width, 1)
 
-        batch_gen_train, batch_gen_valid, _ = setupdata.setup_data(
+        batch_gen_train, batch_gen_valid = setupdata.setup_data(
             training_range=training_range,
             validation_range=val_range,
             fcst_data_source=fcst_data_source,
@@ -198,7 +198,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
         if restart: # load weights and run status
 
             model.load(model.filenames_from_root(model_weights_root))
-            with open(log_folder + "-run_status.json", 'r') as f:
+            with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
                 run_status = json.load(f)
             training_samples = run_status["training_samples"]
             checkpoint = int(training_samples / (steps_per_checkpoint * batch_size)) + 1
@@ -257,7 +257,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
     else:
         print("Training skipped...")
 
-    eval_fname = os.path.join(log_folder, "eval_validation.txt")
+    eval_fname = os.path.join(log_folder, f"eval_validation_{'-'.join(val_range)}.txt")
 
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
@@ -290,7 +290,6 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, records_folder=Non
                                                  weights_dir=model_weights_root,
                                                  records_folder=records_folder,
                                                  downsample=downsample,
-                                                 add_noise=add_noise,
                                                  noise_factor=noise_factor,
                                                  model_numbers=model_numbers,
                                                  ranks_to_save=ranks_to_save,
@@ -325,4 +324,7 @@ if __name__ == "__main__":
     main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
         evaluate=args.evaluate,
-        plot_ranks=args.plot_ranks)
+        plot_ranks=args.plot_ranks,
+        noise_factor=args.noise_factor,
+        num_samples_override=args.num_samples,
+        num_images=args.num_images)

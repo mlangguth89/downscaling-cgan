@@ -1,3 +1,4 @@
+import numpy as np
 from tensorflow.keras.layers import MaxPool2D, AvgPool2D
 
 
@@ -7,6 +8,12 @@ def pool(x, pool_type, data_format='channels_last'):
     Pooling is applied on W and H dimensions.
 
     """
+    x = np.copy(x)
+    if len(x.shape) == 2:
+        x = np.expand_dims(x, (0, -1))
+    elif len(x.shape) == 3:
+        x = np.expand_dims(x, 0)
+        
     pool_op = {
         'max_4': MaxPool2D(pool_size=(4, 4), strides=(2, 2), data_format=data_format),
         'max_16': MaxPool2D(pool_size=(16, 16), strides=(4, 4), data_format=data_format),

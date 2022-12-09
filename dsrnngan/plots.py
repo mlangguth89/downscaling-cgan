@@ -305,8 +305,8 @@ def plot_rank_histogram_all(rank_files,
     plt.close()
 
 
-def plot_histograms(log_folder, val_year, ranks, N_ranks):
-    rank_metrics_files = [os.path.join(log_folder, f"ranksnew-{val_year}-{rk}.npz") for rk in ranks]
+def plot_histograms(log_folder, val_range, ranks, N_ranks):
+    rank_metrics_files = [os.path.join(log_folder, f"ranksnew-{'-'.join(val_range)}_{rk}.npz") for rk in ranks]
     labels = [f"{rk}" for rk in ranks]
     plot_rank_histogram_all(rank_metrics_files, labels, log_folder, N_ranks=N_ranks)
 

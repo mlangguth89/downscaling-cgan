@@ -31,7 +31,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --eval-blitz 
+srun python -m dsrnngan.main --eval-blitz --num-samples 160000 --evaluate --records-folder /user/work/uz22147/tfrecords/d34d309eb0e00b04 --restart
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

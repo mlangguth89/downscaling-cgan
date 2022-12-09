@@ -1,5 +1,6 @@
 import gc
 import os
+import copy
 import warnings
 from datetime import datetime, timedelta
 import numpy as np
@@ -20,7 +21,8 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 path = os.path.dirname(os.path.abspath(__file__))
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 
-
+metrics = {'correlation': calculate_pearsonr, 'mae': mae, 'mse': mse,
+           }
 def setup_inputs(*,
                  mode,
                  arch,
@@ -103,13 +105,18 @@ def eval_one_chkpt(*,
                    num_images,
                    latitude_range,
                    longitude_range,
-                   add_noise,
                    ensemble_size,
                    noise_factor,
                    denormalise_data=True,
                    normalize_ranks=True,
                    show_progress=True):
-
+    
+    if num_images < 5:
+        Warning('These scores are best performed with more images')
+    
+    truth_vals = []
+    samples_gen_vals = []
+    bias = []
     ranks = []
     lowress = []
     hiress = []
@@ -123,7 +130,6 @@ def eval_one_chkpt(*,
     ensemble_mean_correlation_all = []
     correlation_fcst_all = []
 
-    data_gen_iter = iter(data_gen)
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
     
     batch_size = 1  # do one full-size image at a time
@@ -139,14 +145,27 @@ def eval_one_chkpt(*,
     CRPS_pooling_methods = ['no_pooling', 'max_4', 'max_16', 'avg_4', 'avg_16']
     rng = np.random.default_rng()
 
+    data_idx = 0
     for kk in range(num_images):
         
         # load truth images
-        inputs, outputs = next(data_gen_iter)
+        # Bit of a hack here to deal with missing data
+        try:
+            inputs, outputs = data_gen[data_idx]
+        except FileNotFoundError as e:
+            print('Could not load file, attempting retries')
+            for retry in range(5):
+                data_idx += 1
+                print(f'Attempting retry {retry} of 5')
+                try:
+                    inputs, outputs = data_gen[data_idx]
+                    break
+                except FileNotFoundError:
+                    pass
+                    
         cond = inputs['lo_res_inputs']
         const = inputs['hi_res_inputs']
-        truth = outputs['output']
-        truth = np.expand_dims(np.array(truth), axis=-1)  # must be 4D tensor for pooling NHWC
+        truth = outputs['output'][0, :, :]
         dates = inputs['dates']
         hours = inputs['hours']
         
@@ -156,7 +175,7 @@ def eval_one_chkpt(*,
         imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, 
                                                longitude_vals=longitude_range, log_precip=not denormalise_data)
         
-        assert imerg_persisted_fcst.shape == truth.shape[1:3], ValueError('Shape mismatch in iMERG persistent and truth')
+        assert imerg_persisted_fcst.shape == truth.shape, ValueError('Shape mismatch in iMERG persistent and truth')
         assert len(dates) == 1, ValueError('Currently must be run with a batch size of 1')
         assert len(dates) == len(hours), ValueError('This is strange, why are they different sizes?')
         
@@ -195,16 +214,16 @@ def eval_one_chkpt(*,
         # samples generated, now process them (e.g., undo log transform) and calculate MAE etc
         for ii in range(ensemble_size):
             
-            sample_gen = samples_gen[ii]
+            sample_gen = samples_gen[ii][0, :, :, 0]
             
             # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
             if denormalise_data:
                 sample_gen = data.denormalise(sample_gen)
 
             # Calculate MAE, MSE for this sample
-            mae_val = mae(truth[0, :, :, 0], sample_gen[0, :, :, 0])
-            mse_val = mse(truth[0, :, :, 0], sample_gen[0, :, :, 0])
-            corr = calculate_pearsonr(truth[0, :, :,0], sample_gen[0, :, :, 0])
+            mae_val = mae(truth, sample_gen)
+            mse_val = mse(truth, sample_gen)
+            corr = calculate_pearsonr(truth, sample_gen)
 
             mae_all.append(mae_val)
             mse_all.append(mse_val)
@@ -215,42 +234,57 @@ def eval_one_chkpt(*,
                 ensmean = np.zeros_like(sample_gen)
             ensmean += sample_gen
 
-            sample_gen = np.squeeze(sample_gen, axis=-1)  # squeeze out trival dim
             samples_gen[ii] = sample_gen
-
+       
         # Calculate Ensemble Mean MSE
         ensmean /= ensemble_size
-        emmse = mse(truth[0, :, :,0], ensmean[0, :, :, 0])
+        emmse = mse(truth, ensmean)
         emmse_all.append(emmse)
         
         # MSE to forecast
-        fcst_emmse = mse(truth[0, :, :,0], cond[0, :, :, tpidx])
+        fcst_emmse = mse(truth, cond[0, :, :, tpidx])
         fcst_emmse_all.append(fcst_emmse)
-                
-        # Correlation between ensemble mean and truth
-        corr = calculate_pearsonr(truth[0, :, :,0], ensmean[0, :, :, 0])
+        
+        # Correlation between random member of gan and truth (to compare with IFS)
+        corr = calculate_pearsonr(truth, ensmean)
         ensemble_mean_correlation_all.append(corr)
         
-        corr_fcst = calculate_pearsonr(truth[0, :, :,0], cond[0, :, :, tpidx])
+        # Correlation between random member of gan and truth (to compare with IFS)
+        corr = calculate_pearsonr(truth, ensmean)
+        ensemble_mean_correlation_all.append(corr)
+        
+        corr_fcst = calculate_pearsonr(truth, cond[0, :, :, tpidx])
         correlation_fcst_all.append(corr_fcst)
 
         # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
-        ralsd = calculate_ralsd_rmse(np.squeeze(truth, axis=-1), samples_gen)
+        ralsd = calculate_ralsd_rmse(truth, samples_gen)
         ralsd_all.append(ralsd.flatten())
+        
+        # Grid of biases
+        bias.append(samples_gen[0] - truth)
 
         # turn list of predictions into array, for CRPS/rank calculations
         samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
+        
+        # Store these values for e.g. correlation on the grid
+        truth_vals.append(truth)
+        samples_gen_vals.append(samples_gen)
 
+        ####################  CRPS calculation ##########################
         # calculate CRPS scores for different pooling methods
         for method in CRPS_pooling_methods:
+
             if method == 'no_pooling':
                 truth_pooled = truth
                 samples_gen_pooled = samples_gen
             else:
                 truth_pooled = pool(truth, method)
                 samples_gen_pooled = pool(samples_gen, method)
+                
             # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
-            crps_score = crps_ensemble(np.squeeze(truth_pooled, axis=-1), samples_gen_pooled).mean()
+            crps_truth_input = np.expand_dims(truth, 0)
+            crps_gen_input = np.expand_dims(samples_gen, 0)
+            crps_score = crps_ensemble(crps_truth_input, crps_gen_input).mean()
             del truth_pooled, samples_gen_pooled
             gc.collect()
 
@@ -263,14 +297,14 @@ def eval_one_chkpt(*,
 
         # Add noise to truth and generated samples to make 0-handling fairer
         # NOTE truth and sample_gen are 'polluted' after this, hence we do this last
-        if add_noise:
-            truth += rng.random(size=truth.shape, dtype=np.float32)*noise_factor
-            samples_gen += rng.random(size=samples_gen.shape, dtype=np.float32)*noise_factor
+        truth += rng.random(size=truth.shape, dtype=np.float32)*noise_factor
+        samples_gen += rng.random(size=samples_gen.shape, dtype=np.float32)*noise_factor
 
         truth_flat = truth.ravel()  # unwrap into one long array, then unwrap samples_gen in same format
         samples_gen_ranks = samples_gen.reshape((-1, ensemble_size))  # unknown batch size/img dims, known number of samples
         rank = np.count_nonzero(truth_flat[:, None] >= samples_gen_ranks, axis=-1)  # mask array where truth > samples gen, count
         ranks.append(rank)
+        
         # keep track of input and truth rainfall values, to facilitate further ranks processing
         cond_exp = np.repeat(np.repeat(data.denormalise(cond[..., tpidx]).astype(np.float32), ds_fac, axis=-1), ds_fac, axis=-2)
         lowress.append(cond_exp.ravel())
@@ -284,18 +318,34 @@ def eval_one_chkpt(*,
             losses = [("EM-MSE", emmse_so_far), ("CRPS", crps_mean)]
             progbar.add(1, values=losses)
 
+    truth_array = np.stack(truth_vals, axis=0)
+    samples_gen_array = np.stack(samples_gen_vals, axis=0)
+
+    # Pixelwise correlation
+    pixelwise_corr = np.zeros_like(truth_array[0, :, :])
+    for row in range(truth_array.shape[1]):
+        for col in range(truth_array.shape[2]):
+            pixelwise_corr[row, col] = calculate_pearsonr(truth_array[:, row, col], samples_gen_array[:, row, col, 0]).statistic
+
     ralsd_all = np.concatenate(ralsd_all)
+    
+    crps_out = {}
+    for method in crps_scores:
+        crps_out['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
 
     other = {}
-    other['mae'] = mae_all
-    other['mse'] = mse_all
-    other['emmse'] = emmse_all
-    other['emmse_fcst'] = fcst_emmse_all
-    other['ralsd'] = ralsd_all
-    other['corr'] = corr_all
-    other['corr_ensemble_mean'] = ensemble_mean_correlation_all
-    other['corr_fcst'] = correlation_fcst_all
-    
+    other['mae'] = np.mean(mae_all)
+    other['rmse'] = np.sqrt(np.mean(mse_all))
+    other['emmse'] = np.sqrt(np.mean(emmse_all))
+    other['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
+    other['ralsd'] = np.nanmean(ralsd_all)
+    other['corr'] = np.mean(corr_all)
+    other['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
+    other['corr_fcst'] = np.mean(correlation_fcst_all)
+    other['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
+    other['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
+    other['pixelwise_corr'] = pixelwise_corr
+
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
     hiress = np.concatenate(hiress)
@@ -303,9 +353,9 @@ def eval_one_chkpt(*,
     if normalize_ranks:
         ranks = (ranks / ensemble_size).astype(np.float32)
         gc.collect()
-    arrays = (ranks, lowress, hiress)
+    rank_arrays = (ranks, lowress, hiress)
 
-    return arrays, crps_scores, other
+    return rank_arrays, crps_out, other
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -333,7 +383,6 @@ def evaluate_multiple_checkpoints(*,
                                   weights_dir,
                                   records_folder,
                                   downsample,
-                                  add_noise,
                                   noise_factor,
                                   model_numbers,
                                   ranks_to_save,
@@ -371,7 +420,13 @@ def evaluate_multiple_checkpoints(*,
 
     log_line(log_fname, f"Samples per image: {ensemble_size}")
     log_line(log_fname, f"Initial dates/times: {data_gen_valid.dates[0:4]}, {data_gen_valid.hours[0:4]}")
-    log_line(log_fname, "N CRPS CRPS_max_4 CRPS_max_16 CRPS_avg_4 CRPS_avg_16 RMSE EMRMSE EMRMSE_FCST RALSD MAE OP CORR CORR_ENS CORR_FCST")
+    
+    crps_metrics = ['CRPS', 'CRPS_max_4', 'CRPS_max_16', 'CRPS_avg_4', 'CRPS_avg_16']
+    other_float_metrics = ['rmse', 'emrmse', 'emmse_fcst', 'ralsd', 'mae', 'op', 'corr', 
+                     'corr_ens', 'corr_fcst']
+    other_grid_metrics = ['bias', 'bias_std', 'pixelwise_corr']
+    metrics = ['N'] + crps_metrics + other_float_metrics
+    log_line(log_fname, ','.join(metrics))
 
     for model_number in model_numbers:
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -384,36 +439,23 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        arrays, crps, other = eval_one_chkpt(mode=mode,
+        rank_arrays, crps, other = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
                                              noise_channels=noise_channels,
                                              latent_variables=latent_variables,
                                              num_images=num_images,
-                                             add_noise=add_noise,
                                              ensemble_size=ensemble_size,
                                              noise_factor=noise_factor,
                                              latitude_range=latitude_range,
                                              longitude_range=longitude_range)
-        ranks, lowress, hiress = arrays
+        ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)
-        CRPS_pixel = np.asarray(crps['no_pooling']).mean()
-        CRPS_max_4 = np.asarray(crps['max_4']).mean()
-        CRPS_max_16 = np.asarray(crps['max_16']).mean()
-        CRPS_avg_4 = np.asarray(crps['avg_4']).mean()
-        CRPS_avg_16 = np.asarray(crps['avg_16']).mean()
-
-        mae = np.mean(other['mae'])
-        rmse = np.sqrt(np.mean(other['mse']))
-        emrmse = np.sqrt(np.mean(other['emmse']))
-        emrmse_fcst = np.sqrt(np.mean(other['emmse_fcst']))
-        ralsd = np.nanmean(other['ralsd'])
-        corr = np.mean(other['corr'])
-        corr_ens = np.mean(other['corr_ensemble_mean'])
-        corr_fcst = np.mean(other['corr_fcst'])
-
-        log_line(log_fname, f"{model_number} {CRPS_pixel:.6f} {CRPS_max_4:.6f} {CRPS_max_16:.6f} {CRPS_avg_4:.6f} {CRPS_avg_16:.6f} {rmse:.6f} {emrmse:.6f} {emrmse_fcst:.6f} {ralsd:.6f} {mae:.6f} {OP:.6f} {corr:.6f} {corr_ens:.6f} {corr_fcst:.6f}")
+        
+        crps_score_str = ','.join([f'{v:.6f}' for k, v in crps.items() if k in crps_metrics])
+        other_score_str = ','.join([f'{v:.6f}' for k, v in other.items() if k in other_float_metrics])
+        log_line(log_fname, str(model_number) + crps_score_str + other_score_str)
 
         # save one directory up from model weights, in same dir as logfile
         ranks_folder = os.path.dirname(log_fname)
@@ -421,11 +463,30 @@ def evaluate_multiple_checkpoints(*,
         if model_number in ranks_to_save:
             fname = f"ranksnew-{'-'.join(validation_range)}_{model_number}.npz"
             np.savez_compressed(os.path.join(ranks_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
+            
+            # Save other gridwise metrics
+            for k in other_grid_metrics:
+                v = other[k]
+                fname = f"{k}-{'-'.join(validation_range)}_{model_number}.npz"
+                np.savez_compressed(os.path.join(ranks_folder, fname), k=v)
 
 
 def calculate_ralsd_rmse(truth, samples):
     # check 'batch size' is 1; can rewrite to handle batch size > 1 if necessary
-    assert truth.shape[0] == 1
+    
+    truth = np.copy(truth)
+    
+    if len(truth.shape) == 2:
+        truth = np.expand_dims(truth, (0))
+    
+    expanded_samples = []
+    for sample in samples:
+        if len(sample.shape) == 2:
+            sample = np.expand_dims(sample, (0))
+        expanded_samples.append(sample)
+    samples = expanded_samples
+    
+    assert truth.shape[0] == 1, 'Incorrect shape for truth'
     assert samples[0].shape[0] == 1
 
     # truth has shape 1 x W x H

@@ -22,8 +22,8 @@
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--eval-blitz", "--no-train",
-                "--evaluate", "--records-folder", "/user/work/uz22147/tfrecords/d34d309eb0e00b04"
+                "--eval-short", "--num-samples", "160000", "--no-train", "--num-images", "30",
+                "--evaluate", "--records-folder", "/user/work/uz22147/tfrecords/d34d309eb0e00b04", "--restart"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
