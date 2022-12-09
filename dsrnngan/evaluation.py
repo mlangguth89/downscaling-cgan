@@ -4,6 +4,7 @@ import copy
 import warnings
 from datetime import datetime, timedelta
 import numpy as np
+import pandas as pd
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
 
@@ -329,22 +330,21 @@ def eval_one_chkpt(*,
 
     ralsd_all = np.concatenate(ralsd_all)
     
-    crps_out = {}
+    output = {}
     for method in crps_scores:
-        crps_out['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
-
-    other = {}
-    other['mae'] = np.mean(mae_all)
-    other['rmse'] = np.sqrt(np.mean(mse_all))
-    other['emmse'] = np.sqrt(np.mean(emmse_all))
-    other['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
-    other['ralsd'] = np.nanmean(ralsd_all)
-    other['corr'] = np.mean(corr_all)
-    other['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
-    other['corr_fcst'] = np.mean(correlation_fcst_all)
-    other['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
-    other['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
-    other['pixelwise_corr'] = pixelwise_corr
+        output['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
+        
+    output['mae'] = np.mean(mae_all)
+    output['rmse'] = np.sqrt(np.mean(mse_all))
+    output['emmse'] = np.sqrt(np.mean(emmse_all))
+    output['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
+    output['ralsd'] = np.nanmean(ralsd_all)
+    output['corr'] = np.mean(corr_all)
+    output['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
+    output['corr_fcst'] = np.mean(correlation_fcst_all)
+    output['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
+    output['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
+    output['pixelwise_corr'] = pixelwise_corr
 
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
@@ -355,7 +355,7 @@ def eval_one_chkpt(*,
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
 
-    return rank_arrays, crps_out, other
+    return rank_arrays, output
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -418,15 +418,9 @@ def evaluate_multiple_checkpoints(*,
                                        constant_fields=constant_fields,
                                        data_paths=data_paths)
 
-    log_line(log_fname, f"Samples per image: {ensemble_size}")
-    log_line(log_fname, f"Initial dates/times: {data_gen_valid.dates[0:4]}, {data_gen_valid.hours[0:4]}")
-    
-    crps_metrics = ['CRPS', 'CRPS_max_4', 'CRPS_max_16', 'CRPS_avg_4', 'CRPS_avg_16']
-    other_float_metrics = ['rmse', 'emrmse', 'emmse_fcst', 'ralsd', 'mae', 'op', 'corr', 
-                     'corr_ens', 'corr_fcst']
-    other_grid_metrics = ['bias', 'bias_std', 'pixelwise_corr']
-    metrics = ['N'] + crps_metrics + other_float_metrics
-    log_line(log_fname, ','.join(metrics))
+    grid_metrics = ['bias', 'bias_std', 'pixelwise_corr']
+
+    header = True
 
     for model_number in model_numbers:
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -439,7 +433,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, crps, other = eval_one_chkpt(mode=mode,
+        rank_arrays, metric_dict = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -453,9 +447,11 @@ def evaluate_multiple_checkpoints(*,
         ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)
         
-        crps_score_str = ','.join([f'{v:.6f}' for k, v in crps.items() if k in crps_metrics])
-        other_score_str = ','.join([f'{v:.6f}' for k, v in other.items() if k in other_float_metrics])
-        log_line(log_fname, str(model_number) + crps_score_str + other_score_str)
+        # Create a dataframe of all the data (to ensure scores are recorded in the right column)
+        df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in metric_dict.items() if k not in grid_metrics}))
+        
+        df.to_csv(log_fname, header=header, mode='a', float_format='%.6f', index=False)
+        header = False
 
         # save one directory up from model weights, in same dir as logfile
         ranks_folder = os.path.dirname(log_fname)
@@ -465,8 +461,8 @@ def evaluate_multiple_checkpoints(*,
             np.savez_compressed(os.path.join(ranks_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
             
             # Save other gridwise metrics
-            for k in other_grid_metrics:
-                v = other[k]
+            for k in grid_metrics:
+                v = metric_dict[k]
                 fname = f"{k}-{'-'.join(validation_range)}_{model_number}.npz"
                 np.savez_compressed(os.path.join(ranks_folder, fname), k=v)
 

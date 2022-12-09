@@ -3,6 +3,7 @@ import json
 import os
 import math
 import git
+from glob import glob
 from pathlib import Path
 import tensorflow as tf
 
@@ -256,14 +257,19 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
 
     else:
         print("Training skipped...")
+        
+        
 
-    eval_fname = os.path.join(log_folder, f"eval_validation_{'-'.join(val_range)}.txt")
+    eval_fname = os.path.join(log_folder, f"eval_validation_{'-'.join(val_range)}_{num_images}.csv")
 
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
     # selection used to avoid storing gigabytes of data
     interval = steps_per_checkpoint * batch_size
-    finalchkpt = num_samples // interval
+    
+    # Get latest model number
+    latest_model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
+    finalchkpt = int(int(latest_model_fp.split('/')[-1].split('.')[-2][-7:]) / interval)
     
     # last 4 checkpoints, or all checkpoints if < 4
     ranks_to_save = [(finalchkpt - ii)*interval for ii in range(3, -1, -1)] if finalchkpt >= 4 else [ii*interval for ii in range(1, finalchkpt+1)]

@@ -13,7 +13,7 @@ class DataGenerator(Sequence):
     def __init__(self, dates, batch_size, forecast_data_source, observational_data_source, data_paths=DATA_PATHS,
                  log_precip=True, shuffle=True, constants=True, hour='random', longitude_range=None,
                  latitude_range=None, fcst_norm=True,
-                 downsample=False, seed=9999):
+                 downsample=False, seed=None):
 
         self.dates = dates
 
