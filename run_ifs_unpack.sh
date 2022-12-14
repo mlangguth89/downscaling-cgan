@@ -5,6 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=ifs-unpack
 #SBATCH --partition short
+#SBATCH --array=2018-2021
 
 echo Running on host `hostname`
 echo Time is `date`
@@ -19,7 +20,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m scripts.unpack_ifs_data --years 2019 2018
+srun python -m scripts.unpack_ifs_data --years ${SLURM_ARRAY_TASK_ID}
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

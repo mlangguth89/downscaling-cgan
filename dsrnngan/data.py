@@ -871,12 +871,12 @@ def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=No
 
     # Note we use method nearest; the iMERG data isn't interpolated to be on
     # the same grid as the input forecast necessarily (they don't need to match exactly)
-    # Use backfill otherwise it may be non-deterministic as to which side it chooses
+    # Add small shift otherwise it may be non-deterministic as to which side it chooses
     if longitude_vals is not None:
-        ds = ds.sel(lon=longitude_vals, method='backfill')
+        ds = ds.sel(lon=longitude_vals + 1e-6, method='nearest')
 
     if latitude_vals is not None:
-        ds = ds.sel(lat=latitude_vals, method='backfill')
+        ds = ds.sel(lat=latitude_vals + 1e-6, method='nearest')
         
     # Make sure dataset is consistent with others
     ds = standardise_dataset(ds)

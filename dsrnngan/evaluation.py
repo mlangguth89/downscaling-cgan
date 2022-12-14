@@ -110,7 +110,8 @@ def eval_one_chkpt(*,
                    noise_factor,
                    denormalise_data=True,
                    normalize_ranks=True,
-                   show_progress=True):
+                   show_progress=True,
+                   n_quantiles=50):
     
     if num_images < 5:
         Warning('These scores are best performed with more images')
@@ -118,6 +119,7 @@ def eval_one_chkpt(*,
     truth_vals = []
     samples_gen_vals = []
     bias = []
+    bias_fcst = []
     ranks = []
     lowress = []
     hiress = []
@@ -263,6 +265,7 @@ def eval_one_chkpt(*,
         
         # Grid of biases
         bias.append(samples_gen[0] - truth)
+        bias_fcst.append(cond[0, :, :, tpidx] - truth)
 
         # turn list of predictions into array, for CRPS/rank calculations
         samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
@@ -321,6 +324,14 @@ def eval_one_chkpt(*,
 
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
+    
+    # Calculate quantiles for observed and truth
+    quantile_boundaries = np.arange(0, 1, 1/10)
+    truth_quantiles = np.quantile(truth_array, quantile_boundaries)
+    sample_quantiles = np.quantile(samples_gen_array[:,:,0], quantile_boundaries)
+    
+    quantiles = {'truth': truth_quantiles,
+                 'sample': sample_quantiles}
 
     # Pixelwise correlation
     pixelwise_corr = np.zeros_like(truth_array[0, :, :])
@@ -331,6 +342,7 @@ def eval_one_chkpt(*,
     ralsd_all = np.concatenate(ralsd_all)
     
     output = {}
+
     for method in crps_scores:
         output['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
         
@@ -342,9 +354,13 @@ def eval_one_chkpt(*,
     output['corr'] = np.mean(corr_all)
     output['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
     output['corr_fcst'] = np.mean(correlation_fcst_all)
-    output['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
-    output['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
-    output['pixelwise_corr'] = pixelwise_corr
+    
+    grid_output = {}
+    grid_output['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
+    grid_output['bias_fcst'] = np.mean(np.stack(bias_fcst, axis=-1), axis=-1)
+    grid_output['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
+    grid_output['bias_median'] = np.median(np.stack(bias, axis=-1), axis=-1)
+    grid_output['pixelwise_corr'] = pixelwise_corr
 
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
@@ -355,7 +371,7 @@ def eval_one_chkpt(*,
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
 
-    return rank_arrays, output
+    return rank_arrays, output, grid_output, quantiles
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -418,8 +434,6 @@ def evaluate_multiple_checkpoints(*,
                                        constant_fields=constant_fields,
                                        data_paths=data_paths)
 
-    grid_metrics = ['bias', 'bias_std', 'pixelwise_corr']
-
     header = True
 
     for model_number in model_numbers:
@@ -433,7 +447,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, metric_dict = eval_one_chkpt(mode=mode,
+        rank_arrays, agg_metrics, grid_metrics, quantiles = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -448,7 +462,7 @@ def evaluate_multiple_checkpoints(*,
         OP = rank_OP(ranks)
         
         # Create a dataframe of all the data (to ensure scores are recorded in the right column)
-        df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in metric_dict.items() if k not in grid_metrics}))
+        df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))
         
         df.to_csv(log_fname, header=header, mode='a', float_format='%.6f', index=False)
         header = False
@@ -461,10 +475,14 @@ def evaluate_multiple_checkpoints(*,
             np.savez_compressed(os.path.join(ranks_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
             
             # Save other gridwise metrics
-            for k in grid_metrics:
-                v = metric_dict[k]
+            for k, v in grid_metrics.items():
                 fname = f"{k}-{'-'.join(validation_range)}_{model_number}.npz"
                 np.savez_compressed(os.path.join(ranks_folder, fname), k=v)
+                
+            # Save quantiles
+            fname = f"quantiles-{'-'.join(validation_range)}_{model_number}.npz"
+            np.savez_compressed(os.path.join(ranks_folder, fname), truth=quantiles['truth'], sample=quantiles['sample'])
+            
 
 
 def calculate_ralsd_rmse(truth, samples):

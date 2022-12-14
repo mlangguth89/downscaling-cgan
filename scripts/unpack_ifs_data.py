@@ -28,8 +28,6 @@ if __name__ == '__main__':
     years = args.years if isinstance(args.years, list) else [args.years]
     months = args.months if isinstance(args.months, list) else [args.months]
     
-    months = [int(month) for month in months]
-    
     for year in years:
         if year is None:
                 year_str = 'HRES_1h_EAfrica_*'
@@ -40,7 +38,7 @@ if __name__ == '__main__':
             if month is None:
                 glob_str = os.path.join(tar_dir, f'{year_str}-*.tar')
             else:
-                glob_str = os.path.join(tar_dir, f'{year_str}-{month:02d}*.tar')
+                glob_str = os.path.join(tar_dir, f'{year_str}-{int(month):02d}*.tar')
             
             tar_fps = glob(glob_str)
         
