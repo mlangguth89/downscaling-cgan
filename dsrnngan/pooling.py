@@ -2,13 +2,13 @@ import numpy as np
 from tensorflow.keras.layers import MaxPool2D, AvgPool2D
 
 
-def pool(x, pool_type, data_format='channels_last'):
+def pool(input, pool_type, data_format='channels_last'):
     """Apply pooling operation (via Tensorflow) to input Numpy array x.
     x should be 4-dimensional: N x W x H x C ('channels_last') or N x C x W x H ('channels_first')
     Pooling is applied on W and H dimensions.
 
     """
-    x = np.copy(x)
+    x = np.copy(input)
     if len(x.shape) == 2:
         x = np.expand_dims(x, (0, -1))
     elif len(x.shape) == 3:

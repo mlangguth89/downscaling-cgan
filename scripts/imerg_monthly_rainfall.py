@@ -13,7 +13,6 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 
 from dsrnngan.data import load_imerg_raw, load_era5_month_raw
-from calendar import monthrange
 
 hours = range(24)
 

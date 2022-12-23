@@ -28,7 +28,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --eval-short --no-train --records-folder /user/work/uz22147/tfrecords/d34d309eb0e00b04 --plot-ranks --num-images 200
+srun python -m dsrnngan.main --evaluate --eval-short --no-train --records-folder /user/work/uz22147/tfrecords/d34d309eb0e00b04 --plot-ranks --num-images 50
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

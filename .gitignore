@@ -10,6 +10,8 @@ test-logs/
 *.txt
 *.zip
 *.out
+*.png 
+*.npy
 system_tests/data/constants/
 
 # Byte-compiled / optimized / DLL files

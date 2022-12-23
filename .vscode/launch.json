@@ -5,12 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: fss stats",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.fss_stats",
+            "justMyCode": true
+        },
+        {
             "name": "Python: unpack IFS",
             "type": "python",
             "request": "launch",
             "module": "scripts.unpack_ifs_data",
             "justMyCode": true,
-            "args": ["--years", "2018", "--months", "12"]
+            "args": [
+                "--years",
+                "2018",
+                "--months",
+                "12"
+            ]
         },
         {
             "name": "Python: data.py",

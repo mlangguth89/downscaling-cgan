@@ -118,20 +118,28 @@ def eval_one_chkpt(*,
     
     truth_vals = []
     samples_gen_vals = []
+    ensmean_vals = []
+    fcst_vals = []
+    
     bias = []
     bias_fcst = []
     ranks = []
     lowress = []
     hiress = []
     crps_scores = {}
+    crps_scores_grid = {}
     mae_all = []
     mse_all = []
     corr_all = []
     emmse_all = []
     fcst_emmse_all = []
-    ralsd_all = []
+    rapsd_truth = []
+    rapsd_pred = []
+    rapsd_fcst = []
+    ralsd_rmse_all = []
     ensemble_mean_correlation_all = []
     correlation_fcst_all = []
+    grid_corr_scores = {}
 
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
     
@@ -146,6 +154,7 @@ def eval_one_chkpt(*,
                                         stateful_metrics=("CRPS", "EM-MSE"))
 
     CRPS_pooling_methods = ['no_pooling', 'max_4', 'max_16', 'avg_4', 'avg_16']
+    correlation_pooling_methods = CRPS_pooling_methods
     rng = np.random.default_rng()
 
     data_idx = 0
@@ -260,20 +269,32 @@ def eval_one_chkpt(*,
         correlation_fcst_all.append(corr_fcst)
 
         # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
-        ralsd = calculate_ralsd_rmse(truth, samples_gen)
-        ralsd_all.append(ralsd.flatten())
+        #TODO: truth, forecast and sample rapsd
+        fft_freq_truth = rapsd(truth, fft_method=np.fft)
+        rapsd_truth.append(fft_freq_truth)
+        
+        fft_freq_pred = rapsd(samples_gen[0], fft_method=np.fft)
+        rapsd_pred.append(fft_freq_pred)
+        
+        fft_freq_fcst = rapsd(cond[0, :, :, tpidx], fft_method=np.fft)
+        rapsd_fcst.append(fft_freq_fcst)
+    
+        ralsd_rmse = calculate_ralsd_rmse(truth, samples_gen)
+        ralsd_rmse_all.append(ralsd_rmse.flatten())
         
         # Grid of biases
         bias.append(samples_gen[0] - truth)
         bias_fcst.append(cond[0, :, :, tpidx] - truth)
-
+        
         # turn list of predictions into array, for CRPS/rank calculations
         samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(truth)
         samples_gen_vals.append(samples_gen)
-
+        ensmean_vals.append(ensmean)
+        fcst_vals.append(cond[0, :, :, tpidx])
+        
         ####################  CRPS calculation ##########################
         # calculate CRPS scores for different pooling methods
         for method in CRPS_pooling_methods:
@@ -288,13 +309,17 @@ def eval_one_chkpt(*,
             # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
             crps_truth_input = np.expand_dims(truth, 0)
             crps_gen_input = np.expand_dims(samples_gen, 0)
-            crps_score = crps_ensemble(crps_truth_input, crps_gen_input).mean()
+            crps_score_grid = crps_ensemble(crps_truth_input, crps_gen_input)
+            crps_score = crps_score_grid.mean()
             del truth_pooled, samples_gen_pooled
             gc.collect()
 
             if method not in crps_scores:
                 crps_scores[method] = []
+                crps_scores_grid[method] = []
+
             crps_scores[method].append(crps_score)
+            crps_scores_grid[method].append(crps_score_grid)
         
         
         # calculate ranks; only calculated without pooling
@@ -324,22 +349,19 @@ def eval_one_chkpt(*,
 
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
+    ensmean_array = np.stack(ensmean_vals, axis=0)
+    fcst_array = np.stack(fcst_vals, axis=0)
     
     # Calculate quantiles for observed and truth
     quantile_boundaries = np.arange(0, 1, 1/10)
     truth_quantiles = np.quantile(truth_array, quantile_boundaries)
-    sample_quantiles = np.quantile(samples_gen_array[:,:,0], quantile_boundaries)
+    sample_quantiles = np.quantile(samples_gen_array[:,:,:, 0], quantile_boundaries)
     
     quantiles = {'truth': truth_quantiles,
                  'sample': sample_quantiles}
 
-    # Pixelwise correlation
-    pixelwise_corr = np.zeros_like(truth_array[0, :, :])
-    for row in range(truth_array.shape[1]):
-        for col in range(truth_array.shape[2]):
-            pixelwise_corr[row, col] = calculate_pearsonr(truth_array[:, row, col], samples_gen_array[:, row, col, 0]).statistic
-
-    ralsd_all = np.concatenate(ralsd_all)
+    
+    ralsd_rmse_all = np.concatenate(ralsd_rmse_all)
     
     output = {}
 
@@ -350,17 +372,44 @@ def eval_one_chkpt(*,
     output['rmse'] = np.sqrt(np.mean(mse_all))
     output['emmse'] = np.sqrt(np.mean(emmse_all))
     output['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
-    output['ralsd'] = np.nanmean(ralsd_all)
+    output['ralsd'] = np.nanmean(ralsd_rmse_all)
     output['corr'] = np.mean(corr_all)
     output['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
     output['corr_fcst'] = np.mean(correlation_fcst_all)
     
+    output['rapsd_truth'] = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1).shape
+    output['rapsd_pred'] = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1).shape
+    output['rapsd_fcst'] = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1).shape
+
     grid_output = {}
-    grid_output['bias'] = np.mean(np.stack(bias, axis=-1), axis=-1)
+    bias_array = np.stack(bias, axis=-1)
+    grid_output['rmse'] = np.sqrt(np.mean(np.power(bias_array, 2), axis=-1))
+    grid_output['bias'] = np.mean(bias_array, axis=-1)
     grid_output['bias_fcst'] = np.mean(np.stack(bias_fcst, axis=-1), axis=-1)
-    grid_output['bias_std'] = np.std(np.stack(bias, axis=-1), axis=-1)
-    grid_output['bias_median'] = np.median(np.stack(bias, axis=-1), axis=-1)
-    grid_output['pixelwise_corr'] = pixelwise_corr
+    grid_output['bias_std'] = np.std(samples_gen_array[:,:,:,0], axis=0) - np.std(truth_array, axis=0)
+    grid_output['bias_median'] = np.median(bias_array, axis=-1)
+    
+    # Pixelwise correlation
+    for method in correlation_pooling_methods:
+        if method == 'no_pooling':
+            truth_pooled = truth_array
+            samples_gen_pooled = ensmean_array
+        else:
+            truth_pooled = np.squeeze(pool(np.expand_dims(truth_array, -1), method), axis=-1)
+            samples_gen_pooled = np.squeeze(pool(np.expand_dims(ensmean_array, -1), method), axis=-1)
+        
+        if method not in grid_corr_scores:
+            grid_corr_scores[method] = []
+            
+        grid_corr_scores[method] = np.zeros_like(truth_pooled[0,:,:])
+        for row in range(truth_pooled.shape[1]):
+            for col in range(truth_pooled.shape[2]):
+                
+                grid_corr_scores[method][row, col] = calculate_pearsonr(truth_pooled, samples_gen_pooled).statistic
+        grid_output['corr_' + method] = grid_corr_scores[method]
+    
+    for method in crps_scores_grid:
+        grid_output['CRPS_' + method] = np.mean(np.stack(crps_scores_grid[method], axis=-1)[0, :, :, :], axis=-1)
 
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
@@ -510,6 +559,7 @@ def calculate_ralsd_rmse(truth, samples):
     # for images that are mostly zeroes
     if truth.mean() < 0.002:
         return np.array([np.nan])
+    
     # calculate RAPSD of truth once, not repeatedly!
     fft_freq_truth = rapsd(np.squeeze(truth, axis=0), fft_method=np.fft)
     dBtruth = 10 * np.log10(fft_freq_truth)
