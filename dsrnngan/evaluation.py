@@ -1,10 +1,11 @@
 import gc
 import os
-import copy
 import warnings
 from datetime import datetime, timedelta
+import pickle
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
 
@@ -158,7 +159,7 @@ def eval_one_chkpt(*,
     rng = np.random.default_rng()
 
     data_idx = 0
-    for kk in range(num_images):
+    for kk in tqdm(range(num_images)):
         
         # load truth images
         # Bit of a hack here to deal with missing data
@@ -420,7 +421,7 @@ def eval_one_chkpt(*,
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
 
-    return rank_arrays, output, grid_output, quantiles
+    return rank_arrays, output, grid_output, quantiles, (truth_array, samples_gen_array, ensmean_array, fcst_array)
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -496,7 +497,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, agg_metrics, grid_metrics, quantiles = eval_one_chkpt(mode=mode,
+        rank_arrays, agg_metrics, grid_metrics, quantiles, arrays = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -515,6 +516,9 @@ def evaluate_multiple_checkpoints(*,
         
         df.to_csv(log_fname, header=header, mode='a', float_format='%.6f', index=False)
         header = False
+        
+        with open(f"arrays_{'-'.join(validation_range)}_{num_images}.pkl", 'wb+') as ofh:
+            pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
 
         # save one directory up from model weights, in same dir as logfile
         ranks_folder = os.path.dirname(log_fname)

@@ -38,7 +38,7 @@ from scipy.ndimage.filters import uniform_filter
 from dsrnngan import data
 from dsrnngan import setupmodel
 from dsrnngan.benchmarks import nn_interp_model
-from dsrnngan.data import get_dates, all_fcst_fields
+from dsrnngan.data import get_dates, input_field_lookup
 from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
 from dsrnngan.evaluation import _init_VAEGAN
 from dsrnngan.noise import NoiseGenerator
@@ -53,6 +53,7 @@ def plot_fss_curves(*,
                     weights_dir,
                     model_numbers,
                     problem_type,
+                    fcst_data_source,
                     filters_gen,
                     filters_disc,
                     noise_channels,
@@ -104,7 +105,6 @@ def plot_fss_curves(*,
     if predict_full_image:
         dates = get_dates(predict_year)
         data_predict = DataGeneratorFull(dates=dates,
-                                         fcst_fields=all_fcst_fields,
                                          batch_size=batch_size,
                                          log_precip=True,
                                          shuffle=True,
@@ -123,14 +123,13 @@ def plot_fss_curves(*,
             raise RuntimeError('Data generator for benchmarks not implemented for small images')
         # requires a different data generator with different fields and no fcst_norm
         data_benchmarks = DataGeneratorFull(dates=dates,
-                                            fcst_fields=all_fcst_fields,
                                             batch_size=batch_size,
                                             log_precip=False,
                                             shuffle=True,
                                             constants=True,
                                             hour="random",
                                             fcst_norm=False)
-        tpidx = all_fcst_fields.index('tp')
+        tpidx = input_field_lookup[fcst_data_source].index('tp')
 
     # tidier to iterate over GAN checkpoints and NN-interp using joint code
     model_numbers_ec = model_numbers.copy()

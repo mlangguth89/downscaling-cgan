@@ -135,7 +135,7 @@ class TestEvaluation(unittest.TestCase):
                    data_gen=data_gen_valid,
                    noise_channels=noise_channels,
                    latent_variables=latent_variables,
-                   num_images=10,
+                   num_images=100,
                    latitude_range=latitude_range,
                    longitude_range=longitude_range,
                    ensemble_size=2,
