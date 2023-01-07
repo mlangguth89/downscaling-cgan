@@ -378,9 +378,10 @@ def eval_one_chkpt(*,
     output['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
     output['corr_fcst'] = np.mean(correlation_fcst_all)
     
-    output['rapsd_truth'] = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1).shape
-    output['rapsd_pred'] = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1).shape
-    output['rapsd_fcst'] = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1).shape
+    rapsd_output = {}
+    rapsd_output['rapsd_truth'] = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1)
+    rapsd_output['rapsd_pred'] = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1)
+    rapsd_output['rapsd_fcst'] = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1)
 
     grid_output = {}
     bias_array = np.stack(bias, axis=-1)
@@ -391,23 +392,23 @@ def eval_one_chkpt(*,
     grid_output['bias_median'] = np.median(bias_array, axis=-1)
     
     # Pixelwise correlation
-    for method in correlation_pooling_methods:
-        if method == 'no_pooling':
-            truth_pooled = truth_array
-            samples_gen_pooled = ensmean_array
-        else:
-            truth_pooled = np.squeeze(pool(np.expand_dims(truth_array, -1), method), axis=-1)
-            samples_gen_pooled = np.squeeze(pool(np.expand_dims(ensmean_array, -1), method), axis=-1)
+    # for method in correlation_pooling_methods:
+    #     if method == 'no_pooling':
+    #         truth_pooled = truth_array
+    #         samples_gen_pooled = ensmean_array
+    #     else:
+    #         truth_pooled = np.squeeze(pool(np.expand_dims(truth_array, -1), method), axis=-1)
+    #         samples_gen_pooled = np.squeeze(pool(np.expand_dims(ensmean_array, -1), method), axis=-1)
         
-        if method not in grid_corr_scores:
-            grid_corr_scores[method] = []
+    #     if method not in grid_corr_scores:
+    #         grid_corr_scores[method] = []
             
-        grid_corr_scores[method] = np.zeros_like(truth_pooled[0,:,:])
-        for row in range(truth_pooled.shape[1]):
-            for col in range(truth_pooled.shape[2]):
+    #     grid_corr_scores[method] = np.zeros_like(truth_pooled[0,:,:])
+    #     for row in range(truth_pooled.shape[1]):
+    #         for col in range(truth_pooled.shape[2]):
                 
-                grid_corr_scores[method][row, col] = calculate_pearsonr(truth_pooled, samples_gen_pooled).statistic
-        grid_output['corr_' + method] = grid_corr_scores[method]
+    #             grid_corr_scores[method][row, col] = calculate_pearsonr(truth_pooled, samples_gen_pooled).statistic
+    #     grid_output['corr_' + method] = grid_corr_scores[method]
     
     for method in crps_scores_grid:
         grid_output['CRPS_' + method] = np.mean(np.stack(crps_scores_grid[method], axis=-1)[0, :, :, :], axis=-1)
@@ -421,7 +422,7 @@ def eval_one_chkpt(*,
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
 
-    return rank_arrays, output, grid_output, quantiles, (truth_array, samples_gen_array, ensmean_array, fcst_array)
+    return rank_arrays, output, grid_output, quantiles, rapsd_output, (truth_array, samples_gen_array, ensmean_array, fcst_array, dates, hours)
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -445,12 +446,12 @@ def evaluate_multiple_checkpoints(*,
                                   latitude_range,
                                   longitude_range,
                                   validation_range,
-                                  log_fname,
                                   weights_dir,
                                   records_folder,
                                   downsample,
                                   noise_factor,
                                   model_numbers,
+                                  log_folder,
                                   ranks_to_save,
                                   num_images,
                                   filters_gen,
@@ -461,7 +462,8 @@ def evaluate_multiple_checkpoints(*,
                                   padding,
                                   ensemble_size,
                                   constant_fields,
-                                  data_paths):
+                                  data_paths,
+                                  save_generated_samples=False):
 
     df_dict = read_config.read_config()['DOWNSCALING']
 
@@ -485,6 +487,7 @@ def evaluate_multiple_checkpoints(*,
                                        data_paths=data_paths)
 
     header = True
+    
 
     for model_number in model_numbers:
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -497,7 +500,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, agg_metrics, grid_metrics, quantiles, arrays = eval_one_chkpt(mode=mode,
+        rank_arrays, agg_metrics, grid_metrics, quantiles, rapsd, arrays = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -510,31 +513,39 @@ def evaluate_multiple_checkpoints(*,
                                              longitude_range=longitude_range)
         ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)
+                
+        # save one directory up from model weights, in same dir as logfile
+        output_folder = os.path.join(log_folder, str(num_images))
+        
+        if not os.path.isdir(output_folder):
+            os.mkdir(output_folder)
         
         # Create a dataframe of all the data (to ensure scores are recorded in the right column)
         df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))
-        
-        df.to_csv(log_fname, header=header, mode='a', float_format='%.6f', index=False)
+        eval_fname = os.path.join(output_folder, f"eval_validation_{'-'.join(validation_range)}.csv")
+        df.to_csv(eval_fname, header=header, mode='a', float_format='%.6f', index=False)
         header = False
+
         
-        with open(f"arrays_{'-'.join(validation_range)}_{num_images}.pkl", 'wb+') as ofh:
-            pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
+        if save_generated_samples:
+            with open(os.path.join(output_folder, f"arrays_{'-'.join(validation_range)}.pkl"), 'wb+') as ofh:
+                pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
 
-        # save one directory up from model weights, in same dir as logfile
-        ranks_folder = os.path.dirname(log_fname)
-
-        if model_number in ranks_to_save:
-            fname = f"ranksnew-{'-'.join(validation_range)}_{model_number}.npz"
-            np.savez_compressed(os.path.join(ranks_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
+        # if model_number in ranks_to_save:
+        fname = f"ranksnew-{'-'.join(validation_range)}_{model_number}.npz"
+        np.savez_compressed(os.path.join(output_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
+        
+        # Save other gridwise metrics
+        with open(os.path.join(output_folder, f"grid_metrics-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
+            pickle.dump(grid_metrics, ofh, pickle.HIGHEST_PROTOCOL)
             
-            # Save other gridwise metrics
-            for k, v in grid_metrics.items():
-                fname = f"{k}-{'-'.join(validation_range)}_{model_number}.npz"
-                np.savez_compressed(os.path.join(ranks_folder, fname), k=v)
-                
-            # Save quantiles
-            fname = f"quantiles-{'-'.join(validation_range)}_{model_number}.npz"
-            np.savez_compressed(os.path.join(ranks_folder, fname), truth=quantiles['truth'], sample=quantiles['sample'])
+        # Save quantiles
+        with open(os.path.join(output_folder, f"quantiles-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
+            pickle.dump(quantiles, ofh, pickle.HIGHEST_PROTOCOL)
+        
+        # Save rapsd
+        with open(os.path.join(output_folder, f"rapsd-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
+            pickle.dump(rapsd, ofh, pickle.HIGHEST_PROTOCOL)
             
 
 

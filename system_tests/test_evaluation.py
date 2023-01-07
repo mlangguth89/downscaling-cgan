@@ -173,7 +173,7 @@ class TestEvaluation(unittest.TestCase):
                                         latitude_range=latitude_range,
                                         longitude_range=longitude_range,
                                     validation_range=['201811', '201812'],
-                                    log_fname=log_file,
+                                    log_folder=temp_dir,
                                     weights_dir='/user/home/uz22147/logs/cgan/d34d309eb0e00b04/models',
                                     records_folder=records_folder,
                                     downsample=False,

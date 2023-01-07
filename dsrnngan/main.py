@@ -27,6 +27,8 @@ parser.add_argument('--no-train', dest='do_training', action='store_false',
 parser.add_argument('--restart', dest='restart', action='store_true',
                     help="Restart training from latest checkpoint")
 group = parser.add_mutually_exclusive_group()
+group.add_argument('--model-numbers', nargs='+', default=None,
+                    help='Model number(s) to evaluate on (space separated)')
 group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full")
 group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short")
 group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz")
@@ -41,9 +43,9 @@ parser.add_argument('--num-images', type=int, default=20,
 parser.add_argument('--noise-factor', type=float, default=1e-3,
                     help="Multiplicative noise factor for rank histogram")
 
-def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
-         noise_factor, records_folder=None,
-         seed=None, num_samples_override=None, ):
+def main(restart, do_training, evaluate, plot_ranks, num_images,
+         noise_factor, records_folder=None, evalnum=None, model_numbers=None, 
+         seed=None, num_samples_override=None):
     
     if records_folder is None:
         
@@ -119,7 +121,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
     if evaluate and val_range is None:
-        raise ValueError('Must specify at least one validation year when using --qual flag')
+        raise ValueError('Must specify at least one validation year when using --evaluate flag')
     
     assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
     
@@ -258,10 +260,6 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
     else:
         print("Training skipped...")
         
-        
-
-    eval_fname = os.path.join(log_folder, f"eval_validation_{'-'.join(val_range)}_{num_images}.csv")
-
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
     # selection used to avoid storing gigabytes of data
@@ -274,7 +272,10 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
     # last 4 checkpoints, or all checkpoints if < 4
     ranks_to_save = [(finalchkpt - ii)*interval for ii in range(3, -1, -1)] if finalchkpt >= 4 else [ii*interval for ii in range(1, finalchkpt+1)]
 
-    if evalnum == "blitz":
+    if model_numbers:
+        ranks_to_save = model_numbers
+        pass
+    elif evalnum == "blitz":
         model_numbers = ranks_to_save.copy()  # should not be modifying list in-place, but just in case!
     elif evalnum == "short":
         # last 1/3rd of checkpoints
@@ -292,7 +293,7 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
                                                  validation_range=val_range,
                                                  latitude_range=latitude_range,
                                                  longitude_range=longitude_range,
-                                                 log_fname=eval_fname,
+                                                 log_folder=log_folder,
                                                  weights_dir=model_weights_root,
                                                  records_folder=records_folder,
                                                  downsample=downsample,
@@ -308,7 +309,8 @@ def main(restart, do_training, evalnum, evaluate, plot_ranks, num_images,
                                                  padding=padding,
                                                  ensemble_size=10,
                                                  constant_fields=constant_fields,
-                                                 data_paths=data_paths)
+                                                 data_paths=data_paths,
+                                                 save_generated_samples=True)
 
     if plot_ranks:
         plots.plot_histograms(log_folder, val_range, ranks=ranks_to_save, N_ranks=11)
@@ -323,9 +325,12 @@ if __name__ == "__main__":
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 
     args = parser.parse_args()
-
-    if args.evalnum is None and (args.rank or args.qual):
-        raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', or '--eval_blitz' to specify length of evaluation")
+    
+    model_numbers = [args.model_numbers] if not isinstance(args.model_numbers, list) else args.model_numbers
+    model_numbers = [int(mn) for mn in model_numbers]
+    
+    if args.evaluate and args.evalnum is None and args.model_numbers is None:
+        raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', '--eval_blitz', or '--model-numbers X Y Z to specify length of evaluation")
 
     main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
@@ -333,4 +338,5 @@ if __name__ == "__main__":
         plot_ranks=args.plot_ranks,
         noise_factor=args.noise_factor,
         num_samples_override=args.num_samples,
-        num_images=args.num_images)
+        num_images=args.num_images,
+        model_numbers=model_numbers)

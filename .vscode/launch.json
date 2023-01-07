@@ -58,7 +58,7 @@
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--eval-short",
+                "--model-numbers", "160000",
                 "--num-samples",
                 "160000",
                 "--no-train",
