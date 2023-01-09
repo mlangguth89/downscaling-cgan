@@ -16,7 +16,7 @@ from dsrnngan import setupmodel
 from dsrnngan.noise import NoiseGenerator
 from dsrnngan.pooling import pool
 from dsrnngan.rapsd import rapsd
-from dsrnngan.scoring import rmse, mse, mae, calculate_pearsonr
+from dsrnngan.scoring import rmse, mse, mae, calculate_pearsonr, fss
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -353,43 +353,45 @@ def eval_one_chkpt(*,
     ensmean_array = np.stack(ensmean_vals, axis=0)
     fcst_array = np.stack(fcst_vals, axis=0)
     
+    point_metrics = {}
+    other_metrics = {}
+    
     # Calculate quantiles for observed and truth
     quantile_boundaries = np.arange(0, 1, 1/10)
     truth_quantiles = np.quantile(truth_array, quantile_boundaries)
     sample_quantiles = np.quantile(samples_gen_array[:,:,:, 0], quantile_boundaries)
     
-    quantiles = {'truth': truth_quantiles,
+    other_metrics['quantiles'] = {'truth': truth_quantiles,
                  'sample': sample_quantiles}
 
-    
     ralsd_rmse_all = np.concatenate(ralsd_rmse_all)
     
-    output = {}
-
     for method in crps_scores:
-        output['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
-        
-    output['mae'] = np.mean(mae_all)
-    output['rmse'] = np.sqrt(np.mean(mse_all))
-    output['emmse'] = np.sqrt(np.mean(emmse_all))
-    output['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
-    output['ralsd'] = np.nanmean(ralsd_rmse_all)
-    output['corr'] = np.mean(corr_all)
-    output['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
-    output['corr_fcst'] = np.mean(correlation_fcst_all)
+        point_metrics['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
+     
+    point_metrics['mae'] = np.mean(mae_all)
+    point_metrics['rmse'] = np.sqrt(np.mean(mse_all))
+    point_metrics['emmse'] = np.sqrt(np.mean(emmse_all))
+    point_metrics['emmse_fcst'] = np.sqrt(np.mean(fcst_emmse_all))
+    point_metrics['ralsd'] = np.nanmean(ralsd_rmse_all)
+    point_metrics['corr'] = np.mean(corr_all)
+    point_metrics['corr_ensemble'] = np.mean(ensemble_mean_correlation_all)
+    point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
     
-    rapsd_output = {}
-    rapsd_output['rapsd_truth'] = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1)
-    rapsd_output['rapsd_pred'] = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1)
-    rapsd_output['rapsd_fcst'] = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1)
+    other_metrics['rapsd_truth'] = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1)
+    other_metrics['rapsd_pred'] = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1)
+    other_metrics['rapsd_fcst'] = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1)
 
-    grid_output = {}
+    
     bias_array = np.stack(bias, axis=-1)
-    grid_output['rmse'] = np.sqrt(np.mean(np.power(bias_array, 2), axis=-1))
-    grid_output['bias'] = np.mean(bias_array, axis=-1)
-    grid_output['bias_fcst'] = np.mean(np.stack(bias_fcst, axis=-1), axis=-1)
-    grid_output['bias_std'] = np.std(samples_gen_array[:,:,:,0], axis=0) - np.std(truth_array, axis=0)
-    grid_output['bias_median'] = np.median(bias_array, axis=-1)
+    other_metrics['rmse'] = np.sqrt(np.mean(np.power(bias_array, 2), axis=-1))
+    other_metrics['bias'] = np.mean(bias_array, axis=-1)
+    other_metrics['bias_fcst'] = np.mean(np.stack(bias_fcst, axis=-1), axis=-1)
+    other_metrics['bias_std'] = np.std(samples_gen_array[:,:,:,0], axis=0) - np.std(truth_array, axis=0)
+    other_metrics['bias_median'] = np.median(bias_array, axis=-1)
+    
+    fss_range = np.arange(1, min(truth_array.shape[1], truth_array.shape[2]))
+    other_metrics['fss'] = [fss(truth_array, fcst_array=samples_gen_array[:,:,:,0], scale=n, thr=0.01) for n in fss_range]
     
     # Pixelwise correlation
     # for method in correlation_pooling_methods:
@@ -411,7 +413,7 @@ def eval_one_chkpt(*,
     #     grid_output['corr_' + method] = grid_corr_scores[method]
     
     for method in crps_scores_grid:
-        grid_output['CRPS_' + method] = np.mean(np.stack(crps_scores_grid[method], axis=-1)[0, :, :, :], axis=-1)
+        other_metrics['CRPS_' + method] = np.mean(np.stack(crps_scores_grid[method], axis=-1)[0, :, :, :], axis=-1)
 
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
@@ -421,8 +423,10 @@ def eval_one_chkpt(*,
         ranks = (ranks / ensemble_size).astype(np.float32)
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
+    
+    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 'dates': dates, 'hours': hours}
 
-    return rank_arrays, output, grid_output, quantiles, rapsd_output, (truth_array, samples_gen_array, ensmean_array, fcst_array, dates, hours)
+    return rank_arrays, point_metrics, other_metrics, arrays
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -500,7 +504,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, agg_metrics, grid_metrics, quantiles, rapsd, arrays = eval_one_chkpt(mode=mode,
+        rank_arrays, agg_metrics, other_metrics, arrays = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -515,36 +519,31 @@ def evaluate_multiple_checkpoints(*,
         OP = rank_OP(ranks)
                 
         # save one directory up from model weights, in same dir as logfile
-        output_folder = os.path.join(log_folder, str(num_images))
+        output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(validation_range)}_e{ensemble_size}")
         
         if not os.path.isdir(output_folder):
             os.mkdir(output_folder)
         
         # Create a dataframe of all the data (to ensure scores are recorded in the right column)
         df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))
-        eval_fname = os.path.join(output_folder, f"eval_validation_{'-'.join(validation_range)}.csv")
+        eval_fname = os.path.join(output_folder, f"eval_validation.csv")
         df.to_csv(eval_fname, header=header, mode='a', float_format='%.6f', index=False)
         header = False
 
-        
         if save_generated_samples:
-            with open(os.path.join(output_folder, f"arrays_{'-'.join(validation_range)}.pkl"), 'wb+') as ofh:
+            with open(os.path.join(output_folder, f"arrays.pkl"), 'wb+') as ofh:
                 pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
 
         # if model_number in ranks_to_save:
-        fname = f"ranksnew-{'-'.join(validation_range)}_{model_number}.npz"
+        fname = f"ranks-{'-'.join(validation_range)}_{model_number}.npz"
         np.savez_compressed(os.path.join(output_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
         
         # Save other gridwise metrics
-        with open(os.path.join(output_folder, f"grid_metrics-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
-            pickle.dump(grid_metrics, ofh, pickle.HIGHEST_PROTOCOL)
-            
-        # Save quantiles
-        with open(os.path.join(output_folder, f"quantiles-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
-            pickle.dump(quantiles, ofh, pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(output_folder, f"other_metrics-{model_number}.pkl"), 'wb+') as ofh:
+            pickle.dump(other_metrics, ofh, pickle.HIGHEST_PROTOCOL)
         
         # Save rapsd
-        with open(os.path.join(output_folder, f"rapsd-{'-'.join(validation_range)}_{model_number}.pkl"), 'wb+') as ofh:
+        with open(os.path.join(output_folder, f"rapsd-{model_number}.pkl"), 'wb+') as ofh:
             pickle.dump(rapsd, ofh, pickle.HIGHEST_PROTOCOL)
             
 

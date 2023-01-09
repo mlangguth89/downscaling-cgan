@@ -40,12 +40,19 @@ parser.add_argument('--num-samples', type=int,
                     help="Override of num samples")
 parser.add_argument('--num-images', type=int, default=20,
                     help="Number of images to evaluate on")
+parser.add_argument('--ensemble-size', type=int, default=100,
+                    help="Size of ensemble to evaluate on")
 parser.add_argument('--noise-factor', type=float, default=1e-3,
                     help="Multiplicative noise factor for rank histogram")
+parser.add_argument('--val-ym-start', type=str,
+                    help='Validation start in YYYYMM format (defaults to range specified in config)')
+parser.add_argument('--val-ym-end', type=str,
+                    help='Validation start in YYYYMM format (defaults to the range specified in the config)')
 
 def main(restart, do_training, evaluate, plot_ranks, num_images,
-         noise_factor, records_folder=None, evalnum=None, model_numbers=None, 
-         seed=None, num_samples_override=None):
+         noise_factor, ensemble_size, records_folder=None, evalnum=None, model_numbers=None, 
+         seed=None, num_samples_override=None,
+         val_start=None, val_end=None):
     
     if records_folder is None:
         
@@ -102,6 +109,11 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
     
     val_range = config['VAL'].get('val_range')
+    if val_start:
+        val_range[0] = val_start
+    if val_end:
+        val_range[1] = val_end
+
     val_size = config.get("VAL", {}).get("val_size")
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
@@ -307,13 +319,13 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  latent_variables=latent_variables,
                                                  noise_channels=noise_channels,
                                                  padding=padding,
-                                                 ensemble_size=10,
+                                                 ensemble_size=ensemble_size,
                                                  constant_fields=constant_fields,
                                                  data_paths=data_paths,
                                                  save_generated_samples=True)
 
     if plot_ranks:
-        plots.plot_histograms(log_folder, val_range, ranks=ranks_to_save, N_ranks=11)
+        plots.plot_histograms(os.path.join(log_folder, f"n{num_images}_{'-'.join(val_range)}_e{ensemble_size}"), val_range, ranks=ranks_to_save, N_ranks=11)
 
 if __name__ == "__main__":
     
@@ -339,4 +351,7 @@ if __name__ == "__main__":
         noise_factor=args.noise_factor,
         num_samples_override=args.num_samples,
         num_images=args.num_images,
-        model_numbers=model_numbers)
+        model_numbers=model_numbers,
+        val_start=args.val_ym_start,
+        val_end=args.val_ym_end,
+        ensemble_size=args.ensemble_size)
