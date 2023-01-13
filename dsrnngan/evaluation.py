@@ -121,6 +121,8 @@ def eval_one_chkpt(*,
     samples_gen_vals = []
     ensmean_vals = []
     fcst_vals = []
+    dates = []
+    hours = []
     
     bias = []
     bias_fcst = []
@@ -179,18 +181,21 @@ def eval_one_chkpt(*,
         cond = inputs['lo_res_inputs']
         const = inputs['hi_res_inputs']
         truth = outputs['output'][0, :, :]
-        dates = inputs['dates']
-        hours = inputs['hours']
+        date = inputs['dates']
+        hour = inputs['hours']
+        
+        dates.append(date)
+        hours.append(hour)
         
         # Get observations at time of forecast
-        loaddate, loadtime = data.get_ifs_forecast_time(dates[0].year, dates[0].month, dates[0].day, hours[0])
+        loaddate, loadtime = data.get_ifs_forecast_time(date[0].year, date[0].month, date[0].day, hour[0])
         dt = datetime(loaddate.year, loaddate.month, loaddate.day, int(loadtime))
         imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, 
                                                longitude_vals=longitude_range, log_precip=not denormalise_data)
         
         assert imerg_persisted_fcst.shape == truth.shape, ValueError('Shape mismatch in iMERG persistent and truth')
-        assert len(dates) == 1, ValueError('Currently must be run with a batch size of 1')
-        assert len(dates) == len(hours), ValueError('This is strange, why are they different sizes?')
+        assert len(date) == 1, ValueError('Currently must be run with a batch size of 1')
+        assert len(date) == len(hour), ValueError('This is strange, why are they different sizes?')
         
         if denormalise_data:
             truth = data.denormalise(truth)
@@ -257,10 +262,6 @@ def eval_one_chkpt(*,
         # MSE to forecast
         fcst_emmse = mse(truth, cond[0, :, :, tpidx])
         fcst_emmse_all.append(fcst_emmse)
-        
-        # Correlation between random member of gan and truth (to compare with IFS)
-        corr = calculate_pearsonr(truth, ensmean)
-        ensemble_mean_correlation_all.append(corr)
         
         # Correlation between random member of gan and truth (to compare with IFS)
         corr = calculate_pearsonr(truth, ensmean)
@@ -347,6 +348,9 @@ def eval_one_chkpt(*,
             crps_mean = np.mean(crps_scores['no_pooling'])
             losses = [("EM-MSE", emmse_so_far), ("CRPS", crps_mean)]
             progbar.add(1, values=losses)
+            
+        # This is crucial to get different data!
+        data_idx += 1
 
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
@@ -531,21 +535,16 @@ def evaluate_multiple_checkpoints(*,
         header = False
 
         if save_generated_samples:
-            with open(os.path.join(output_folder, f"arrays.pkl"), 'wb+') as ofh:
+            with open(os.path.join(output_folder, f"arrays-{model_number}.pkl"), 'wb+') as ofh:
                 pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
 
         # if model_number in ranks_to_save:
-        fname = f"ranks-{'-'.join(validation_range)}_{model_number}.npz"
+        fname = f"ranks-{model_number}.npz"
         np.savez_compressed(os.path.join(output_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
         
-        # Save other gridwise metrics
+        # Save other metrics
         with open(os.path.join(output_folder, f"other_metrics-{model_number}.pkl"), 'wb+') as ofh:
             pickle.dump(other_metrics, ofh, pickle.HIGHEST_PROTOCOL)
-        
-        # Save rapsd
-        with open(os.path.join(output_folder, f"rapsd-{model_number}.pkl"), 'wb+') as ofh:
-            pickle.dump(rapsd, ofh, pickle.HIGHEST_PROTOCOL)
-            
 
 
 def calculate_ralsd_rmse(truth, samples):

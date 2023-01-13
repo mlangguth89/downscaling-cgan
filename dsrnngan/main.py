@@ -40,7 +40,7 @@ parser.add_argument('--num-samples', type=int,
                     help="Override of num samples")
 parser.add_argument('--num-images', type=int, default=20,
                     help="Number of images to evaluate on")
-parser.add_argument('--ensemble-size', type=int, default=100,
+parser.add_argument('--ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
 parser.add_argument('--noise-factor', type=float, default=1e-3,
                     help="Multiplicative noise factor for rank histogram")
@@ -104,7 +104,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
     batch_size = config["TRAIN"]["batch_size"]
     kl_weight = config["TRAIN"]["kl_weight"]
-    ensemble_size = config["TRAIN"]["ensemble_size"]
+    ensemble_size = ensemble_size or config["TRAIN"]["ensemble_size"]
     CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
     

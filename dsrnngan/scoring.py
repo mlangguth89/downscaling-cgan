@@ -117,6 +117,6 @@ def fss(obs_array, fcst_array, scale, thr, mode='constant'):
     numer =  2.0 * sum_fct_obs
     denom = sum_fct_sq + sum_obs_sq
 
-    return numer / denom, S_f, S_o
+    return numer / denom
     
     
