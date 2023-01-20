@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=ifs-unpack
 #SBATCH --partition short
-#SBATCH --array=2018-2021
+#SBATCH --array=2016-2022
 
 echo Running on host `hostname`
 echo Time is `date`
