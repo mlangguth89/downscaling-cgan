@@ -5,6 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=fss_data
 #SBATCH --partition short
+#SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc
 echo Running on host `hostname`

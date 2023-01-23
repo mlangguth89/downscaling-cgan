@@ -6,6 +6,7 @@
 #SBATCH --job-name=ifs-unpack
 #SBATCH --partition short
 #SBATCH --array=2016-2022
+#SBATCH --output=logs/slurm-%A_%a.out
 
 echo Running on host `hostname`
 echo Time is `date`

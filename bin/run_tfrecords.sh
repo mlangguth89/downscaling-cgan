@@ -6,6 +6,7 @@
 #SBATCH --job-name=tfrecords-creation
 #SBATCH --partition short
 #SBATCH --array=0-23
+#SBATCH --output=logs/slurm-%A_%a.out
 
 echo `which python`
 export LD_LIBRARY_PATH=/user/work/uz22147/miniconda3/lib/:$LD_LIBRARY_PATH

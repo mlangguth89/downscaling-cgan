@@ -6,6 +6,7 @@
 #SBATCH --job-name=monthly-cat
 #SBATCH --partition short
 #SBATCH --array=2001-2020
+#SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc
 module load apps/nco-toolkit/4.9.2-gcc

@@ -6,6 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-train
 #SBATCH --partition cnu
+#SBATCH --output=logs/slurm-%A_%a.out
 
 # GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
 

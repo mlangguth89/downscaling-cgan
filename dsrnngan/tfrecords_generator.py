@@ -460,7 +460,7 @@ if __name__ == '__main__':
     
     training_range = config['TRAIN']['training_range']
     val_range = config['VAL'].get('val_range')
-    test_range = config['EVAL'].get('test_range')
+    test_range = config.get('EVAL', {}).get('test_range')
     
     training_range = [str(item) for item in training_range]
     if val_range:

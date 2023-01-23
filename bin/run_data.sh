@@ -6,6 +6,7 @@
 #SBATCH --job-name=cgan-data
 #SBATCH --partition compute
 #SBATCH --array=2000-2020
+#SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc
 source ~/.initConda.sh

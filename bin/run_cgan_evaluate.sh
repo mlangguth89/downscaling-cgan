@@ -6,6 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-eval
 #SBATCH --partition cnu
+#SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc
 source ~/.initConda.sh

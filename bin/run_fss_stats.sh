@@ -6,6 +6,7 @@
 #SBATCH --job-name=fss_stats
 #SBATCH --partition short
 #SBATCH --array=5-20
+#SBATCH --output=logs/slurm-%A_%a.out
 
 echo Running on host `hostname`
 echo Time is `date`
