@@ -179,6 +179,7 @@ def eval_one_chkpt(*,
                     pass
                     
         cond = inputs['lo_res_inputs']
+        fcst = cond[0, :, :, tpidx]
         const = inputs['hi_res_inputs']
         truth = outputs['output'][0, :, :]
         date = inputs['dates']
@@ -199,6 +200,7 @@ def eval_one_chkpt(*,
         
         if denormalise_data:
             truth = data.denormalise(truth)
+            fcst = data.denormalise(fcst)
 
         # generate predictions, depending on model type
         samples_gen = []
@@ -260,14 +262,14 @@ def eval_one_chkpt(*,
         emmse_all.append(emmse)
         
         # MSE to forecast
-        fcst_emmse = mse(truth, cond[0, :, :, tpidx])
+        fcst_emmse = mse(truth, fcst)
         fcst_emmse_all.append(fcst_emmse)
         
         # Correlation between random member of gan and truth (to compare with IFS)
         corr = calculate_pearsonr(truth, ensmean)
         ensemble_mean_correlation_all.append(corr)
         
-        corr_fcst = calculate_pearsonr(truth, cond[0, :, :, tpidx])
+        corr_fcst = calculate_pearsonr(truth, fcst)
         correlation_fcst_all.append(corr_fcst)
 
         # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
@@ -278,7 +280,7 @@ def eval_one_chkpt(*,
         fft_freq_pred = rapsd(samples_gen[0], fft_method=np.fft)
         rapsd_pred.append(fft_freq_pred)
         
-        fft_freq_fcst = rapsd(cond[0, :, :, tpidx], fft_method=np.fft)
+        fft_freq_fcst = rapsd(fcst, fft_method=np.fft)
         rapsd_fcst.append(fft_freq_fcst)
     
         ralsd_rmse = calculate_ralsd_rmse(truth, samples_gen)
@@ -286,7 +288,7 @@ def eval_one_chkpt(*,
         
         # Grid of biases
         bias.append(samples_gen[0] - truth)
-        bias_fcst.append(cond[0, :, :, tpidx] - truth)
+        bias_fcst.append(fcst - truth)
         
         # turn list of predictions into array, for CRPS/rank calculations
         samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
@@ -295,7 +297,7 @@ def eval_one_chkpt(*,
         truth_vals.append(truth)
         samples_gen_vals.append(samples_gen)
         ensmean_vals.append(ensmean)
-        fcst_vals.append(cond[0, :, :, tpidx])
+        fcst_vals.append(fcst)
         
         ####################  CRPS calculation ##########################
         # calculate CRPS scores for different pooling methods

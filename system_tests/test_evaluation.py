@@ -24,7 +24,7 @@ from dsrnngan.noise import NoiseGenerator
 from dsrnngan.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
 from dsrnngan.data import DATA_PATHS
 
-model_folder='/user/home/uz22147/logs/cgan/d34d309eb0e00b04'
+model_folder='/user/work/uz22147/logs/cgan/d34d309eb0e00b04'
 
 model_weights_root = os.path.join(model_folder, "models")
 config_path = os.path.join(model_folder, 'setup_params.yaml')
@@ -172,9 +172,9 @@ class TestEvaluation(unittest.TestCase):
                                         obs_data_source=obs_data_source,
                                         latitude_range=latitude_range,
                                         longitude_range=longitude_range,
-                                    validation_range=['201811', '201812'],
+                                    validation_range=['201902', '201902'],
                                     log_folder=temp_dir,
-                                    weights_dir='/user/home/uz22147/logs/cgan/d34d309eb0e00b04/models',
+                                    weights_dir='/user/work/uz22147/logs/cgan/d34d309eb0e00b04/models',
                                     records_folder=records_folder,
                                     downsample=False,
                                     noise_factor=1e-3,

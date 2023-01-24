@@ -108,9 +108,9 @@ char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 
 def denormalise(x):
     """
-    Undo log-transform of rainfall.  Also cap at 500 (feel free to adjust according to application!)
+    Undo log-transform of rainfall. 
     """
-    return np.minimum(10 ** x - 1, 500.0)
+    return 10 ** x - 1
 
 
 def log_precipitation(data_array):
