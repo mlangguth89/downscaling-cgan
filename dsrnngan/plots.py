@@ -47,6 +47,26 @@ def plot_precip(np_array, ax, levels, linewidth=default_linewidth, extent=defaul
     ax.add_feature(cfeature.BORDERS)
     return im
 
+def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
+                  cmap='Reds'):
+    
+    if value_range:
+        im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
+                            cmap=cmap, 
+                            levels=value_range, norm=colors.Normalize(min(value_range), max(value_range)),
+                            extend='both')
+    else:
+
+        im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
+                    cmap=cmap, 
+                    extend='both')
+
+    ax.coastlines(resolution='10m', color='black', linewidth=0.4)
+    ax.add_feature(cfeature.BORDERS)
+    ax.set_title(title)
+    
+    return im
+
     
 # def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
 #                        lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,

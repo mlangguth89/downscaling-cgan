@@ -65,7 +65,6 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     else:
         config = utils.load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
         data_paths = utils.load_yaml_file(os.path.join(records_folder, 'data_paths.yaml'))
-    
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
 

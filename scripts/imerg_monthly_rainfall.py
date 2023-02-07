@@ -22,7 +22,7 @@ longitude_vals = DEFAULT_LONGITUDE_RANGE
 
 parser = ArgumentParser(description='Gather monthly rainfall data.')
 parser.add_argument('--year', type=int, help='Years to process')
-parser.add_argument('--output-dir', type=str, help='output directory', default='rainfall_data')
+parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME/ 'rainfall_data'))
 args = parser.parse_args()
 
 if not os.path.isdir(args.output_dir):
@@ -34,6 +34,7 @@ total_ifs_rainfall_dict = {}
 monthly_rainfall_imerg = {}
 monthly_rainfall_ifs = {}
 monthly_rainfall_era5 = {}
+daily_maximum = {}
 
 print(args)
 
@@ -45,22 +46,32 @@ for month in tqdm(np.arange(1, 13)):
     monthly_rainfall_imerg[month] = 0
     monthly_rainfall_ifs[month] = 0
     
+    daily_maximum[month] = {}
+    
     for day in range(1, monthrange(year, month)[1]+1):
         total_imerg_rainfall_dict[month][day] = 0
         total_ifs_rainfall_dict[month][day] = 0
         
+        daily_maximum[month][day] = 0
+        
         for hour in hours:
-
+            
             precip_hourly_values = load_imerg(datetime(year, month, day), hour=hour,
                             data_dir='/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final/',
                         latitude_vals=latitude_vals, longitude_vals=longitude_vals)
             
             total_imerg_rainfall_dict[month][day] += precip_hourly_values
+            
+            if precip_hourly_values.max() > daily_maximum[month][day]:
+                daily_maximum[month][day] = precip_hourly_values.max()
 
             # IFS
-            ds_ifs = load_ifs('tp', datetime(year, month, day), hour, log_precip=False, norm=False, 
-                              latitude_vals=latitude_vals, longitude_vals=longitude_vals)
-            total_ifs_rainfall_dict[month][day] += ds_ifs
+            try:
+                ds_ifs = load_ifs('tp', datetime(year, month, day), hour, log_precip=False, norm=False, 
+                                latitude_vals=latitude_vals, longitude_vals=longitude_vals)
+                total_ifs_rainfall_dict[month][day] += ds_ifs
+            except FileNotFoundError:
+                print(f'No IFS data found for {datetime(year, month, day)}, {hour}')
                         
         monthly_rainfall_imerg[month] += total_imerg_rainfall_dict[month][day]
         monthly_rainfall_ifs[month] += total_ifs_rainfall_dict[month][day]
@@ -79,6 +90,9 @@ for month in tqdm(np.arange(1, 13)):
     
     
     with open(os.path.join(args.output_dir, f'daily_imerg_rainfall_{year}.pkl'), 'wb+') as ofh:
+        pickle.dump(total_imerg_rainfall_dict, ofh)
+        
+    with open(os.path.join(args.output_dir, f'daily_imerg_maxima_{year}.pkl'), 'wb+') as ofh:
         pickle.dump(total_imerg_rainfall_dict, ofh)
     
     with open(os.path.join(args.output_dir, f'daily_ifs_rainfall_{year}.pkl'), 'wb+') as ofh:

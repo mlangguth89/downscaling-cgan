@@ -6,7 +6,7 @@
 #SBATCH --job-name=monthly_rainfall
 #SBATCH --partition compute
 #SBATCH --array=1
-#SBATCH --output=logs/slurm-%A_%a.out
+#SBATCH --output=logs/slurm-%A.out
 
 source ~/.bashrc
 echo Running on host `hostname`

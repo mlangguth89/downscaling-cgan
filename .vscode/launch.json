@@ -70,7 +70,7 @@
             "justMyCode": true,
             "args": [
                 "--model-numbers",
-                "160000",
+                "153600",
                 "--num-samples",
                 "160000",
                 "--no-train",
