@@ -48,11 +48,14 @@ parser.add_argument('--val-ym-start', type=str,
                     help='Validation start in YYYYMM format (defaults to range specified in config)')
 parser.add_argument('--val-ym-end', type=str,
                     help='Validation start in YYYYMM format (defaults to the range specified in the config)')
+parser.add_argument('--no-shuffle-eval', action='store_true', 
+                    help='Boolean, will turn off shuffling at evaluation.')
 
 def main(restart, do_training, evaluate, plot_ranks, num_images,
-         noise_factor, ensemble_size, records_folder=None, evalnum=None, model_numbers=None, 
+         noise_factor, ensemble_size, shuffle_eval=True, records_folder=None, evalnum=None, model_numbers=None, 
          seed=None, num_samples_override=None,
-         val_start=None, val_end=None):
+         val_start=None, val_end=None,
+         ):
     
     if records_folder is None:
         
@@ -106,6 +109,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     ensemble_size = ensemble_size or config["TRAIN"]["ensemble_size"]
     CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
+    crop_size = config['TRAIN'].get('crop_size')
     
     val_range = config['VAL'].get('val_range')
     if val_start:
@@ -207,6 +211,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             weights=training_weights,
             batch_size=batch_size,
             load_full_image=False,
+            crop_size=crop_size,
             seed=seed)
 
         if restart: # load weights and run status
@@ -321,6 +326,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  ensemble_size=ensemble_size,
                                                  constant_fields=constant_fields,
                                                  data_paths=data_paths,
+                                                 shuffle=shuffle_eval,
                                                  save_generated_samples=True)
 
     if plot_ranks:
@@ -337,8 +343,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    model_numbers = [args.model_numbers] if not isinstance(args.model_numbers, list) else args.model_numbers
-    model_numbers = [int(mn) for mn in model_numbers]
+    if args.model_numbers:
+        model_numbers = [args.model_numbers] if not isinstance(args.model_numbers, list) else args.model_numbers
+        model_numbers = [int(mn) for mn in model_numbers]
+    else:
+        model_numbers = None
     
     if args.evaluate and args.evalnum is None and args.model_numbers is None:
         raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', '--eval_blitz', or '--model-numbers X Y Z to specify length of evaluation")
@@ -353,4 +362,5 @@ if __name__ == "__main__":
         model_numbers=model_numbers,
         val_start=args.val_ym_start,
         val_end=args.val_ym_end,
-        ensemble_size=args.ensemble_size)
+        ensemble_size=args.ensemble_size,
+        shuffle_eval=not args.no_shuffle_eval)

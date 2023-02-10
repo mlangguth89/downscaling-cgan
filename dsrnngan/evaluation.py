@@ -35,6 +35,7 @@ def setup_inputs(*,
                  longitude_range,
                  downscaling_steps,
                  validation_range,
+                 hour,
                  downsample,
                  input_channels,
                  filters_gen,
@@ -43,7 +44,8 @@ def setup_inputs(*,
                  latent_variables,
                  padding,
                  constant_fields,
-                 data_paths):
+                 data_paths,
+                 shuffle):
 
     # initialise model
     model = setupmodel.setup_model(mode=mode,
@@ -71,7 +73,9 @@ def setup_inputs(*,
         validation_range=validation_range,
         batch_size=1,
         downsample=downsample,
-        data_paths=data_paths)
+        data_paths=data_paths,
+        shuffle=shuffle,
+        hour=hour)
     
     return gen, data_gen_valid
 
@@ -444,7 +448,9 @@ def evaluate_multiple_checkpoints(*,
                                   ensemble_size,
                                   constant_fields,
                                   data_paths,
-                                  save_generated_samples=False):
+                                  shuffle,
+                                  save_generated_samples=False
+                                  ):
 
     df_dict = read_config.read_config()['DOWNSCALING']
 
@@ -457,6 +463,7 @@ def evaluate_multiple_checkpoints(*,
                                        longitude_range=longitude_range,
                                        downscaling_steps=df_dict["steps"],
                                        validation_range=validation_range,
+                                       hour='random',
                                        downsample=downsample,
                                        input_channels=input_channels,
                                        filters_gen=filters_gen,
@@ -465,7 +472,8 @@ def evaluate_multiple_checkpoints(*,
                                        latent_variables=latent_variables,
                                        padding=padding,
                                        constant_fields=constant_fields,
-                                       data_paths=data_paths)
+                                       data_paths=data_paths,
+                                       shuffle=shuffle)
 
     header = True
     

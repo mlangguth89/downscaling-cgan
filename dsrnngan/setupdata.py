@@ -22,6 +22,7 @@ def setup_batch_gen(val: bool,
                     downsample: bool=False,
                     weights=None,
                     val_fixed=True,
+                    crop_size: int=None,
                     seed: int=None
                     ):
 
@@ -35,6 +36,7 @@ def setup_batch_gen(val: bool,
                            downsample=downsample, 
                            weights=weights, 
                            records_folder=records_folder, 
+                           crop_size=crop_size,
                            seed=seed)
 
     # note -- using create_fixed_dataset with a batch size not divisible by 16 will cause problems [is this true?]
@@ -62,7 +64,8 @@ def setup_full_image_dataset(year_month_range,
                              longitude_range,
                              batch_size=1,
                              downsample=False,
-                             hour='random'
+                             hour='random',
+                             shuffle=True
                              ):
 
     from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
@@ -78,7 +81,7 @@ def setup_full_image_dataset(year_month_range,
                                   longitude_range=longitude_range,
                                   batch_size=batch_size,
                                   log_precip=True,
-                                  shuffle=True,
+                                  shuffle=shuffle,
                                   constants=load_constants,
                                   fcst_norm=True,
                                   downsample=downsample,
@@ -105,7 +108,9 @@ def setup_data(records_folder,
                batch_size=None,
                load_full_image=False,
                seed=None,
-               data_paths=DATA_PATHS):
+               data_paths=DATA_PATHS,
+               crop_size=None,
+               shuffle=True):
 
     if load_full_image:
         if training_range is None:
@@ -120,7 +125,8 @@ def setup_data(records_folder,
                                           downsample=downsample,
                                           load_constants=load_constants,
                                           data_paths=data_paths,
-                                          hour=hour)
+                                          hour=hour,
+                                          shuffle=shuffle)
         if validation_range is None:
             batch_gen_valid = None
         else:
@@ -134,7 +140,8 @@ def setup_data(records_folder,
                                           downsample=downsample,
                                           load_constants=load_constants,
                                           data_paths=data_paths,
-                                          hour=hour)
+                                          hour=hour,
+                                          shuffle=shuffle)
 
     else:
         if not records_folder:
@@ -149,6 +156,7 @@ def setup_data(records_folder,
             val_size=val_size,
             downsample=downsample,
             weights=weights,
+            crop_size=crop_size,
             seed=seed)
 
     gc.collect()

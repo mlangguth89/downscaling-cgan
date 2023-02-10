@@ -26,10 +26,14 @@ DATA_PATHS = read_config.get_data_paths()
 records_folder = DATA_PATHS["TFRecords"]["tfrecords_path"]
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
 
+# Use autotune to tune the prefetching of records in parrallel to processing to improve performance
+AUTOTUNE = tf.data.AUTOTUNE
+
 def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
                   downsample=False, weights=None, 
-                  records_folder=records_folder, seed=None):
+                  records_folder=records_folder, seed=None,
+                  crop_size=None):
     return create_mixed_dataset(data_label, 
                                 batch_size,
                                 fcst_shape,
@@ -39,7 +43,8 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 downsample=downsample, 
                                 weights=weights, 
                                 folder=records_folder, 
-                                seed=seed)
+                                seed=seed,
+                                crop_size=crop_size)
 
 
 def create_mixed_dataset(data_label: str,
@@ -52,7 +57,8 @@ def create_mixed_dataset(data_label: str,
                          folder: str=records_folder,
                          shuffle_size: int=1024,
                          weights: list=None,
-                         seed: int=None):
+                         seed: int=None,
+                         crop_size: int=None):
     """_summary_
 
     Args:
@@ -88,11 +94,17 @@ def create_mixed_dataset(data_label: str,
     
     sampled_ds = tf.data.Dataset.sample_from_datasets(datasets,
                                                       weights=weights, seed=seed).batch(batch_size)
+    
+    if crop_size:
+        sampled_ds = sampled_ds.map(lambda x: tf.image.stateless_random_crop(x, size=[crop_size, crop_size]), 
+                                    num_parralel_calls=AUTOTUNE)
 
     if downsample and return_dic:
         sampled_ds = sampled_ds.map(_dataset_downsampler)
+    
     elif downsample and not return_dic:
         sampled_ds = sampled_ds.map(_dataset_downsampler_list)
+        
     sampled_ds = sampled_ds.prefetch(2)
     return sampled_ds
 
@@ -179,8 +191,6 @@ def create_dataset(data_label: str,
     Returns:
         tf.data.DataSet: _description_
     """
-    # Use autotune to tune the prefetching of records in parrallel to processing to improve performance
-    AUTOTUNE = tf.data.experimental.AUTOTUNE
 
     fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
@@ -337,61 +347,41 @@ def write_data(year_month_range,
                     # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
                     #TODO: Try a different way of sampling, depending on size of nsamples.
                     # Or given nsamples is fixed, just choose all the possible indices?
-                    
-                    # valid_indices = list(range(0, img_size-img_chunk_width))   
-                    # idx_selection = random.sample(valid_indices, nsamples)
-                    # idy_selection = random.sample(valid_indices, nsamples)
-                    
+
                     for k in range(sample[1]['output'].shape[0]):
-                        for ii in range(nsamples):
-                            idx = random.randint(0, img_size-img_chunk_width)
-                            idy = random.randint(0, img_size-img_chunk_width)
-                            # idx = idx_selection[ii]
-                            # idy = idy_selection[ii]
-                            
-                            # TODO: Check that there is data and error if not throw error
 
-                            observations = sample[1]['output'][k,
-                                                        idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
-                                                        idy*scaling_factor:(idy+img_chunk_width)*scaling_factor].flatten()
+                        observations = sample[1]['output'][k, :, :].flatten()
 
-                            forecast = sample[0]['lo_res_inputs'][k,
-                                                                idx:idx+img_chunk_width,
-                                                                idy:idy+img_chunk_width,
-                                                                :].flatten()
+                        forecast = sample[0]['lo_res_inputs'][k, :, :, :].flatten()
+                        
+                        const = sample[0]['hi_res_inputs'][k, :, :, :].flatten()
                             
-                            const = sample[0]['hi_res_inputs'][k,
-                                                                idx*scaling_factor:(idx+img_chunk_width)*scaling_factor,
-                                                                idy*scaling_factor:(idy+img_chunk_width)*scaling_factor,
-                                                                :].flatten()
-                                
-                            # Check no Null values
-                            if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                                raise ValueError('Unexpected NaN values in data')
+                        # Check no Null values
+                        if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                            raise ValueError('Unexpected NaN values in data')
+                        
+                        # Check for empty data
+                        if forecast.sum() == 0 or const.sum() == 0:
+                            raise ValueError('one or more of arrays is all zeros')
+                        
+                        # Check hi res data has same dimensions
                             
-                            # Check for empty data
-                            if forecast.sum() == 0 or const.sum() == 0:
-                                raise ValueError('one or more of arrays is all zeros')
-                            
-                            # Check hi res data has same dimensions
-                                
-                            feature = {
-                                'generator_input': _float_feature(forecast),
-                                'constants': _float_feature(const),
-                                'generator_output': _float_feature(observations)
-                            }
+                        feature = {
+                            'generator_input': _float_feature(forecast),
+                            'constants': _float_feature(const),
+                            'generator_output': _float_feature(observations)
+                        }
 
-                            features = tf.train.Features(feature=feature)
-                            example = tf.train.Example(features=features)
-                            example_to_string = example.SerializeToString()
-                            
-                            # Removing this for the moment while we figure out appropriate threshold
-                            clss = random.choice(range(num_class))
-                            # clss = min(int(np.floor(((observations > 0.1).mean()*num_class))), num_class-1)  # all class binning is here!
+                        features = tf.train.Features(feature=feature)
+                        example = tf.train.Example(features=features)
+                        example_to_string = example.SerializeToString()
+                        
+                        # Removing this for the moment while we figure out appropriate threshold
+                        clss = random.choice(range(num_class))
+                        # clss = min(int(np.floor(((observations > 0.1).mean()*num_class))), num_class-1)  # all class binning is here!
 
-                            fle_hdles[clss].write(example_to_string)
-                            
-                            #TODO: write config to folder as well
+                        fle_hdles[clss].write(example_to_string)
+                        
                 except FileNotFoundError as e:
                     print(f"Error loading hour={hour}, date={date}")
             

@@ -11,6 +11,7 @@
 # GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
 
 source ~/.bashrc
+source ~/.initConda.sh
 
 echo Running on host `hostname`
 echo Time is `date`
@@ -32,7 +33,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval-blitz --num-samples 160000 --evaluate --records-folder /user/work/uz22147/tfrecords/d34d309eb0e00b04 --restart
+srun python -m dsrnngan.main --eval-blitz --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/d34d309eb0e00b04 --restart
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

@@ -80,6 +80,7 @@
                 "201806",
                 "--val-ym-end",
                 "201905",
+                "--no-shuffle-eval",
                 "--ensemble-size",
                 "10",
                 "--evaluate",
