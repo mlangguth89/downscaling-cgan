@@ -74,11 +74,11 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
 
     architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
-    log_folder = config['SETUP'].get('log_folder', False) or config["MODEL"]["log_folder"] 
+    log_folder = config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
     log_folder = os.path.join(log_folder, utils.hash_dict(config))
     mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
     problem_type = config["MODEL"].get("problem_type", False) or config['GENERAL']['problem_type'] ## TODO: check if this is used anywhere
-    downsample = config["MODEL"].get("downsample", False) or config['GENERAL']['downsample']
+    downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False)
     
     downscaling_steps = config['DOWNSCALING']['steps']
     downscaling_factor = config['DOWNSCALING']['downscaling_factor']
