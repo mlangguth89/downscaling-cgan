@@ -5,7 +5,6 @@ from tensorflow.keras.utils import Sequence
 
 from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
 from dsrnngan import read_config
-return_dic = True
 
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
@@ -106,14 +105,12 @@ class DataGenerator(Sequence):
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
 
-        
-        if return_dic:
-            return {"lo_res_inputs": data_x_batch,
-                    "hi_res_inputs": self.constants,
-                    "dates": dates_batch, "hours": hours_batch},\
-                    {"output": data_y_batch}
-        else:
-            return data_x_batch, self.constants, data_y_batch, dates_batch
+
+        return {"lo_res_inputs": data_x_batch,
+                "hi_res_inputs": self.constants,
+                "dates": dates_batch, "hours": hours_batch},\
+                {"output": data_y_batch}
+
 
     def shuffle_data(self):
         assert len(self.hours) == len(self.dates)

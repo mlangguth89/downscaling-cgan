@@ -11,6 +11,7 @@ import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
 
+from dsrnngan import data
 from dsrnngan import evaluation
 from dsrnngan import plots
 from dsrnngan import read_config
@@ -109,7 +110,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     ensemble_size = ensemble_size or config["TRAIN"]["ensemble_size"]
     CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
-    crop_size = config['TRAIN'].get('crop_size')
+    crop_size = config['TRAIN'].get('img_chunk_width')
     
     val_range = config['VAL'].get('val_range')
     if val_start:
@@ -136,7 +137,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
     if evaluate and val_range is None:
-        raise ValueError('Must specify at least one validation year when using --evaluate flag')
+        raise ValueError('Must specify validation range when using --evaluate flag')
     
     assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
     
@@ -261,11 +262,11 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             with open(os.path.join(log_folder, "run_status.json"), 'w') as f:
                 json.dump(run_status, f)
 
-            data = {"training_samples": [training_samples]}
+            log_data = {"training_samples": [training_samples]}
             for foo in loss_log:
-                data[foo] = loss_log[foo]
+                log_data[foo] = loss_log[foo]
 
-            log_list.append(pd.DataFrame(data=data))
+            log_list.append(pd.DataFrame(data=log_data))
             log = pd.concat(log_list)
             log.to_csv(log_file, index=False, float_format="%.6f")
 

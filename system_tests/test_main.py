@@ -9,6 +9,7 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.main import main, parser
+from dsrnngan import utils
 
 
 class TestMain(unittest.TestCase):
@@ -59,9 +60,10 @@ class TestMain(unittest.TestCase):
 
         setup_params['SETUP']['log_folder'] = log_folder
             
-        args = parser.parse_args(['--eval_blitz'])
+        args = parser.parse_args(['--evaluate'])
         
-        data_paths = {'TFRecords': {'tfrecords_path': '/user/work/uz22147/tfrecords/era5_imerg_random_bins'}}
+        records_folder = '/user/work/uz22147/tfrecords/era5_imerg_random_bins'
+        data_paths = {'TFRecords': {'tfrecords_path': records_folder}}
         
         setup_params['DOWNSCALING'] = {'downscaling_factor': 1, 'steps': [1]}
         
@@ -72,19 +74,30 @@ class TestMain(unittest.TestCase):
             'fcst_data_source': 'era5',
             'obs_data_source': 'imerg',
             'input_channels': 5,
-            'fcst_image_width': 200, # Assumes a square image
-            'output_image_width': 200,
-            'constants_width': 200,
+            'input_image_width': 200, # Assumes a square image
             'constant_fields': 1,
-            'load_constants': False
+            'log_precip': True,
+            'fcst_norm': True,
+            'min_latitude': -11.95,
+            'max_latitude': 15.05,
+            'latitude_step_size': 0.1,
+            'min_longitude': 25.05,
+            'max_longitude': 51.45,
+            'longitude_step_size': 0.1
         }
+        
+        # Save config to tfrecords folder 
+        utils.write_to_yaml(os.path.join(records_folder, 'local_config.yaml'), setup_params)
+        utils.write_to_yaml(os.path.join(records_folder, 'data_paths.yaml'), data_paths)
         
         # Try with qual
         main(restart=args.restart, do_training=args.do_training, 
-            evalnum=args.evalnum, eval=True,
+            evalnum=args.evalnum, evaluate=True,
             plot_ranks=args.plot_ranks,
-            setup_params=setup_params,
-            data_paths=data_paths)
+            records_folder=records_folder,
+            noise_factor=args.noise_factor,
+            num_images=args.num_images,
+            ensemble_size=args.ensemble_size)
         
         # Check that logs written to folder
         self.assertTrue(os.path.isfile(os.path.join(log_folder, 'eval.txt')))

@@ -94,16 +94,13 @@ def create_mixed_dataset(data_label: str,
     
     sampled_ds = tf.data.Dataset.sample_from_datasets(datasets,
                                                       weights=weights, seed=seed).batch(batch_size)
-    
-    if crop_size:
-        sampled_ds = sampled_ds.map(lambda x: tf.image.stateless_random_crop(x, size=[crop_size, crop_size]), 
-                                    num_parralel_calls=AUTOTUNE)
 
-    if downsample and return_dic:
-        sampled_ds = sampled_ds.map(_dataset_downsampler)
     
-    elif downsample and not return_dic:
-        sampled_ds = sampled_ds.map(_dataset_downsampler_list)
+    if downsample:
+        if return_dic:
+            sampled_ds = sampled_ds.map(_dataset_downsampler)
+        else:
+            sampled_ds = sampled_ds.map(_dataset_downsampler_list)
         
     sampled_ds = sampled_ds.prefetch(2)
     return sampled_ds
@@ -127,6 +124,31 @@ def _dataset_downsampler_list(inputs, constants, outputs):
     image = tf.nn.conv2d(image, filters=kernel_tf, strides=[1, ds_fac, ds_fac, 1], padding='VALID', name='conv_debug', data_format='NHWC')
     inputs = image
     return inputs, constants, outputs
+
+def _dataset_cropper(inputs, outputs, crop_size, seed=None):
+    '''
+    Random crop of inputs and outputs
+    
+    Note: this currently only works when inputs and outputs are all the same dimensions (i.e not downscaling)
+    
+    '''
+    outputs = outputs['output']
+    hires_inputs = inputs['hi_res_inputs']
+    lo_res_inputs = inputs['lo_res_inputs']
+    
+    (_, _, lores_channels) = lo_res_inputs.shape
+    (_, _, hires_channels) = hires_inputs.shape
+    
+
+    if not seed:
+        # Choose random seed (to make sure consistent selection)
+        seed = (np.random.randint(1e6), np.random.randint(1e6))
+    
+    cropped_outputs = {'output': tf.image.stateless_random_crop(outputs, size=[crop_size, crop_size, 1], seed=seed)}
+    cropped_inputs = {'hi_res_inputs': tf.image.stateless_random_crop(hires_inputs, size=[crop_size, crop_size, hires_channels] , seed=seed),
+                      'lo_res_inputs': tf.image.stateless_random_crop(lo_res_inputs, size=[crop_size, crop_size, lores_channels], seed=seed)}
+    
+    return cropped_inputs, cropped_outputs
 
 
 def _parse_batch(record_batch,
@@ -171,6 +193,7 @@ def create_dataset(data_label: str,
                    fcst_shape=(20, 20, 9),
                    con_shape=(200, 200, 2),
                    out_shape=(200, 200, 1),
+                   crop_size=None,
                    folder: str=records_folder,
                    shuffle_size: int=1024,
                    repeat=True,
@@ -191,18 +214,29 @@ def create_dataset(data_label: str,
     Returns:
         tf.data.DataSet: _description_
     """
+    
+    if not isinstance(seed, int):
+        int_seed = seed[0]
+    else:
+        int_seed = seed
 
     fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
     ds = tf.data.TFRecordDataset(fl,
                                  num_parallel_reads=AUTOTUNE)
     
-    ds = ds.shuffle(shuffle_size, seed=seed)
+    ds = ds.shuffle(shuffle_size, seed=int_seed)
 
     ds = ds.map(lambda x: _parse_batch(x,
                                        insize=fcst_shape,
                                        consize=con_shape,
                                        outsize=out_shape))
+    
+    if crop_size:
+        if return_dic:
+            ds = ds.map(lambda x,y: _dataset_cropper(x, y, crop_size=crop_size, seed=seed))
+        else:
+            raise NotImplementedError
     if repeat:
         return ds.repeat()
     else:
@@ -247,10 +281,7 @@ def write_data(year_month_range,
                forecast_data_source, 
                observational_data_source,
                hours,
-               img_chunk_width=20,
                num_class=4,
-               img_size = 94,
-               scaling_factor = 10,
                log_precip=True,
                fcst_norm=True,
                data_paths=DATA_PATHS,
@@ -280,9 +311,6 @@ def write_data(year_month_range,
             dates = dates[1:]
             
         records_folder = data_paths["TFRecords"]["tfrecords_path"]
-
-        nsamples = (img_size // img_chunk_width)**2
-        logger.info(f"Samples per image:{nsamples}")
         
         config = read_config.read_config()
 
@@ -344,10 +372,6 @@ def write_data(year_month_range,
                     
                     sample = dgc.__getitem__(batch)
                 
-                    # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
-                    #TODO: Try a different way of sampling, depending on size of nsamples.
-                    # Or given nsamples is fixed, just choose all the possible indices?
-
                     for k in range(sample[1]['output'].shape[0]):
 
                         observations = sample[1]['output'][k, :, :].flatten()
