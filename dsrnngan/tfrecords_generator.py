@@ -215,10 +215,13 @@ def create_dataset(data_label: str,
         tf.data.DataSet: _description_
     """
     
-    if not isinstance(seed, int):
-        int_seed = seed[0]
+    if seed:
+        if not isinstance(seed, int):
+            int_seed = seed[0]
+        else:
+            int_seed = seed
     else:
-        int_seed = seed
+        int_seed = None
 
     fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     

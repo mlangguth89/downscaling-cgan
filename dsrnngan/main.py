@@ -87,9 +87,19 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     obs_data_source=config['DATA']['obs_data_source']
     input_channels = config['DATA']['input_channels']
     constant_fields = config['DATA']['constant_fields']
-    input_image_width = config['DATA']['input_image_width']
-    output_image_width = downscaling_factor * input_image_width
-    constants_image_width = input_image_width
+    min_latitude = config['DATA']['min_latitude']
+    max_latitude = config['DATA']['max_latitude']
+    latitude_step_size = config['DATA']['latitude_step_size']
+    min_longitude = config['DATA']['min_longitude']
+    max_longitude = config['DATA']['max_longitude']
+    longitude_step_size = config['DATA']['longitude_step_size']
+    lat_range=np.arange(min_latitude, max_latitude + latitude_step_size, latitude_step_size)
+    lon_range=np.arange(min_longitude, max_longitude + longitude_step_size, longitude_step_size)
+    
+    input_image_shape = (len(lat_range), len(lon_range), input_channels)
+    output_image_shape = (downscaling_factor * input_image_shape[0], downscaling_factor * input_image_shape[1], 1)
+    constants_image_shape = (len(lat_range), len(lon_range), constant_fields)
+    
     load_constants = config['DATA'].get('load_constants', True)    
     
     filters_gen = config["GENERATOR"]["filters_gen"]
@@ -190,11 +200,6 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             ensemble_size=ensemble_size,
             CLtype=CL_type,
             content_loss_weight=content_loss_weight)
-        
-        fcst_shape=(input_image_width, input_image_width, input_channels)
-        
-        con_shape=(constants_image_width, constants_image_width, constant_fields)
-        out_shape=(output_image_width, output_image_width, 1)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
             training_range=training_range,
@@ -206,9 +211,9 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             val_size=val_size,
             records_folder=records_folder,
             downsample=downsample,
-            fcst_shape=fcst_shape,
-            con_shape=con_shape,
-            out_shape=out_shape,
+            fcst_shape=input_image_shape,
+            con_shape=constants_image_shape,
+            out_shape=output_image_shape,
             weights=training_weights,
             batch_size=batch_size,
             load_full_image=False,

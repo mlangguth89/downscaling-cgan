@@ -101,8 +101,8 @@ latitude_step_size = config['DATA']['latitude_step_size']
 min_longitude = config['DATA']['min_longitude']
 max_longitude = config['DATA']['max_longitude']
 longitude_step_size = config['DATA']['longitude_step_size']
-DEFAULT_LATITUDE_RANGE=np.arange(min_latitude, max_latitude, latitude_step_size)
-DEFAULT_LONGITUDE_RANGE=np.arange(min_longitude, max_longitude, longitude_step_size)
+DEFAULT_LATITUDE_RANGE=np.arange(min_latitude, max_latitude + latitude_step_size, latitude_step_size)
+DEFAULT_LONGITUDE_RANGE=np.arange(min_longitude, max_longitude + longitude_step_size, longitude_step_size)
 
 char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 
