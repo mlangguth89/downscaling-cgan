@@ -13,7 +13,7 @@ from calendar import monthrange
 
 def hash_dict(params: dict):
     h = hashlib.shake_256()
-    h.update(json.dumps(params).encode('utf-8'))
+    h.update(json.dumps(params, sort_keys=True).encode('utf-8'))
     return h.hexdigest(8)
 
 

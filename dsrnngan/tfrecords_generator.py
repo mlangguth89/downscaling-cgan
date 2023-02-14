@@ -499,9 +499,7 @@ if __name__ == '__main__':
     longitude_step_size = config['DATA']['longitude_step_size']
     
     scaling_factor =  config['DOWNSCALING']['downscaling_factor']
-    load_constants = config['DATA'].get('load_constants', True)
-    img_chunk_width = config['TRAIN']['img_chunk_width']
-    
+    load_constants = config['DATA'].get('load_constants', True)    
     args = parser.parse_args()
     
     data_paths = DATA_PATHS
@@ -514,10 +512,7 @@ if __name__ == '__main__':
                             forecast_data_source=fcst_data_source, 
                             observational_data_source=obs_data_source,
                             hours=args.fcst_hours,
-                            img_chunk_width=img_chunk_width,
                             num_class=num_classes,
-                            img_size=img_size,
-                            scaling_factor=scaling_factor,
                             log_precip=log_precip,
                             fcst_norm=fcst_norm,
                             data_paths=data_paths,

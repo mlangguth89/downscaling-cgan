@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: imerg monthly",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.imerg_monthly_rainfall",
+            "justMyCode": true,
+            "args": [
+                "--year",
+                "2019"
+            ]
+        },
+        {
             "name": "Python: ifs monthly",
             "type": "python",
             "request": "launch",
@@ -69,24 +80,20 @@
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
-                "--model-numbers",
-                "153600",
                 "--num-samples",
                 "160000",
-                "--no-train",
                 "--num-images",
                 "5",
+                "--evaluate",
+                "--eval-short",
                 "--val-ym-start",
                 "201806",
                 "--val-ym-end",
                 "201905",
-                "--no-shuffle-eval",
                 "--ensemble-size",
                 "10",
-                "--evaluate",
                 "--records-folder",
-                "/user/work/uz22147/tfrecords/d34d309eb0e00b04",
-                "--restart"
+                "/user/work/uz22147/tfrecords/43ae7be47e9a182e"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },

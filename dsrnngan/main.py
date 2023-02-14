@@ -75,9 +75,8 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
     log_folder = config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
-    log_folder = os.path.join(log_folder, utils.hash_dict(config))
+    log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
     mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
-    problem_type = config["MODEL"].get("problem_type", False) or config['GENERAL']['problem_type'] ## TODO: check if this is used anywhere
     downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False)
     
     downscaling_steps = config['DOWNSCALING']['steps']
@@ -93,8 +92,8 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     min_longitude = config['DATA']['min_longitude']
     max_longitude = config['DATA']['max_longitude']
     longitude_step_size = config['DATA']['longitude_step_size']
-    lat_range=np.arange(min_latitude, max_latitude + latitude_step_size, latitude_step_size)
-    lon_range=np.arange(min_longitude, max_longitude + longitude_step_size, longitude_step_size)
+    lat_range=np.arange(min_latitude, max_latitude, latitude_step_size)
+    lon_range=np.arange(min_longitude, max_longitude, longitude_step_size)
     
     input_image_shape = (len(lat_range), len(lon_range), input_channels)
     output_image_shape = (downscaling_factor * input_image_shape[0], downscaling_factor * input_image_shape[1], 1)
