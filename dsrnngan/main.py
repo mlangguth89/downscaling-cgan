@@ -3,6 +3,7 @@ import json
 import os
 import math
 import git
+import logging
 from glob import glob
 from pathlib import Path
 import tensorflow as tf
@@ -19,6 +20,14 @@ from dsrnngan import setupdata
 from dsrnngan import setupmodel
 from dsrnngan import train
 from dsrnngan import utils
+
+logger = logging.getLogger(__name__)
+sh = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+sh.setLevel(logging.DEBUG)
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--records-folder', type=str, default=None,
@@ -71,7 +80,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         data_paths = utils.load_yaml_file(os.path.join(records_folder, 'data_paths.yaml'))
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
-
+    logger.debug('Reading config')
     architecture = config["MODEL"]["architecture"]
     padding = config["MODEL"]["padding"]
     log_folder = config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
@@ -120,7 +129,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
     crop_size = config['TRAIN'].get('img_chunk_width')
-    
+        
     val_range = config['VAL'].get('val_range')
     if val_start:
         val_range[0] = val_start
@@ -181,6 +190,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         ofh.write(sha)
 
     if do_training:
+        logger.debug('Starting training')
         # initialize GAN
         model = setupmodel.setup_model(
             mode=mode,
@@ -241,7 +251,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
 
         while (training_samples < num_samples):  # main training loop
 
-            print("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
+            logger.debug("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
 
             # train for some number of batches
             loss_log = train.train_model(model=model,
@@ -279,7 +289,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             model.gen.save_weights(gen_weights_file)
 
     else:
-        print("Training skipped...")
+        logger.debug("Training skipped...")
         
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
@@ -307,6 +317,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
 
     # evaluate model performance
     if evaluate:
+        logger.debug('Performing evaluation')
         evaluation.evaluate_multiple_checkpoints(mode=mode,
                                                  arch=architecture,
                                                  fcst_data_source=fcst_data_source,
@@ -342,7 +353,8 @@ if __name__ == "__main__":
     gpu_devices = tf.config.list_physical_devices('GPU')
     
     if len(gpu_devices) == 0:
-        print('GPU devices are not being seen')
+        logger.debug('GPU devices are not being seen')
+    logger.debug(gpu_devices)
     
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 
@@ -356,6 +368,7 @@ if __name__ == "__main__":
     
     if args.evaluate and args.evalnum is None and args.model_numbers is None:
         raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', '--eval_blitz', or '--model-numbers X Y Z to specify length of evaluation")
+
 
     main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,

@@ -5,7 +5,7 @@ import pandas as pd
 import xarray as xr
 import pickle
 from argparse import ArgumentParser
-from datetime import datetime
+from datetime import datetime, date
 from calendar import monthrange
 
 from pathlib import Path
@@ -53,10 +53,9 @@ for month in tqdm(np.arange(1, 13)):
     era5_monthly_rainfall_array = None
     
     daily_maximum[month] = {}
+    day_range= range(1, monthrange(year, month)[1]+1)
 
-    day_range = range(1,3)
-    for day in range(1,3):
-    # for day in range(1, monthrange(year, month)[1]+1):
+    for day in day_range:
         total_imerg_rainfall_dict[month][day] = 0
         total_ifs_rainfall_dict[month][day] = 0
         
@@ -95,21 +94,26 @@ for month in tqdm(np.arange(1, 13)):
         if n_ifs_hours < 24:
             if n_ifs_hours > 0:
                 total_ifs_rainfall_dict[month][day] = total_ifs_rainfall_dict[month][day]* 24 / n_ifs_hours
+                ifs_daily_rainfall_arrays.append(total_ifs_rainfall_dict[month][day])
+                monthly_rainfall_ifs[month] += total_ifs_rainfall_dict[month][day]
             else:
-                total_ifs_rainfall_dict[month][day] = np.nan
+                total_ifs_rainfall_dict[month].pop(day)
+        else:
+            ifs_daily_rainfall_arrays.append(total_ifs_rainfall_dict[month][day])
+
         
         if n_imerg_hours < 24:
             if n_imerg_hours > 0:
                 total_imerg_rainfall_dict[month][day] = total_imerg_rainfall_dict[month][day]* 24 / n_imerg_hours
+                imerg_daily_rainfall_arrays.append(total_imerg_rainfall_dict[month][day])
+                monthly_rainfall_imerg[month] += total_imerg_rainfall_dict[month][day]
             else:
-                total_imerg_rainfall_dict[month][day] = np.nan
+                total_imerg_rainfall_dict[month].pop(day)
+            
+        else:
+            imerg_daily_rainfall_arrays.append(total_imerg_rainfall_dict[month][day])
         
-        monthly_rainfall_imerg[month] += total_imerg_rainfall_dict[month][day]
-        monthly_rainfall_ifs[month] += total_ifs_rainfall_dict[month][day]
         
-        imerg_daily_rainfall_arrays.append(total_imerg_rainfall_dict[month][day])
-        ifs_daily_rainfall_arrays.append(total_ifs_rainfall_dict[month][day])
-
     # # # era5
     # try:
     #     era5_ds = load_era5_month_raw('tp', year=year, month=month, era_data_dir='/bp1/geog-tropical/data/ERA-5/day')
@@ -128,20 +132,21 @@ for month in tqdm(np.arange(1, 13)):
     imerg_days = list(total_imerg_rainfall_dict[month].keys())
     ifs_days = list(total_ifs_rainfall_dict[month].keys())
     
-    time_dim = pd.date_range(start=f'{year}-{month}-1', end=f'{year}-{month}-{day}', freq='D')
+    imerg_time_dim = [datetime(year=year, month=month, day=d) for d in imerg_days]
+    ifs_time_dim = [datetime(year=year, month=month, day=d) for d in ifs_days]
+
+    # pd.date_range(start=f'{year}-{month}-1', end=f'{year}-{month}-{day}', freq='D')
     # only record full months
     if set(imerg_days) == set(day_range): 
         
         imerg_daily_rainfall_array = np.stack(imerg_daily_rainfall_arrays, axis=0)
-        monthly_imerg_ds = xr.DataArray(imerg_daily_rainfall_array, coords={'time': time_dim, 'lat': latitude_vals, 'lon': longitude_vals}, dims=['time', 'lat', 'lon'])   
-        monthly_imerg_ds.to_netcdf(os.path.join(args.output_dir, f'daily_imerg_rainfall_{month}_{year}.pkl'))
+        monthly_imerg_ds = xr.DataArray(imerg_daily_rainfall_array, coords={'time': imerg_time_dim, 'lat': latitude_vals, 'lon': longitude_vals}, dims=['time', 'lat', 'lon'])   
+        monthly_imerg_ds.to_netcdf(os.path.join(args.output_dir, f'daily_imerg_rainfall_{month}_{year}.nc'))
     
-    if len(ifs_daily_rainfall_arrays) > 0 and set(ifs_days) == set(day_range): 
+    if len(ifs_daily_rainfall_arrays) > 0 and year >= 2016: 
         ifs_daily_rainfall_array = np.stack(ifs_daily_rainfall_arrays, axis=0)
-        monthly_ifs_ds = xr.DataArray(ifs_daily_rainfall_array, coords={'time': time_dim, 'lat': latitude_vals, 'lon': longitude_vals}, dims=['time', 'lat', 'lon'])
-        monthly_ifs_ds.to_netcdf(os.path.join(args.output_dir, f'daily_ifs_rainfall_{month}_{year}.pkl'))
-    
-    
+        monthly_ifs_ds = xr.DataArray(ifs_daily_rainfall_array, coords={'time': ifs_time_dim, 'lat': latitude_vals, 'lon': longitude_vals}, dims=['time', 'lat', 'lon'])
+        monthly_ifs_ds.to_netcdf(os.path.join(args.output_dir, f'daily_ifs_rainfall_{month}_{year}.nc'))
 
     
     # with open(os.path.join(args.output_dir, f'daily_imerg_rainfall_{year}.pkl'), 'wb+') as ofh:

@@ -89,7 +89,8 @@ def create_mixed_dataset(data_label: str,
                                folder=folder,
                                shuffle_size=shuffle_size,
                                repeat=repeat,
-                               seed=seed)
+                               seed=seed,
+                               crop_size=crop_size)
                 for i in range(classes)]
     
     sampled_ds = tf.data.Dataset.sample_from_datasets(datasets,
@@ -125,7 +126,7 @@ def _dataset_downsampler_list(inputs, constants, outputs):
     inputs = image
     return inputs, constants, outputs
 
-def _dataset_cropper(inputs, outputs, crop_size, seed=None):
+def _dataset_cropper_dict(inputs, outputs, crop_size, seed=None):
     '''
     Random crop of inputs and outputs
     
@@ -134,21 +135,30 @@ def _dataset_cropper(inputs, outputs, crop_size, seed=None):
     '''
     outputs = outputs['output']
     hires_inputs = inputs['hi_res_inputs']
-    lo_res_inputs = inputs['lo_res_inputs']
+    lores_inputs = inputs['lo_res_inputs']
     
-    (_, _, lores_channels) = lo_res_inputs.shape
+    cropped_lores_input, cropped_hires_input, cropped_output = _dataset_cropper_list(lores_inputs, hires_inputs, outputs, crop_size, seed)
+    
+    cropped_outputs = {'output': cropped_output}
+    cropped_inputs = {'hi_res_inputs': cropped_hires_input,
+                      'lo_res_inputs': cropped_lores_input}
+    
+    return cropped_inputs, cropped_outputs
+
+def _dataset_cropper_list(lores_inputs, hires_inputs, outputs, crop_size, seed):
+    
+    (_, _, lores_channels) = lores_inputs.shape
     (_, _, hires_channels) = hires_inputs.shape
     
-
     if not seed:
         # Choose random seed (to make sure consistent selection)
         seed = (np.random.randint(1e6), np.random.randint(1e6))
     
-    cropped_outputs = {'output': tf.image.stateless_random_crop(outputs, size=[crop_size, crop_size, 1], seed=seed)}
-    cropped_inputs = {'hi_res_inputs': tf.image.stateless_random_crop(hires_inputs, size=[crop_size, crop_size, hires_channels] , seed=seed),
-                      'lo_res_inputs': tf.image.stateless_random_crop(lo_res_inputs, size=[crop_size, crop_size, lores_channels], seed=seed)}
+    cropped_output = tf.image.stateless_random_crop(outputs, size=[crop_size, crop_size, 1], seed=seed)
+    cropped_hires_input = tf.image.stateless_random_crop(hires_inputs, size=[crop_size, crop_size, hires_channels] , seed=seed)
+    cropped_lores_input = tf.image.stateless_random_crop(lores_inputs, size=[crop_size, crop_size, lores_channels], seed=seed)
     
-    return cropped_inputs, cropped_outputs
+    return cropped_lores_input, cropped_hires_input, cropped_output
 
 
 def _parse_batch(record_batch,
@@ -237,9 +247,9 @@ def create_dataset(data_label: str,
     
     if crop_size:
         if return_dic:
-            ds = ds.map(lambda x,y: _dataset_cropper(x, y, crop_size=crop_size, seed=seed))
+            ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed))
         else:
-            raise NotImplementedError
+            ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed))
     if repeat:
         return ds.repeat()
     else:
