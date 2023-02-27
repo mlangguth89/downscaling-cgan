@@ -8,6 +8,9 @@ import pandas as pd
 from tqdm import tqdm
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
+from timezonefinder import TimezoneFinder
+from dateutil import tz
+from datetime import datetime
 
 from dsrnngan import data
 from dsrnngan import read_config
@@ -19,6 +22,9 @@ from dsrnngan.rapsd import rapsd
 from dsrnngan.scoring import rmse, mse, mae, calculate_pearsonr, fss
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+tz_finder = TimezoneFinder()
+from_zone = tz.gettz('UTC')
 
 path = os.path.dirname(os.path.abspath(__file__))
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
@@ -564,3 +570,45 @@ def calculate_ralsd_rmse(truth, samples):
             rmse = np.sqrt(np.nanmean((dBtruth-dBpred)**2))
             ralsd_all.append(rmse)
     return np.array(ralsd_all)
+
+
+def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, dates, hours, longitude_range, latitude_range):
+    
+    hourly_data_obs = {}
+    hourly_data_sample = {}
+    hourly_data_fcst = {}
+    hourly_counts = {}
+
+    from_zone = tz.gettz('UTC')
+    
+    (n_samples, height, width) = truth_array.shape
+
+    for n in tqdm(range(n_samples)):
+        obs = truth_array[n,:,:].copy()
+        sample = samples_gen_array[n,:,:,0].copy()
+        fcst = fcst_array[n, :, :].copy()
+        h = hours[n]
+        d = dates[n]
+        
+        utc_datetime = datetime(d.year, d.month, d.day, h)
+        utc_datetime.replace(tzinfo=from_zone)
+
+        for long in longitude_range:
+            
+            timezone = tz_finder.timezone_at(lng=long, lat=np.mean(latitude_range))
+            to_zone = tz.gettz(timezone)
+
+            local_hour = utc_datetime.astimezone(to_zone).hour
+            
+            if local_hour not in hourly_data_obs:
+                hourly_data_obs[local_hour] = obs.sum() / (height*width)
+                hourly_data_sample[local_hour] = sample.sum() / (height*width)
+                hourly_data_fcst[local_hour] = fcst.sum() / (height*width)
+                hourly_counts[local_hour] = 1
+            else:
+                hourly_data_obs[local_hour] += obs.sum() / (height*width)
+                hourly_data_sample[local_hour] += sample.sum() / (height*width)
+                hourly_data_fcst[local_hour] += fcst.sum() / (height*width)
+                hourly_counts[local_hour] += 1
+                
+    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts
