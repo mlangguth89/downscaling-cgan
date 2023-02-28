@@ -383,25 +383,6 @@ def eval_one_chkpt(*,
     point_metrics['corr'] = np.mean(corr_all)
     point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
     
-    # Pixelwise correlation
-    # for method in correlation_pooling_methods:
-    #     if method == 'no_pooling':
-    #         truth_pooled = truth_array
-    #         samples_gen_pooled = ensmean_array
-    #     else:
-    #         truth_pooled = np.squeeze(pool(np.expand_dims(truth_array, -1), method), axis=-1)
-    #         samples_gen_pooled = np.squeeze(pool(np.expand_dims(ensmean_array, -1), method), axis=-1)
-        
-    #     if method not in grid_corr_scores:
-    #         grid_corr_scores[method] = []
-            
-    #     grid_corr_scores[method] = np.zeros_like(truth_pooled[0,:,:])
-    #     for row in range(truth_pooled.shape[1]):
-    #         for col in range(truth_pooled.shape[2]):
-                
-    #             grid_corr_scores[method][row, col] = calculate_pearsonr(truth_pooled, samples_gen_pooled).statistic
-    #     grid_output['corr_' + method] = grid_corr_scores[method]
-    
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
     hiress = np.concatenate(hiress)
@@ -577,11 +558,10 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, dates, hours, 
     hourly_data_obs = {}
     hourly_data_sample = {}
     hourly_data_fcst = {}
-    hourly_counts = {}
 
     from_zone = tz.gettz('UTC')
     
-    (n_samples, height, width) = truth_array.shape
+    (n_samples, _, _) = truth_array.shape
 
     for n in tqdm(range(n_samples)):
         obs = truth_array[n,:,:].copy()
@@ -601,14 +581,17 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, dates, hours, 
             local_hour = utc_datetime.astimezone(to_zone).hour
             
             if local_hour not in hourly_data_obs:
-                hourly_data_obs[local_hour] = obs.sum() / (height*width)
-                hourly_data_sample[local_hour] = sample.sum() / (height*width)
-                hourly_data_fcst[local_hour] = fcst.sum() / (height*width)
-                hourly_counts[local_hour] = 1
+                hourly_data_obs[local_hour] = [obs ]
+                hourly_data_sample[local_hour] = [sample]
+                hourly_data_fcst[local_hour] = [fcst]
             else:
-                hourly_data_obs[local_hour] += obs.sum() / (height*width)
-                hourly_data_sample[local_hour] += sample.sum() / (height*width)
-                hourly_data_fcst[local_hour] += fcst.sum() / (height*width)
-                hourly_counts[local_hour] += 1
-                
-    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts
+                hourly_data_obs[local_hour] += [obs]
+                hourly_data_sample[local_hour] += [sample]
+                hourly_data_fcst[local_hour] += [fcst]
+    
+    for hr in tqdm(hourly_data_fcst.keys()):
+        hourly_data_obs[hr] = np.stack(hourly_data_obs[hr], axis=0)
+        hourly_data_sample[hr] = np.stack(hourly_data_sample[hr], axis=0)
+        hourly_data_fcst[hr] = np.stack(hourly_data_fcst[hr], axis=0)
+    
+    return hourly_data_obs, hourly_data_sample, hourly_data_fcst

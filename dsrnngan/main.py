@@ -60,11 +60,13 @@ parser.add_argument('--val-ym-end', type=str,
                     help='Validation start in YYYYMM format (defaults to the range specified in the config)')
 parser.add_argument('--no-shuffle-eval', action='store_true', 
                     help='Boolean, will turn off shuffling at evaluation.')
+parser.add_argument('--save-generated-samples', action='store_true',
+                    help='Flag to trigger saving of the evaluation arrays')
 
 def main(restart, do_training, evaluate, plot_ranks, num_images,
          noise_factor, ensemble_size, shuffle_eval=True, records_folder=None, evalnum=None, model_numbers=None, 
          seed=None, num_samples_override=None,
-         val_start=None, val_end=None,
+         val_start=None, val_end=None, save_generated_samples=False
          ):
     
     if records_folder is None:
@@ -343,7 +345,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  constant_fields=constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
-                                                 save_generated_samples=True)
+                                                 save_generated_samples=save_generated_samples)
 
     if plot_ranks:
         plots.plot_histograms(os.path.join(log_folder, f"n{num_images}_{'-'.join(val_range)}_e{ensemble_size}"), val_range, ranks=ranks_to_save, N_ranks=11)
@@ -381,4 +383,5 @@ if __name__ == "__main__":
         val_start=args.val_ym_start,
         val_end=args.val_ym_end,
         ensemble_size=args.ensemble_size,
-        shuffle_eval=not args.no_shuffle_eval)
+        shuffle_eval=not args.no_shuffle_eval,
+        save_generated_samples=args.save_generated_samples)

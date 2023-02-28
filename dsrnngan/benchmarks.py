@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import chain
 
 def nn_interp_model(data, upsampling_factor):
     return np.repeat(np.repeat(data, upsampling_factor, axis=-1), upsampling_factor, axis=-2)
@@ -7,6 +8,41 @@ def nn_interp_model(data, upsampling_factor):
 def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
 
+def get_quantile_areas(dates, month_ranges, latitude_range, longitude_range):
+    
+    lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
+    lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
+
+    date_chunks =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in dates if item.month in month_range] for month_range in month_ranges}
+    date_indexes = {k : [dates.index(item) for item in chunk] for k, chunk in date_chunks.items()}
+
+    assert len(list(chain.from_iterable(date_chunks.values()))) == len(dates)
+
+    num_lat_lon_chunks =2
+    lat_chunk_size = int(len(lat_range_list)/num_lat_lon_chunks)
+    lat_range_chunks = [lat_range_list[n*lat_chunk_size:(n+1)*lat_chunk_size] for n in range(num_lat_lon_chunks)]
+    lat_range_chunks[-1] = lat_range_chunks[-1] + lat_range_list[num_lat_lon_chunks*lat_chunk_size:]
+
+    lon_chunk_size = int(len(lon_range_list)/num_lat_lon_chunks)
+    lon_range_chunks = [lon_range_list[n*lon_chunk_size:(n+1)*lon_chunk_size] for n in range(num_lat_lon_chunks)]
+    lon_range_chunks[-1] = lon_range_chunks[-1] + lon_range_list[num_lat_lon_chunks*lon_chunk_size:]
+
+    quantile_areas = {}
+    for t_name, d in date_indexes.items():
+        for n, lat_chunk in enumerate(lat_range_chunks):
+            for m, lon_chunk in enumerate(lon_range_chunks):
+                
+                lat_rng = [lat_chunk[0], lat_chunk[-1]]
+                lon_rng = [lon_chunk[0], lon_chunk[-1]]
+                
+                lat_index_range = [lat_range_list.index(lat_rng[0]), lat_range_list.index(lat_rng[1])]
+                lon_index_range = [lon_range_list.index(lon_rng[0]), lon_range_list.index(lon_rng[1])]
+                
+                quantile_areas[f't{t_name}_lat{n}_lon{m}'] = {'lat_range': lat_rng, 'lon_range': lon_rng,
+                                                        'lat_index_range': lat_index_range,
+                                                        'lon_index_range': lon_index_range,
+                                                        'date_indexes': d}
+    return quantile_areas
 
 def get_quantiles_by_area(quantile_areas, fcst_data, obs_data, quantile_boundaries):
     quantiles_by_area = {}
