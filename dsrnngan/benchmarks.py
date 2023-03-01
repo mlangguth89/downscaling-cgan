@@ -63,13 +63,14 @@ def get_quantiles_by_area(quantile_areas, fcst_data, obs_data, quantile_boundari
 
         imerg_bin_centres = np.array([0.5*(obs_bin_edges[n+1] + obs_bin_edges[n]) for n in range(len(obs_bin_edges)-1)])      
             
-        quantiles_by_area[k] = {'ifs_bin_edges': fcst_bin_edges, 'imerg_bin_centres': imerg_bin_centres, 'imerg_bin_edges': obs_bin_edges,
-                                'ifs_quantiles': fcst_quantiles}
+        quantiles_by_area[k] = {'ifs_quantiles': fcst_bin_edges, 'imerg_bin_centres': imerg_bin_centres, 'imerg_quantiles': obs_bin_edges}
 
     return quantiles_by_area
 
 def get_quantile_mapped_forecast(fcst, dates, hours, month_ranges, quantile_areas, quantiles_by_area):
     # Find indexes of dates in test set relative to the date chunks
+    
+    fcst = fcst.copy()
 
     date_hour_list = list(zip(dates,hours))
 
@@ -95,20 +96,25 @@ def get_quantile_mapped_forecast(fcst, dates, hours, month_ranges, quantile_area
             
                 tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
                 
-                imerg_bin_centres = quantiles_by_area[area_name]['imerg_bin_centres']
-                ifs_bin_edges = quantiles_by_area[area_name]['ifs_bin_edges']
-                    
-                inds = np.digitize(tmp_fcst_array, ifs_bin_edges) - 1
-                
-                assert inds.size == len(d_ix)
+                imerg_quantiles = quantiles_by_area[area_name]['imerg_quantiles']
+                ifs_quantiles = quantiles_by_area[area_name]['ifs_quantiles']
 
-                fcst_corrected[d_ix,lat_index,lon_index] = imerg_bin_centres[inds]
+                fcst_corrected[d_ix,lat_index,lon_index] = np.interp(tmp_fcst_array, ifs_quantiles, imerg_quantiles)
+                
+                # imerg_bin_centres = quantiles_by_area[area_name]['imerg_quantiles']
+                # ifs_bin_edges = quantiles_by_area[area_name]['ifs_quantiles']
+                    
+                # inds = np.digitize(tmp_fcst_array, ifs_bin_edges) - 1
+                
+                # assert inds.size == len(d_ix)
+
+                # fcst_corrected[d_ix,lat_index,lon_index] = imerg_bin_centres[inds]
                 
                 # Deal with zeros; assign random bin
-                ifs_zero_bin_edges = [n for n, be in enumerate(ifs_bin_edges) if be ==0.0]
+                ifs_zero_bin_edges = [n for n, be in enumerate(ifs_quantiles) if be ==0.0]
                 
                 zero_inds = np.argwhere(tmp_fcst_array == 0.0)
-                fcst_corrected[zero_inds, lat_index, lon_index ] = imerg_bin_centres[np.random.choice(ifs_zero_bin_edges, size=zero_inds.shape)]
+                fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_bin_edges, size=zero_inds.shape)]
 
     
     return fcst_corrected
