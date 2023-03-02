@@ -138,10 +138,8 @@ def create_single_sample(*,
     date = inputs['dates']
     hour = inputs['hours']
     
-    # Get observations at time of forecast
-    loaddate, loadtime = data.get_ifs_forecast_time(date[0].year, date[0].month, date[0].day, hour[0])
-    dt = datetime(loaddate.year, loaddate.month, loaddate.day, int(loadtime))
-    imerg_persisted_fcst = data.load_imerg(dt.date(), hour=dt.hour, latitude_vals=latitude_range, 
+    # Get observations 24hrs before
+    imerg_persisted_fcst = data.load_imerg(date[0] - timedelta(days=1), hour=hour[0], latitude_vals=latitude_range, 
                                             longitude_vals=longitude_range, log_precip=not denormalise_data)
     
     assert imerg_persisted_fcst.shape == obs.shape, ValueError('Shape mismatch in iMERG persistent and truth')
@@ -216,6 +214,7 @@ def eval_one_chkpt(*,
     truth_vals = []
     samples_gen_vals = []
     fcst_vals = []
+    persisted_fcst_vals = []
     dates = []
     hours = []
     
@@ -311,6 +310,7 @@ def eval_one_chkpt(*,
         truth_vals.append(obs)
         samples_gen_vals.append(samples_gen)
         fcst_vals.append(fcst)
+        persisted_fcst_vals.append(imerg_persisted_fcst)
         
         ####################  CRPS calculation ##########################
         # calculate CRPS scores for different pooling methods
@@ -368,6 +368,7 @@ def eval_one_chkpt(*,
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
     fcst_array = np.stack(fcst_vals, axis=0)
+    persisted_fcst_array = np.stack(persisted_fcst_vals, axis=0)
     
     point_metrics = {}
         
@@ -392,7 +393,8 @@ def eval_one_chkpt(*,
         gc.collect()
     rank_arrays = (ranks, lowress, hiress)
     
-    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 'dates': dates, 'hours': hours}
+    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 
+              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours}
 
     return rank_arrays, point_metrics, arrays
 

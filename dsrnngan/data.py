@@ -868,6 +868,12 @@ def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=No
             raise IOError(f'File formats {file_ending} not supported')
 
     ds = xr.concat(datasets, dim='time').mean('time')
+    
+    if ds.lon.values.max() < max(longitude_vals) or ds.lon.values.min() > min(longitude_vals):
+        raise ValueError('Longitude range outside of data range')
+    
+    if ds.lat.values.max() < max(latitude_vals) or ds.lat.values.max() > min(latitude_vals):
+        raise ValueError('Latitude range outside of data range')
 
     # Note we use method nearest; the iMERG data isn't interpolated to be on
     # the same grid as the input forecast necessarily (they don't need to match exactly)
