@@ -47,6 +47,24 @@ def mse(x, y):
 def rmse(x, y):
     return np.sqrt(mse(x, y))
 
+def mae_95(y_true, y_pred):
+    
+    ''' 
+    Mean absolute error above the 95th percentile
+    '''
+    
+    cutoff_true = np.quantile(y_true, 0.95)
+    cutoff_pred = np.quantile(y_pred, 0.95)
+    
+    # Account for degenerate values
+    true_vals_ix = np.where(y_true >= cutoff_true)[0]
+    pred_vals_ix = np.where(y_pred >= cutoff_pred)[0]
+    min_index = max(true_vals_ix.min(), pred_vals_ix.min())
+        
+    mae_95 = np.abs(y_true[min_index:] - y_pred[min_index:]).mean()
+    
+    return mae_95
+
 
 ##
 # The code below is based off the pysteps code, please refer to their license

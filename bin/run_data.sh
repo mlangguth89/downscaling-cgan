@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --time=0-5:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --mem=20gb
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-data
 #SBATCH --partition compute
-#SBATCH --array=2000-2020
+#SBATCH --array=2000-2016
 #SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc
