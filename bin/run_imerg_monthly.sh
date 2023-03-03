@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=monthly-cat
 #SBATCH --partition short
-#SBATCH --array=2001-2020
+#SBATCH --array=2003
 #SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc

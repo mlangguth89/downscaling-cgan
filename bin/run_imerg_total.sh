@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=monthly_rainfall
 #SBATCH --partition short
-#SBATCH --array=2002-2017
+#SBATCH --array=2016
 #SBATCH --output=logs/slurm-%A_%a.out
 
 source ~/.bashrc

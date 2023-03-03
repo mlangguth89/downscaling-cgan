@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=0-80:00:00
-#SBATCH --mem=100gb
+#SBATCH --mem=150gb
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-train
@@ -28,12 +28,12 @@ module load lang/cuda/11.2-cudnn-8.1
 nvidia-smi
 
 # print out stuff to tell you when the script is running
-echo running model
+echo "running model"
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval-blitz --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e --restart
+srun python -m dsrnngan.main --eval-blitz --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

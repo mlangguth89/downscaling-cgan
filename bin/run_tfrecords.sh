@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=tfrecords-creation
 #SBATCH --partition short
-#SBATCH --array=0-23
+#SBATCH --array=18
 #SBATCH --output=logs/slurm-%A_%a.out
 
 echo `which python`

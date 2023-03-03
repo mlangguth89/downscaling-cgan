@@ -1,15 +1,18 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --time=3-00:00:00
+#SBATCH --time=0-80:00:00
 #SBATCH --mem=50gb
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
-#SBATCH --job-name=cgan-eval
+#SBATCH --job-name=cgan-test
 #SBATCH --partition cnu
 #SBATCH --output=logs/slurm-%A.out
 
+# GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
+
 source ~/.bashrc
 source ~/.initConda.sh
+
 echo Running on host `hostname`
 echo Time is `date`
 echo Directory is `pwd`
@@ -25,12 +28,12 @@ module load lang/cuda/11.2-cudnn-8.1
 nvidia-smi
 
 # print out stuff to tell you when the script is running
-echo running model
+echo "running model"
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --model-numbers 230400 --save-generated-samples --no-train --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e --num-images 3000 --ensemble-size 50 --val-ym-start 201806 --val-ym-end 201905
+srun python -m dsrnngan.test
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  
