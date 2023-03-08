@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=3-00:00:00
-#SBATCH --mem=50gb
+#SBATCH --mem=100gb
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-eval
@@ -30,7 +30,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --model-numbers 230400 --save-generated-samples --no-train --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e --num-images 3000 --ensemble-size 50 --val-ym-start 201806 --val-ym-end 201905
+srun python -m dsrnngan.main --evaluate --save-generated-samples --model-numbers 230400 --no-train --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e --num-images 3000 --ensemble-size 10 --val-ym-start 201806 --val-ym-end 201905
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

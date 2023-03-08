@@ -872,7 +872,7 @@ def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=No
     if ds.lon.values.max() < max(longitude_vals) or ds.lon.values.min() > min(longitude_vals):
         raise ValueError('Longitude range outside of data range')
     
-    if ds.lat.values.max() < max(latitude_vals) or ds.lat.values.max() > min(latitude_vals):
+    if ds.lat.values.max() < max(latitude_vals) or ds.lat.values.min() > min(latitude_vals):
         raise ValueError('Latitude range outside of data range')
 
     # Note we use method nearest; the iMERG data isn't interpolated to be on

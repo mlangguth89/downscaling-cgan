@@ -47,14 +47,14 @@ def mse(x, y):
 def rmse(x, y):
     return np.sqrt(mse(x, y))
 
-def mae_95(y_true, y_pred):
+def mae_above_threshold(y_true, y_pred, percentile_threshold=0.95):
     
     ''' 
     Mean absolute error above the 95th percentile
     '''
     
-    cutoff_true = np.quantile(y_true, 0.95)
-    cutoff_pred = np.quantile(y_pred, 0.95)
+    cutoff_true = np.quantile(y_true, percentile_threshold)
+    cutoff_pred = np.quantile(y_pred, percentile_threshold)
     
     # Account for degenerate values
     true_vals_ix = np.where(y_true >= cutoff_true)[0]

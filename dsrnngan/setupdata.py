@@ -1,8 +1,10 @@
 import gc
 import os
 import copy
+import pickle
 from glob import glob
 import numpy as np
+from tqdm import tqdm
 
 from dsrnngan import tfrecords_generator
 from dsrnngan.tfrecords_generator import DataGenerator
@@ -278,3 +280,54 @@ def generate_prediction(data_iterator, generator, noise_channels, ensemble_size 
         img_gens.append(generator.predict([cond, const, noise_gen()]))
     
     return img_gens, truth, fcst, dates, hours
+
+
+if __name__=='__main__':
+    
+    from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
+    
+    fcst_data_source = 'ifs'
+    date_range = ['201603', '201803']
+    n_samples = 2000
+    
+    data_gen = setup_full_image_dataset(['201603', '201803'],
+                             fcst_data_source=fcst_data_source,
+                             obs_data_source='imerg',
+                             load_constants=True,
+                             data_paths=DATA_PATHS,
+                             latitude_range=DEFAULT_LATITUDE_RANGE,
+                             longitude_range=DEFAULT_LONGITUDE_RANGE,
+                             batch_size=1,
+                             downsample=False,
+                             hour='random',
+                             shuffle=True
+                             )
+    
+    tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
+    
+    obs_vals, fcst_vals, dates, hours = [], [], [], []
+    
+    for data_idx in tqdm(range(n_samples)):
+
+        inputs, outputs = data_gen[data_idx]
+      
+        cond = inputs['lo_res_inputs']
+        fcst = cond[0, :, :, tpidx]
+        const = inputs['hi_res_inputs']
+        obs = outputs['output'][0, :, :]
+        date = inputs['dates']
+        hour = inputs['hours']
+        
+        obs_vals.append(obs)
+        fcst_vals.append(fcst)
+        dates.append(date)
+        hours.append(hour)
+        
+    obs_array = np.stack(obs_vals, axis=0)
+    fcst_array = np.stack(fcst_vals, axis=0)
+        
+    arrays = {'obs': obs_array, 'fcst_array': fcst_array, 
+              'dates': dates, 'hours': hours}
+    
+    with open(f"{'_'.join(date_range)}_{n_samples}_arrays.pkl", 'wb+') as ofh:
+        pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)

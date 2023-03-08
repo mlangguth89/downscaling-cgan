@@ -7,7 +7,7 @@ import xarray as xr
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
 
-HOME = Path(os.getcwd()).parents[0]
+HOME = Path(os.getcwd())
 
 sys.path.insert(1, str(HOME))
 
@@ -15,7 +15,7 @@ sys.path.insert(1, str(HOME))
 from dsrnngan.utils import load_yaml_file
 from dsrnngan.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range
 from dsrnngan.benchmarks import get_quantile_areas, get_quantile_mapped_forecast, get_quantiles_by_area
-from dsrnngan.scoring import mae_95
+from dsrnngan.scoring import mae_above_threshold
 
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
@@ -24,12 +24,15 @@ args = parser.parse_args()
 
 month_ranges = [[1,2], [3,4,5], [6,7,8,9], [10,11,12]]
 
+output_fp = os.path.join(args.output_dir, 'mae_vals.pkl')
+print(output_fp)
+
 # Quantiles
 step_size = 0.001
 range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 32},
               1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 256},
-              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 512},
-              3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
+              2: {'start': 10, 'stop': 70, 'interval':10, 'marker': '+', 'marker_size': 512},
+              3: {'start': 70, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
               4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 128},
               5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
               6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10}}
@@ -96,32 +99,50 @@ X = ifs_train_data.copy().reshape(n_train_samples, -1)
 y = obs_data=imerg_train_data.reshape(n_train_samples, -1)
 months = [d.month for d in overlapping_dates]
 
-quantile_thresholds = [0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999]
+quantile_thresholds = [0.7, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999]
 mae_vals = []
+mae_95_vals = []
+
 for quantile_threshold in tqdm(quantile_thresholds):
     # Stratify by month
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
     skf.get_n_splits(X, months)
 
     cv_mae_vals = []
+    cv_mae_95_vals = []
+    
     for i, (train_index, test_index) in enumerate(skf.split(X, months)):
         
         # train
         train_dates = overlapping_dates[train_index]
         training_quantile_areas = get_quantile_areas(train_dates, month_ranges, latitude_range, longitude_range)
         
-        training_quantiles_by_area = get_quantiles_by_area(training_quantile_areas, fcst_data=ifs_train_data[train_index, :, :], obs_data=imerg_train_data[train_index, :, :], quantile_locs=quantile_locs,
-                                                        quantile_threshold=quantile_threshold)
+        training_quantiles_by_area = get_quantiles_by_area(training_quantile_areas, 
+                                                           fcst_data=ifs_train_data[train_index, :, :], 
+                                                           obs_data=imerg_train_data[train_index, :, :], 
+                                                           quantile_locs=quantile_locs)
 
         # test
         test_dates = overlapping_dates[test_index]
         test_quantile_areas = get_quantile_areas(test_dates, month_ranges, latitude_range, longitude_range)
 
-        test_qmapped_fcst = get_quantile_mapped_forecast(ifs_train_data[test_index, :, :], test_dates, month_ranges, test_quantile_areas, training_quantiles_by_area, hours=None )
+        test_qmapped_fcst = get_quantile_mapped_forecast(fcst=ifs_train_data[test_index, :, :], 
+                                                         dates=test_dates, 
+                                                         month_ranges=month_ranges, 
+                                                         quantile_areas=test_quantile_areas, 
+                                                         quantiles_by_area=training_quantiles_by_area, 
+                                                         hours=None,
+                                                         quantile_threshold=quantile_threshold)
         
         test_obs = imerg_train_data[test_index, :, :]
-        cv_mae_vals.append(mae_95(test_obs.flatten(), test_qmapped_fcst.flatten()))
-    mae_vals.append((quantile_threshold, np.mean(cv_mae_vals)))
+        
+        cv_mae_vals.append(np.abs(test_obs.flatten() - test_qmapped_fcst.flatten()).mean())
+        
+        cv_mae_95_vals.append(mae_above_threshold(test_obs.flatten(), test_qmapped_fcst.flatten(), 
+                                                  percentile_threshold=0.95))
     
-    with open(os.path.join(args.output_dir, 'mae_vals.pkl'), 'wb+') as ofh:
-        pickle.dump(mae_vals, ofh)
+    mae_vals.append((quantile_threshold, np.mean(cv_mae_vals)))
+    mae_95_vals.append((quantile_threshold, np.mean(cv_mae_95_vals)))
+    
+    with open(output_fp, 'wb+') as ofh:
+        pickle.dump({'mae': mae_vals, 'mae_95': mae_95_vals}, ofh)
