@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=1-00:00:00
-#SBATCH --mem=20gb
+#SBATCH --mem=100gb
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-setupdata
 #SBATCH --partition compute

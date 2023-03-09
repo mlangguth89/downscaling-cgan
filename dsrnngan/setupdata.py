@@ -307,8 +307,26 @@ if __name__=='__main__':
     
     obs_vals, fcst_vals, dates, hours = [], [], [], []
     
-    for data_idx in tqdm(range(n_samples)):
-
+    data_idx = 0
+        
+    for kk in tqdm(range(n_samples)):
+        
+        try:
+            inputs, outputs = data_gen[data_idx]
+        except FileNotFoundError:
+            print('Could not load file, attempting retries')
+            success = False
+            for retry in range(5):
+                data_idx += 1
+                print(f'Attempting retry {retry} of 5')
+                try:
+                    inputs, outputs = data_gen[data_idx]
+                    break
+                except FileNotFoundError:
+                    pass
+            if not success:
+                raise FileNotFoundError
+        
         inputs, outputs = data_gen[data_idx]
       
         cond = inputs['lo_res_inputs']
@@ -322,6 +340,8 @@ if __name__=='__main__':
         fcst_vals.append(fcst)
         dates.append(date)
         hours.append(hour)
+        
+        data_idx += 1
         
     obs_array = np.stack(obs_vals, axis=0)
     fcst_array = np.stack(fcst_vals, axis=0)
