@@ -15,11 +15,11 @@ data_folder = HOME / 'system_tests' / 'data'
 
 sys.path.append(str(HOME))
 
-from dsrnngan.data import infer_lat_lon_names, load_ifs, FIELD_TO_HEADER_LOOKUP_IFS, load_hires_constants, load_imerg_raw, load_era5_day_raw, \
+from dsrnngan.data import infer_lat_lon_names, FIELD_TO_HEADER_LOOKUP_IFS, load_hires_constants, load_imerg_raw, load_era5_day_raw, \
     VAR_LOOKUP_ERA5, interpolate_dataset_on_lat_lon, \
     get_era5_stats, load_fcst_stack, all_ifs_fields, all_era5_fields, load_era5, \
-    load_ifs, get_imerg_filepaths, ERA5_PATH, get_ifs_filepath, \
-    load_fcst_radar_batch, log_precipitation, filter_by_lat_lon, load_ifs_raw, \
+    load_ifs, get_imerg_filepaths, ERA5_PATH, \
+    load_fcst_radar_batch, log_plus_1, filter_by_lat_lon, load_ifs_raw, \
     VAR_LOOKUP_IFS, get_ifs_stats, file_exists, get_dates, load_land_sea_mask, load_orography
 
 
@@ -240,12 +240,12 @@ class TestLoad(unittest.TestCase):
         month = 7
         day = 5
         hour = 18
-        
+
         ds_raw = load_ifs_raw('tp', year=year, month=month, day=day, hour=hour,
-                                   latitude_vals=[0, 0.1], longitude_vals=[33, 33.1],
+                                   latitude_vals=[-1.75, -1.85], longitude_vals=[34.35, 34.45],
                                    ifs_data_dir=str(ifs_path), interpolate=False)
         
-        testing.assert_allclose(ds_raw['tp'].values, np.array([[0.0, 0.0], [1.08778477e-06, 0.0]]), atol=1e-8)
+        testing.assert_allclose(ds_raw['tp'].values, np.array(np.array([[3.98702919e-04, 6.53415918e-06], [0.00081483, 0.]])), atol=1e-8)
 
     def test_era5_load_norm_logs(self):
 
@@ -273,7 +273,7 @@ class TestLoad(unittest.TestCase):
                                            latitude_vals=lat_vals, longitude_vals=lon_vals, constants_path=constants_path)
 
                 testing.assert_array_equal(ds_tp_log, ds_tp_log_norm)
-                testing.assert_array_equal(ds_tp_log, log_precipitation(ds_tp_no_log))
+                testing.assert_array_equal(ds_tp_log, log_plus_1(ds_tp_no_log))
 
             # Try loading with normalisation
             ds_tp_norm = load_era5(v, f'{year}{month:02d}{day:02d}', hour=12, log_precip=False, norm=True,
@@ -306,27 +306,22 @@ class TestLoad(unittest.TestCase):
         for v in var_name_lookup:
             if v == 'tp':
                 # check log precipitation is working
-                ds_tp_no_log = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, log_precip=False, norm=False,
+                ds_tp_no_log = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour,  norm=False,
                                          fcst_dir=str(ifs_path),
                                          latitude_vals=lat_vals, longitude_vals=lon_vals, 
                                          constants_path=constants_path)
-                ds_tp_log = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, log_precip=True, norm=False,
+                ds_tp_log_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
                                       fcst_dir=str(ifs_path),
                                       latitude_vals=lat_vals, longitude_vals=lon_vals, 
                                       constants_path=constants_path)
-                ds_tp_log_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, log_precip=True, norm=True,
-                                           fcst_dir=str(ifs_path),
-                                           latitude_vals=lat_vals, longitude_vals=lon_vals, 
-                                           constants_path=constants_path)
 
-                testing.assert_array_equal(ds_tp_log, ds_tp_log_norm)
-                testing.assert_array_equal(ds_tp_log, log_precipitation(ds_tp_no_log))
+                testing.assert_array_equal(ds_tp_log_norm, log_plus_1(ds_tp_no_log))
 
             # Try loading with normalisation
-            ds_tp_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, log_precip=False, norm=True,
+            ds_tp_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
                                    fcst_dir=str(ifs_path),
                                    latitude_vals=lat_vals, longitude_vals=lon_vals, constants_path=constants_path)
-            ds_tp_no_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, log_precip=False, norm=False,
+            ds_tp_no_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=False,
                                       fcst_dir=str(ifs_path),
                                       latitude_vals=lat_vals, longitude_vals=lon_vals, constants_path=constants_path)
 
@@ -422,15 +417,15 @@ class TestLoad(unittest.TestCase):
         
         fps = get_imerg_filepaths(2019, 1, 1, 0, file_ending='.nc')
         
-        self.assertEqual(fps[0].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20181231-S233000-E235959.1410.V06B.nc')
-        self.assertEqual(fps[1].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20190101-S000000-E002959.0000.V06B.nc')
+        self.assertEqual(fps[0].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20190101-S000000-E002959.0000.V06B.nc')
+        self.assertEqual(fps[1].split('/')[-1], '3B-HHR.MS.MRG.3IMERG.20190101-S003000-E005959.0030.V06B.nc')
         
     def test_load_imerg(self):
 
         year = 2018
         month = 12
         day = 30
-        hour = 18
+        hour = 17
         latitude_vals = [0, 0.1, 0.2]
         longitude_vals = [33, 34]
 
@@ -451,6 +446,12 @@ class TestLoad(unittest.TestCase):
         
         # Check for NaNs
         self.assertFalse(np.isnan(ds['precipitationCal']).any())
+        
+        with self.assertRaises(ValueError):
+            load_imerg_raw(year=year, month=month, day=day, hour=hour,
+                            latitude_vals=latitude_vals,
+                            longitude_vals=[330.05, 330.15],
+                            imerg_data_dir=imerg_folder)
 
     def test_era5_stats(self):
 
@@ -485,15 +486,15 @@ class TestLoad(unittest.TestCase):
         latitude_vals = [0, 1]
 
         # Check it works with IFS
-        ifs_stack = load_fcst_stack('ifs', all_ifs_fields, '20170705', 4, fcst_dir=ifs_path, log_precip=False,
-                                    norm=False, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
+        ifs_stack = load_fcst_stack('ifs', all_ifs_fields, '20170705', 4, fcst_dir=ifs_path,
+                                    norm=True, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
                                     constants_dir=constants_path)
         ifs_shape = ifs_stack.shape
         self.assertEqual(ifs_shape[2], len(all_ifs_fields))
         self.assertFalse(np.isnan(ifs_stack).any())
 
         # Check it works with era5
-        era5_stack = load_fcst_stack('era5', all_era5_fields, '20201101', 12, fcst_dir=era5_path, log_precip=False,
+        era5_stack = load_fcst_stack('era5', all_era5_fields, '20201101', 12, fcst_dir=era5_path,
                                      norm=False, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
                                      constants_dir=constants_path)
         era5_shape = era5_stack.shape
@@ -512,7 +513,7 @@ class TestLoad(unittest.TestCase):
         ifs_input_batch, imerg_batch = load_fcst_radar_batch(ifs_batch_dates, fcst_data_source='ifs', obs_data_source='imerg', fcst_fields=all_ifs_fields, 
                                           fcst_dir=ifs_path, obs_data_dir=imerg_folder, latitude_range=latitude_vals,
                                           longitude_range=longitude_vals, constants_dir=constants_path,
-                                          log_precip=False, constants=True, hour=4, norm=False)
+                                          constants=True, hour=4, norm=False)
         self.assertEqual(len(ifs_input_batch), 2)
         self.assertEqual(len(ifs_input_batch[0]), len(ifs_batch_dates))
         self.assertEqual(len(ifs_input_batch[1]), len(ifs_batch_dates))
@@ -526,7 +527,7 @@ class TestLoad(unittest.TestCase):
         era5_batch, imerg_batch = load_fcst_radar_batch(batch_dates=era5_batch_dates, fcst_data_source='era5',
                                                         obs_data_source='imerg', fcst_fields=all_era5_fields,
                                                         fcst_dir=era5_path, obs_data_dir=imerg_folder,
-                                                        log_precip=False, constants=False, hour=12, norm=False,
+                                                        constants=False, hour=12, norm=False,
                                                         longitude_range=longitude_vals, latitude_range=latitude_vals,
                                                         constants_dir=constants_path)
 
