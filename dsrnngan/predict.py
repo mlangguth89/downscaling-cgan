@@ -136,10 +136,9 @@ gen.load_weights(weights_fn)
 data_benchmarks = DataGeneratorFull(dates=dates,
                                     fcst_fields=data.all_fcst_fields,
                                     batch_size=batch_size,
-                                    log_precip=False,
+                                    normalise=False,
                                     shuffle=True,
                                     hour='random',
-                                    fcst_norm=False,
                                     downsample=downsample)
 
 ###########

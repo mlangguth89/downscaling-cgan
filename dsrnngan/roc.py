@@ -78,11 +78,10 @@ def calculate_roc(*,
         data_predict = DataGeneratorFull(dates=dates,
                                          fcst_fields=all_fcst_fields,
                                          batch_size=batch_size,
-                                         log_precip=True,
+                                         normalise=True,
                                          shuffle=True,
                                          constants=True,
                                          hour='random',
-                                         fcst_norm=True,
                                          downsample=downsample)
 
     if not predict_full_image:
@@ -97,11 +96,10 @@ def calculate_roc(*,
         data_benchmarks = DataGeneratorFull(dates=dates,
                                             fcst_fields=all_fcst_fields,
                                             batch_size=batch_size,
-                                            log_precip=False,
+                                            normalise=False,
                                             shuffle=True,
                                             constants=True,
-                                            hour="random",
-                                            fcst_norm=False)
+                                            hour="random")
         tpidx = all_fcst_fields.index('tp')
 
     auc_scores_roc = {}  # will only contain GAN AUCs; used for "progress vs time" plot

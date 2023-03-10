@@ -41,7 +41,7 @@ dates = get_dates(predict_year)
 data_benchmarks = DataGeneratorFull(dates=dates,
                                     fcst_fields=all_fcst_fields,
                                     batch_size=batch_size,
-                                    log_precip=False,  # no need to denormalise data
+                                    noralise=False,  # no need to denormalise data
                                     shuffle=True,
                                     constants=True,
                                     hour='random',

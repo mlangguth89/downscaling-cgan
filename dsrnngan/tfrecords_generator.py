@@ -295,8 +295,7 @@ def write_data(year_month_range,
                observational_data_source,
                hours,
                num_class=4,
-               log_precip=True,
-               fcst_norm=True,
+               normalise=True,
                data_paths=DATA_PATHS,
                constants=True,
                latitude_range=None,
@@ -358,11 +357,10 @@ def write_data(year_month_range,
                                 observational_data_source=observational_data_source,
                                 data_paths=data_paths,
                                 batch_size=1,
-                                log_precip=log_precip,
                                 shuffle=False,
                                 constants=constants,
                                 hour=hour,
-                                fcst_norm=fcst_norm,
+                                normalise=normalise,
                                 longitude_range=longitude_range,
                                 latitude_range=latitude_range)
             print(f'Data generator initialization took {time.time() - start_time}')
@@ -497,8 +495,7 @@ if __name__ == '__main__':
     
     fcst_data_source = config['DATA']['fcst_data_source']
     obs_data_source = config['DATA']['obs_data_source']
-    log_precip = config['DATA']['log_precip']
-    fcst_norm = config['DATA'].get('fcst_norm', False)
+    normalise = config['DATA'].get('normalise', False)
     num_classes = config['DATA']['num_classes']
     img_size = config['DATA']['input_image_width']
     min_latitude = config['DATA']['min_latitude']
@@ -523,8 +520,7 @@ if __name__ == '__main__':
                             observational_data_source=obs_data_source,
                             hours=args.fcst_hours,
                             num_class=num_classes,
-                            log_precip=log_precip,
-                            fcst_norm=fcst_norm,
+                            normalise=normalise,
                             data_paths=data_paths,
                             constants=load_constants,
                             latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size),

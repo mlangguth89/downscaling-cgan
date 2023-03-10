@@ -11,8 +11,11 @@ test-logs/
 *.zip
 *.out
 *.png 
+*.eps
 *.npy
 system_tests/data/constants/
+*/tmp
+*/*/tmp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -66,21 +66,21 @@ VAR_LOOKUP_ERA5 = {'tp': {'folder': 'total_precipitation', 'suffix': 'day',
                         'v': {'folder': 'v', 'subfolder': 'v700', 'suffix': 'day_1deg',
                               'normalisation': 'minmax'}}
 
-IFS_NORMALISATION_STRATEGY = {'tp': {'negative_vals': False}, 
-                              'cp': {'negative_vals': False},
-                  'pr': {'negative_vals': False}, 
-                  'prl': {'negative_vals': False},
-                  'prc': {'negative_vals': False},
-                  'sp': {'normalisation': 'standardise'},
+IFS_NORMALISATION_STRATEGY = {'tp': {'negative_vals': False, 'normalisation': 'log'}, 
+                              'cp': {'negative_vals': False, 'normalisation': 'log'},
+                  'pr': {'negative_vals': False, 'normalisation': 'log'}, 
+                  'prl': {'negative_vals': False, 'normalisation': 'log'},
+                  'prc': {'negative_vals': False, 'normalisation': 'log'},
+                  'sp': {'normalisation': 'minmax'},
                   'u': {'normalisation': 'max'},
                   'v': {'normalisation': 'max'},
                   'w': {'normalisation': 'max'},
-                  'r': {'normalisation': 'minmax'}, 
-                  '2t': {'normalisation': 'max', 'negative_vals': False}, 
-                  'cape': {'normalisation': 'max'}, 
+                  'r': {'normalisation': 'max'}, 
+                  '2t': {'normalisation': 'minmax', 'negative_vals': False}, 
+                  'cape': {'normalisation': 'log'}, 
                   'cin': {'normalisation': 'max'}, 
-                  't': {'normalisation': 'max', 'negative_vals': False},
-                  'tclw': {'normalisation': 'max'}, 
+                  't': {'normalisation': 'minmax', 'negative_vals': False},
+                  'tclw': {'normalisation': 'log'}, 
                   'tcwv': {'normalisation': 'max'}, 
                   'tisr': {'normalisation': 'max'}}
 
@@ -113,7 +113,7 @@ def denormalise(x):
     return 10 ** x - 1
 
 
-def log_precipitation(data_array):
+def log_plus_1(data_array):
     return np.log10(1 + data_array)
 
 def infer_lat_lon_names(ds):
@@ -294,10 +294,6 @@ def load_hdf5_file(fp, group_name='Grid'):
 def preprocess(variable, ds, var_name_lookup, stats_dict=None):
     
     var_name = list(ds.data_vars)[0]
-    
-    if not var_name_lookup[variable].get('negative_vals', True):
-        # Make sure no negative values
-        ds[var_name] = ds[var_name].clip(min=0)
 
     normalisation_type = var_name_lookup[variable].get('normalisation')
 
@@ -308,10 +304,15 @@ def preprocess(variable, ds, var_name_lookup, stats_dict=None):
 
         elif normalisation_type == 'minmax':
             ds[var_name] = (ds[var_name] - stats_dict['min']) / (stats_dict['max'] - stats_dict['min'])
+        
+        elif normalisation_type == 'log':
+            ds[var_name] = log_plus_1(ds[var_name])
             
-        else:
-            # default to max normalisation for now
+        elif normalisation_type == 'max':
             ds[var_name] = ds[var_name] / stats_dict['max']
+        
+        else:
+            raise ValueError(f'Unrecognised normalisation type for variable {var_name}')
 
     return ds
 
@@ -343,7 +344,7 @@ def load_nimrod(date, hour, log_precip=False, aggregate=1, data_dir=NIMROD_PATH,
     # The remapping of the NIMROD radar left a few negative numbers, so remove those
     y[y < 0.0] = 0.0
     if log_precip:
-        return log_precipitation(y)
+        return log_plus_1(y)
     else:
         return y
 
@@ -424,7 +425,7 @@ def load_fcst_radar_batch(batch_dates,
                           latitude_range=None,
                           longitude_range=None,
                           constants_dir=CONSTANTS_PATH,
-                          log_precip=False, constants=False, hour=0, norm=False):
+                          constants=False, hour=0, norm=False):
     batch_x = []
     batch_y = []
 
@@ -443,8 +444,8 @@ def load_fcst_radar_batch(batch_dates,
         h = hours[i]
         batch_x.append(load_fcst_stack(fcst_data_source, fcst_fields, date, h,
                                        latitude_vals=latitude_range, longitude_vals=longitude_range, fcst_dir=fcst_dir,
-                                       log_precip=log_precip, norm=norm, constants_dir=constants_dir))
-        batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=log_precip,
+                                       norm=norm, constants_dir=constants_dir))
+        batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=norm,
                                                latitude_vals=latitude_range, longitude_vals=longitude_range,
                                                data_dir=obs_data_dir))
     if (not constants):
@@ -488,12 +489,15 @@ def get_ifs_forecast_time(year, month, day, hour):
     
 def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
                  latitude_vals=None, longitude_vals=None, interpolate=True):
-     
+    
+    if not isinstance(latitude_vals[0], np.float32):
+        latitude_vals = np.array(latitude_vals).astype(np.float32)
+        longitude_vals = np.array(longitude_vals).astype(np.float32)
+
     assert field in all_ifs_fields, ValueError(f"field must be one of {all_ifs_fields}")
     
-    time = datetime(year=year, month=month, day=day, hour=hour)
-    time_plus_one = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
-    time_minus_one = datetime(year=year, month=month, day=day, hour=hour) - timedelta(hours=1)
+    t = datetime(year=year, month=month, day=day, hour=hour)
+    t_plus_one = datetime(year=year, month=month, day=day, hour=hour) + timedelta(hours=1)
 
     # Get the nearest forecast starttime
     loaddate, loadtime = get_ifs_forecast_time(year, month, day, hour)
@@ -507,6 +511,12 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
     ds = xr.open_dataset(fp)
     var_names = list(ds.data_vars)
     
+    if np.round(ds.longitude.values.max(), 6) < np.round(max(longitude_vals), 6) or np.round(ds.longitude.values.min(), 6) > np.round(min(longitude_vals), 6):
+        raise ValueError('Longitude range outside of data range')
+    
+    if np.round(ds.latitude.values.max(), 6) < np.round(max(latitude_vals),6) or np.round(ds.latitude.values.min(),6) > np.round(min(latitude_vals), 6):
+        raise ValueError('Latitude range outside of data range')
+    
     assert len(var_names) == 1, ValueError('More than one variable found; cannot automatically infer variable name')
     var_name = list(ds.data_vars)[0]
     
@@ -515,10 +525,10 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
        
     # Account for cumulative fields
     if var_name in ['tp', 'cp', 'cdir', 'tisr']:
-        # Output rainfall per hour
-        ds =  0.5* ((ds.sel(time=time) - ds.sel(time=time_minus_one)) + (ds.sel(time=time_plus_one) - ds.sel(time=time)))
+        # Output rainfall during the following hour
+        ds =  ds.sel(time=t_plus_one) - ds.sel(time=t)
     else:
-        ds = ds.sel(time=time)
+        ds = ds.sel(time=t)
 
     if latitude_vals is not None and longitude_vals is not None:
         if interpolate:
@@ -538,7 +548,7 @@ def load_ifs_raw(field, year, month, day, hour, ifs_data_dir=IFS_PATH,
              
     return ds
 
-def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH, var_name_lookup=VAR_LOOKUP_IFS,
+def load_ifs(field, date, hour, norm=False, fcst_dir=IFS_PATH, var_name_lookup=VAR_LOOKUP_IFS,
              latitude_vals=None, longitude_vals=None, constants_path=CONSTANTS_PATH):
     
     if isinstance(date, str):
@@ -546,7 +556,17 @@ def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH,
         
     ds = load_ifs_raw(field, date.year, date.month, date.day, hour, ifs_data_dir=fcst_dir,
                  latitude_vals=latitude_vals, longitude_vals=longitude_vals, interpolate=True)
-
+    
+    var_name = list(ds.data_vars)[0]
+    
+    if not var_name_lookup[field].get('negative_vals', True):
+        # Make sure no negative values
+        ds[var_name] = ds[var_name].clip(min=0)
+        
+    if field in ['tp', 'cp', 'pr', 'prl', 'prc']:
+        # precipitation is measured in metres, so multiply up
+        ds[var_name] = 1000 * ds[var_name]
+        
     if norm:
         stats_dict = get_ifs_stats(field, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
                             use_cached=True, ifs_data_dir=fcst_dir,
@@ -554,21 +574,13 @@ def load_ifs(field, date, hour, log_precip=False, norm=False, fcst_dir=IFS_PATH,
         # Normalisation here      
         ds = preprocess(field, ds, stats_dict=stats_dict, var_name_lookup=var_name_lookup)
     
-    y = np.array(ds[list(ds.data_vars)[0]][:, :])
-    
-    if field in ['tp', 'cp', 'pr', 'prl', 'prc']:
-        # precip is measured in metres, so multiply up
-        y[y < 0] = 0.
-        y = 1000 * y
-        
-    if log_precip and field in ['tp', 'cp', 'pr', 'prc', 'prl']:
-        return log_precipitation(y)
+    y = np.array(ds[var_name][:, :])
     
     return y
 
 
 def load_fcst_stack(data_source, fields, date, hour, fcst_dir, constants_dir=CONSTANTS_PATH,
-                    log_precip=False, norm=False,
+                    norm=False,
                     latitude_vals=None, longitude_vals=None):
     field_arrays = []
 
@@ -582,7 +594,7 @@ def load_fcst_stack(data_source, fields, date, hour, fcst_dir, constants_dir=CON
     for f in fields:
         field_arrays.append(load_function(f, date, hour, fcst_dir=fcst_dir,
                                           latitude_vals=latitude_vals, longitude_vals=longitude_vals,
-                                          constants_path=constants_dir, log_precip=log_precip, norm=norm))
+                                          constants_path=constants_dir, norm=norm))
     return np.stack(field_arrays, -1)
 
 
@@ -831,7 +843,7 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
     ds.close()
 
     if ifield == 'tp' and log_precip == True:
-        y = log_precipitation(y)
+        y = log_plus_1(y)
 
     ds.close()
 
@@ -839,22 +851,26 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 
 def get_imerg_filepaths(year, month, day, hour, imerg_data_dir=IMERG_PATH, file_ending='.nc'):
     
-    dt_mid = datetime(year, month, day, hour, 0, 0)
-    dt_start = datetime(year, month, day, hour, 0, 0) - timedelta(minutes=30)
-    
-    if hour == 0:
-        suffix_pre = 1410
-    else:
-        suffix_pre = (2*hour - 1) * 30
+    dt_start = datetime(year, month, day, hour, 0, 0) 
         
-    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{suffix_pre:04d}.V06B{file_ending}')
-    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_mid.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{(2*hour * 30):04d}.V06B{file_ending}')
+    fp1 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H0000-E%H2959') + f'.{2*hour * 30:04d}.V06B{file_ending}')
+    fp2 = os.path.join(imerg_data_dir, '3B-HHR.MS.MRG.3IMERG.' + dt_start.strftime('%Y%m%d-S%H3000-E%H5959') + f'.{(2*hour + 1) * 30:04d}.V06B{file_ending}')
     
     return [fp1, fp2]
     
 def load_imerg_raw(year, month, day, hour, latitude_vals=None, longitude_vals=None,
                    imerg_data_dir=IMERG_PATH, file_ending='.nc'):
 
+    if isinstance(latitude_vals, list):
+        latitude_vals = np.array(latitude_vals)
+        
+    if isinstance(longitude_vals, list):
+        longitude_vals = np.array(longitude_vals)
+        
+    if not isinstance(latitude_vals[0], np.float32):
+        latitude_vals = latitude_vals.astype(np.float32)
+        longitude_vals = longitude_vals.astype(np.float32)
+    
     fps = get_imerg_filepaths(year, month, day, hour, imerg_data_dir=imerg_data_dir, file_ending=file_ending)
     
     datasets = []
@@ -919,7 +935,7 @@ def load_imerg(date, hour=18, data_dir=IMERG_PATH,
     ds.close()
     
     if log_precip:
-        precip = log_precipitation(precip)
+        precip = log_plus_1(precip)
 
     return precip
 

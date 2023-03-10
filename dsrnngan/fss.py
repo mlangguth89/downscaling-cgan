@@ -106,11 +106,10 @@ def plot_fss_curves(*,
         dates = get_dates(predict_year)
         data_predict = DataGeneratorFull(dates=dates,
                                          batch_size=batch_size,
-                                         log_precip=True,
+                                         normalise=True,
                                          shuffle=True,
                                          constants=True,
                                          hour='random',
-                                         fcst_norm=True,
                                          downsample=downsample)
 
     if not predict_full_image:
@@ -124,11 +123,10 @@ def plot_fss_curves(*,
         # requires a different data generator with different fields and no fcst_norm
         data_benchmarks = DataGeneratorFull(dates=dates,
                                             batch_size=batch_size,
-                                            log_precip=False,
+                                            normalise=False,
                                             shuffle=True,
                                             constants=True,
-                                            hour="random",
-                                            fcst_norm=False)
+                                            hour="random")
         tpidx = input_field_lookup[fcst_data_source].index('tp')
 
     # tidier to iterate over GAN checkpoints and NN-interp using joint code

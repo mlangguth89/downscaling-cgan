@@ -10,8 +10,8 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
     def __init__(self, dates, batch_size, forecast_data_source, observational_data_source, data_paths=DATA_PATHS,
-                 log_precip=True, shuffle=True, constants=True, hour='random', longitude_range=None,
-                 latitude_range=None, fcst_norm=True,
+                 shuffle=True, constants=True, hour='random', longitude_range=None,
+                 latitude_range=None, normalise=True,
                  downsample=False, seed=None):
 
         self.dates = dates
@@ -48,10 +48,9 @@ class DataGenerator(Sequence):
         self.batch_size = batch_size
 
         self.fcst_fields = fields_lookup[self.forecast_data_source.lower()]
-        self.log_precip = log_precip
         self.shuffle = shuffle
         self.hour = hour
-        self.fcst_norm = fcst_norm
+        self.normalise = normalise
         self.downsample = downsample
         self.latitude_range = latitude_range
         self.longitude_range = longitude_range
@@ -93,11 +92,10 @@ class DataGenerator(Sequence):
             obs_data_dir=self.data_paths['GENERAL'][self.observational_data_source.upper()],
             constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
             fcst_fields=self.fcst_fields,
-            log_precip=self.log_precip,
             fcst_data_source=self.forecast_data_source,
             obs_data_source=self.observational_data_source,
             hour=hours_batch,
-            norm=self.fcst_norm,
+            norm=self.normalise,
             latitude_range=self.latitude_range,
             longitude_range=self.longitude_range)
         
