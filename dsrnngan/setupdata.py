@@ -286,12 +286,21 @@ if __name__=='__main__':
     from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
     
     fcst_data_source = 'ifs'
-    date_range = ['201603', '201803']
-    n_samples = 2000
+    obs_data_source='imerg'
+    ym_range = ['201603', '201803']
+    n_samples = 'all'
     
-    data_gen = setup_full_image_dataset(['201603', '201803'],
+    if n_samples == 'all':
+        from dsrnngan.data import get_obs_dates
+
+        date_range = date_range_from_year_month_range(ym_range)
+        dates = get_obs_dates(date_range[0], date_range[-1], 
+                          obs_data_source=obs_data_source, data_paths=DATA_PATHS)
+        n_samples = len(dates)
+    
+    data_gen = setup_full_image_dataset(ym_range,
                              fcst_data_source=fcst_data_source,
-                             obs_data_source='imerg',
+                             obs_data_source=obs_data_source,
                              load_constants=True,
                              data_paths=DATA_PATHS,
                              latitude_range=DEFAULT_LATITUDE_RANGE,
@@ -299,7 +308,7 @@ if __name__=='__main__':
                              batch_size=1,
                              downsample=False,
                              hour='random',
-                             shuffle=True
+                             shuffle=False
                              )
     
     tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
@@ -320,7 +329,7 @@ if __name__=='__main__':
                 print(f'Attempting retry {retry} of 5')
                 try:
                     inputs, outputs = data_gen[data_idx]
-                    break
+                    success = True
                 except FileNotFoundError:
                     pass
             if not success:

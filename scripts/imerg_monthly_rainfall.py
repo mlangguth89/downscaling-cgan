@@ -82,7 +82,7 @@ for month in tqdm(np.arange(1, 13)):
             if year >= 2016:
                 # IFS
                 try:
-                    ds_ifs = load_ifs('tp', datetime(year, month, day), hour, log_precip=False, norm=False, 
+                    ds_ifs = load_ifs('tp', datetime(year, month, day), hour, norm=False, 
                                     latitude_vals=latitude_vals, longitude_vals=longitude_vals)
                     total_ifs_rainfall_dict[month][day] += ds_ifs
                     

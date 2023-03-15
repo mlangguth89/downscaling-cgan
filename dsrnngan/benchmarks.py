@@ -18,21 +18,26 @@ def nn_interp_model(data, upsampling_factor):
 def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
 
-def get_quantile_areas(dates, month_ranges, latitude_range, longitude_range):
+def get_quantile_areas(dates, month_ranges, latitude_range, longitude_range, hours=None, num_lat_lon_chunks=2):
 
     if isinstance(dates, np.ndarray):
 
         dates = list(dates.copy())
     
+    if hours:
+        date_hour_list = list(zip(dates,hours))
+    else:
+        date_hour_list = list(zip(dates,[0]*len(dates)))
+
     lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
     lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
 
-    date_chunks =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in dates if item.month in month_range] for month_range in month_ranges}
-    date_indexes = {k : [dates.index(item) for item in chunk] for k, chunk in date_chunks.items()}
+    date_chunks =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in date_hour_list if item[0].month in month_range] for month_range in month_ranges}
+    date_indexes =  {k : [date_hour_list.index(item) for item in chunk] for k, chunk in date_chunks.items()}
 
     assert len(list(chain.from_iterable(date_chunks.values()))) == len(dates)
 
-    num_lat_lon_chunks =2
+    
     lat_chunk_size = int(len(lat_range_list)/num_lat_lon_chunks)
     lat_range_chunks = [lat_range_list[n*lat_chunk_size:(n+1)*lat_chunk_size] for n in range(num_lat_lon_chunks)]
     lat_range_chunks[-1] = lat_range_chunks[-1] + lat_range_list[num_lat_lon_chunks*lat_chunk_size:]
