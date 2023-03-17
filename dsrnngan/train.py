@@ -1,3 +1,6 @@
+import os
+import tensorflow as tf
+
 from dsrnngan import noise
 from dsrnngan import plots
 
@@ -13,7 +16,8 @@ def train_model(*,
                 steps_per_checkpoint=None,
                 do_plot=False,
                 plot_samples=8,
-                plot_fn=None):
+                plot_fn=None,
+                log_folder=None):
 
     for cond, _, _ in batch_gen_train.take(1).as_numpy_iterator():
         img_shape = cond.shape[1:-1]

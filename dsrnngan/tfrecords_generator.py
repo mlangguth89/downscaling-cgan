@@ -103,7 +103,7 @@ def create_mixed_dataset(data_label: str,
         else:
             sampled_ds = sampled_ds.map(_dataset_downsampler_list)
         
-    sampled_ds = sampled_ds.prefetch(2)
+    sampled_ds = sampled_ds.prefetch(buffer_size=AUTOTUNE)
     return sampled_ds
 
 # Note, if we wanted fewer classes, we can use glob syntax to grab multiple classes as once
@@ -235,21 +235,31 @@ def create_dataset(data_label: str,
 
     fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
+    ignore_order = tf.data.Options()
+    ignore_order.experimental_deterministic = False 
+     
     ds = tf.data.TFRecordDataset(fl,
                                  num_parallel_reads=AUTOTUNE)
+    
+    ds = ds.with_options(
+        ignore_order
+    )
     
     ds = ds.shuffle(shuffle_size, seed=int_seed)
 
     ds = ds.map(lambda x: _parse_batch(x,
                                        insize=fcst_shape,
                                        consize=con_shape,
-                                       outsize=out_shape))
-    
+                                       outsize=out_shape),
+                num_parallel_calls=AUTOTUNE)
+   
     if crop_size:
         if return_dic:
-            ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed))
+            ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed),
+                        num_parallel_calls=AUTOTUNE)
         else:
-            ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed))
+            ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed),
+                        num_parallel_calls=AUTOTUNE)
     if repeat:
         return ds.repeat()
     else:

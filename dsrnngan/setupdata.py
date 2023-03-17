@@ -284,78 +284,84 @@ def generate_prediction(data_iterator, generator, noise_channels, ensemble_size 
 if __name__=='__main__':
     
     from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
+    from dsrnngan.data import get_obs_dates
     
     fcst_data_source = 'ifs'
     obs_data_source='imerg'
     ym_range = ['201603', '201803']
     n_samples = 'all'
     
+    date_range = date_range_from_year_month_range(ym_range)
+    all_dates = get_obs_dates(date_range[0], date_range[-1], 
+                        obs_data_source=obs_data_source, data_paths=DATA_PATHS)
+    all_year_months = list(set([f"{d.year}{d.month:02d}" for d in all_dates]))
+    
     if n_samples == 'all':
-        from dsrnngan.data import get_obs_dates
-
-        date_range = date_range_from_year_month_range(ym_range)
-        dates = get_obs_dates(date_range[0], date_range[-1], 
-                          obs_data_source=obs_data_source, data_paths=DATA_PATHS)
-        n_samples = len(dates)
-    
-    data_gen = setup_full_image_dataset(ym_range,
-                             fcst_data_source=fcst_data_source,
-                             obs_data_source=obs_data_source,
-                             load_constants=True,
-                             data_paths=DATA_PATHS,
-                             latitude_range=DEFAULT_LATITUDE_RANGE,
-                             longitude_range=DEFAULT_LONGITUDE_RANGE,
-                             batch_size=1,
-                             downsample=False,
-                             hour='random',
-                             shuffle=False
-                             )
-    
-    tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
-    
-    obs_vals, fcst_vals, dates, hours = [], [], [], []
-    
-    data_idx = 0
         
-    for kk in tqdm(range(n_samples)):
+        n_samples = 24*len(all_dates)
+    
+    for ym in all_year_months:
+        ym_range = [ym]
+    
+        data_gen = setup_full_image_dataset(ym_range,
+                                fcst_data_source=fcst_data_source,
+                                obs_data_source=obs_data_source,
+                                load_constants=True,
+                                data_paths=DATA_PATHS,
+                                latitude_range=DEFAULT_LATITUDE_RANGE,
+                                longitude_range=DEFAULT_LONGITUDE_RANGE,
+                                batch_size=1,
+                                downsample=False,
+                                hour='random',
+                                shuffle=False
+                                )
         
-        try:
+        tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
+        
+        obs_vals, fcst_vals, dates, hours = [], [], [], []
+        
+        data_idx = 0
+            
+        for kk in tqdm(range(n_samples)):
+            
+            try:
+                inputs, outputs = data_gen[data_idx]
+            except FileNotFoundError:
+                print('Could not load file, attempting retries')
+                success = False
+                for retry in range(5):
+                    data_idx += 1
+                    print(f'Attempting retry {retry} of 5')
+                    try:
+                        inputs, outputs = data_gen[data_idx]
+                        success = True
+                    except FileNotFoundError:
+                        pass
+                if not success:
+                    print(f'Stopping at {dates[data_idx]}')
+                    raise FileNotFoundError
+            
             inputs, outputs = data_gen[data_idx]
-        except FileNotFoundError:
-            print('Could not load file, attempting retries')
-            success = False
-            for retry in range(5):
-                data_idx += 1
-                print(f'Attempting retry {retry} of 5')
-                try:
-                    inputs, outputs = data_gen[data_idx]
-                    success = True
-                except FileNotFoundError:
-                    pass
-            if not success:
-                raise FileNotFoundError
         
-        inputs, outputs = data_gen[data_idx]
-      
-        cond = inputs['lo_res_inputs']
-        fcst = cond[0, :, :, tpidx]
-        const = inputs['hi_res_inputs']
-        obs = outputs['output'][0, :, :]
-        date = inputs['dates']
-        hour = inputs['hours']
+            cond = inputs['lo_res_inputs']
+            fcst = cond[0, :, :, tpidx]
+            const = inputs['hi_res_inputs']
+            obs = outputs['output'][0, :, :]
+            date = inputs['dates']
+            hour = inputs['hours']
+            
+            obs_vals.append(obs)
+            fcst_vals.append(fcst)
+            dates.append(date)
+            hours.append(hour)
+            
+            data_idx += 1
+            
+        obs_array = np.stack(obs_vals, axis=0)
+        fcst_array = np.stack(fcst_vals, axis=0)
+            
+        arrays = {'obs': obs_array, 'fcst_array': fcst_array, 
+                'dates': dates, 'hours': hours}
         
-        obs_vals.append(obs)
-        fcst_vals.append(fcst)
-        dates.append(date)
-        hours.append(hour)
-        
-        data_idx += 1
-        
-    obs_array = np.stack(obs_vals, axis=0)
-    fcst_array = np.stack(fcst_vals, axis=0)
-        
-    arrays = {'obs': obs_array, 'fcst_array': fcst_array, 
-              'dates': dates, 'hours': hours}
-    
-    with open(f"{'_'.join(date_range)}_{n_samples}_arrays.pkl", 'wb+') as ofh:
-        pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
+        with open(f"training_data_{'_'.join(ym)}_{n_samples}.pkl", 'wb+') as ofh:
+            pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)

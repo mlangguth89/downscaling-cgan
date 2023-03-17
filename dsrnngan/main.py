@@ -359,7 +359,6 @@ if __name__ == "__main__":
     logger.debug(gpu_devices)
     
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
-
     args = parser.parse_args()
     
     if args.model_numbers:
