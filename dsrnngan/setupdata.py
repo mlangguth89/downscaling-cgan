@@ -288,20 +288,24 @@ if __name__=='__main__':
     
     fcst_data_source = 'ifs'
     obs_data_source='imerg'
-    ym_range = ['201603', '201803']
+    full_ym_range = ['201603', '201803']
     n_samples = 'all'
     
-    date_range = date_range_from_year_month_range(ym_range)
+    date_range = date_range_from_year_month_range(full_ym_range)
     all_dates = get_obs_dates(date_range[0], date_range[-1], 
                         obs_data_source=obs_data_source, data_paths=DATA_PATHS)
     all_year_months = list(set([f"{d.year}{d.month:02d}" for d in all_dates]))
-    
-    if n_samples == 'all':
-        
-        n_samples = 24*len(all_dates)
+
     
     for ym in all_year_months:
         ym_range = [ym]
+        
+
+        if n_samples == 'all':
+            ym_date_range = date_range_from_year_month_range(ym_range)
+            ym_dates = get_obs_dates(ym_date_range[0], ym_date_range[-1], 
+                                obs_data_source=obs_data_source, data_paths=DATA_PATHS)
+            n_samples = 24*len(ym_dates)
     
         data_gen = setup_full_image_dataset(ym_range,
                                 fcst_data_source=fcst_data_source,
@@ -342,13 +346,20 @@ if __name__=='__main__':
                     raise FileNotFoundError
             
             inputs, outputs = data_gen[data_idx]
-        
-            cond = inputs['lo_res_inputs']
-            fcst = cond[0, :, :, tpidx]
-            const = inputs['hi_res_inputs']
-            obs = outputs['output'][0, :, :]
-            date = inputs['dates']
-            hour = inputs['hours']
+
+            try:
+                cond = inputs['lo_res_inputs']
+                fcst = cond[0, :, :, tpidx]
+                const = inputs['hi_res_inputs']
+                obs = outputs['output'][0, :, :]
+                date = inputs['dates']
+                hour = inputs['hours']
+            except IndexError:
+                print(inputs['dates'])
+                print(data_idx)
+                print(len(dates))
+                
+                raise IndexError
             
             obs_vals.append(obs)
             fcst_vals.append(fcst)

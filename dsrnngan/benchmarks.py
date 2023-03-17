@@ -24,7 +24,7 @@ def get_quantile_areas(dates, month_ranges, latitude_range, longitude_range, hou
 
         dates = list(dates.copy())
     
-    if hours:
+    if hours is not None:
         date_hour_list = list(zip(dates,hours))
     else:
         date_hour_list = list(zip(dates,[0]*len(dates)))
@@ -89,7 +89,7 @@ def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quan
     
     fcst = fcst.copy()
 
-    if hours:
+    if hours is not None:
         date_hour_list = list(zip(dates,hours))
     else:
         date_hour_list = list(zip(dates,[0]*len(dates)))
@@ -108,38 +108,43 @@ def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quan
                 
                 area_name = [k for k, v in quantile_areas.items() if lat_index in range(v['lat_index_range'][0], v['lat_index_range'][1]+1) and lon_index in range(v['lon_index_range'][0], v['lon_index_range'][1]+1)]
                 area_name = [a for a in area_name if a.startswith(f't{date_index_name}')]
-                               
-                if len(area_name) > 1:
-                    raise ValueError('Too many quadrants, something is wrong')
-                else:
-                    area_name = area_name[0]
+                
+                # If lat and lon ranges are mismatched, then it can't find the area name
+                # For now just exclude these pixels until fixed properly
             
-                tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
-                
-                imerg_quantiles = [item[1] for item in quantiles_by_area[area_name]['obs_quantiles']]
-                ifs_quantiles = [item[1] for item in quantiles_by_area[area_name]['fcst_quantiles']]
-                
+                if area_name:
+                                
+                    if len(area_name) > 1:
+                        raise ValueError('Too many quadrants, something is wrong')
+                    else:
+                        area_name = area_name[0]
+                        
+                    tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
+                    
+                    imerg_quantiles = [item[1] for item in quantiles_by_area[area_name]['obs_quantiles']]
+                    ifs_quantiles = [item[1] for item in quantiles_by_area[area_name]['fcst_quantiles']]
+                    
 
-                quantile_locs = [item[0] for item in quantiles_by_area[area_name]['obs_quantiles']]
-                assert set(quantile_locs) == set([item[0] for item in quantiles_by_area[area_name]['fcst_quantiles']])
+                    quantile_locs = [item[0] for item in quantiles_by_area[area_name]['obs_quantiles']]
+                    assert set(quantile_locs) == set([item[0] for item in quantiles_by_area[area_name]['fcst_quantiles']])
 
-                fcst_corrected[d_ix,lat_index,lon_index] = np.interp(tmp_fcst_array, ifs_quantiles, imerg_quantiles)
-                               
-                # Deal with zeros; assign random bin
-                ifs_zero_quantiles = [n for n, q in enumerate(ifs_quantiles) if q == 0.0]
-                
-                zero_inds = np.argwhere(tmp_fcst_array == 0.0)
-                fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
-                
-                # Find nearest quantile to the threshold
-                quantile_threshold_ix = np.abs(np.array(quantile_locs) - quantile_threshold).argmin()
-                ifs_quantile_threshold = ifs_quantiles[quantile_threshold_ix]
-                imerg_quantile_threshold = imerg_quantiles[quantile_threshold_ix]
-                extreme_inds = np.argwhere(tmp_fcst_array >= ifs_quantile_threshold)
+                    fcst_corrected[d_ix,lat_index,lon_index] = np.interp(tmp_fcst_array, ifs_quantiles, imerg_quantiles)
+                                
+                    # Deal with zeros; assign random bin
+                    ifs_zero_quantiles = [n for n, q in enumerate(ifs_quantiles) if q == 0.0]
+                    
+                    zero_inds = np.argwhere(tmp_fcst_array == 0.0)
+                    fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
+                    
+                    # Find nearest quantile to the threshold
+                    quantile_threshold_ix = np.abs(np.array(quantile_locs) - quantile_threshold).argmin()
+                    ifs_quantile_threshold = ifs_quantiles[quantile_threshold_ix]
+                    imerg_quantile_threshold = imerg_quantiles[quantile_threshold_ix]
+                    extreme_inds = np.argwhere(tmp_fcst_array >= ifs_quantile_threshold)
 
-                uplift = imerg_quantile_threshold - ifs_quantile_threshold
+                    uplift = imerg_quantile_threshold - ifs_quantile_threshold
 
-                fcst_corrected[extreme_inds, lat_index, lon_index ] = tmp_fcst_array[extreme_inds] + uplift
+                    fcst_corrected[extreme_inds, lat_index, lon_index ] = tmp_fcst_array[extreme_inds] + uplift
     
     return fcst_corrected
 

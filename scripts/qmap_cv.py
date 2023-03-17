@@ -13,7 +13,7 @@ sys.path.insert(1, str(HOME))
 
 
 from dsrnngan.utils import load_yaml_file
-from dsrnngan.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range
+from dsrnngan.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range, denormalise
 from dsrnngan.benchmarks import get_quantile_areas, get_quantile_mapped_forecast, get_quantiles_by_area
 from dsrnngan.scoring import mae_above_threshold
 
@@ -45,104 +45,108 @@ lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
 
 
-imerg_train_data = []
-ifs_train_data = []
-ifs_dates = []
-imerg_dates = []
+with open('/user/home/uz22147/repos/downscaling-cgan/201603_201803_2000_arrays.pkl', 'rb') as ifh:
+    training_data = pickle.load(ifh)
+    
+imerg_train_data = denormalise(training_data['obs'])
+ifs_train_data = denormalise(training_data['fcst_array'])
 
-for year in tqdm([2016, 2017]):
-    for month in range(1,13):
-
-        imerg_ds = xr.open_dataarray(f'/user/home/uz22147/repos/rainfall_data/daily_imerg_rainfall_{month}_{year}.nc')
-
-        imerg_data = imerg_ds.sel(lat=latitude_range, method='nearest').sel(lon=longitude_range, method='nearest').values
-        
-        imerg_dates += [d.astype('M8[D]').astype('O') for d in imerg_ds.time.values]
-
-        for t in range(imerg_data.shape[0]):
-            
-            snapshot = imerg_data[t, :, :]
-            
-            imerg_train_data.append(snapshot)
-        
-        try:
-            ifs_ds = xr.open_dataarray(f'/user/home/uz22147/repos/rainfall_data/daily_ifs_rainfall_{month}_{year}.nc')
-
-            ifs_data = ifs_ds.sel(lat=latitude_range, method='nearest').sel(lon=longitude_range, method='nearest').values
-
-            for t in range(ifs_data.shape[0]):
-                
-                snapshot = ifs_data[t, :, :]
-                
-                ifs_train_data.append(snapshot)
-            ifs_dates += [d.astype('M8[D]').astype('O') for d in ifs_ds.time.values]
-
-        except:
-            pass
-
-imerg_train_data = np.stack(imerg_train_data, axis = 0)
-ifs_train_data = np.stack(ifs_train_data, axis = 0)
-
-# Make dates consistent
-overlapping_dates = np.array(sorted(set(ifs_dates).intersection(imerg_dates)))
-
-imerg_overlapping_date_ix = [n for n, item in enumerate(imerg_dates) if item in overlapping_dates]
-ifs_overlapping_date_ix = [n for n, item in enumerate(ifs_dates) if item in overlapping_dates]
-
-imerg_train_data = imerg_train_data[imerg_overlapping_date_ix, :, :]
-ifs_train_data = ifs_train_data[ifs_overlapping_date_ix , :, :]
+training_dates = [item[0] for item in training_data['dates']]
+training_hours = [item[0] for item in training_data['hours']]
 
 
-n_splits = 5
-n_train_samples = ifs_train_data.shape[0]
-X = ifs_train_data.copy().reshape(n_train_samples, -1)
-y = obs_data=imerg_train_data.reshape(n_train_samples, -1)
-months = [d.month for d in overlapping_dates]
+X = ifs_train_data.copy().reshape(ifs_train_data.shape[0], -1)
+y = imerg_train_data.reshape(ifs_train_data.shape[0], -1)
+months = [d.month for d in training_dates]
 
-quantile_thresholds = [0.7, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999]
+skf = StratifiedKFold(n_splits=10, shuffle=True)
+skf.get_n_splits(X, months)
+
+# quantile_thresholds = [0.7, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999]
+quantile_threshold = 0.9999
 mae_vals = []
 mae_95_vals = []
 
-for quantile_threshold in tqdm(quantile_thresholds):
-    # Stratify by month
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
-    skf.get_n_splits(X, months)
+cv_mae_vals = []
+cv_mae_95_vals = []
 
-    cv_mae_vals = []
-    cv_mae_95_vals = []
+for i, (train_index, val_index) in enumerate(skf.split(X, months)):
     
-    for i, (train_index, test_index) in enumerate(skf.split(X, months)):
-        
-        # train
-        train_dates = overlapping_dates[train_index]
-        training_quantile_areas = get_quantile_areas(train_dates, month_ranges, latitude_range, longitude_range)
-        
-        training_quantiles_by_area = get_quantiles_by_area(training_quantile_areas, 
-                                                           fcst_data=ifs_train_data[train_index, :, :], 
-                                                           obs_data=imerg_train_data[train_index, :, :], 
-                                                           quantile_locs=quantile_locs)
+    
+    ifs_quantile_training_data = ifs_train_data[train_index, :, :]
+    imerg_quantile_training_data = imerg_train_data[train_index, :, :]
 
-        # test
-        test_dates = overlapping_dates[test_index]
-        test_quantile_areas = get_quantile_areas(test_dates, month_ranges, latitude_range, longitude_range)
+    ifs_quantile_val_data = ifs_train_data[val_index, :, :]
+    imerg_quantile_val_data = imerg_train_data[val_index, :, :]
 
-        test_qmapped_fcst = get_quantile_mapped_forecast(fcst=ifs_train_data[test_index, :, :], 
-                                                         dates=test_dates, 
-                                                         month_ranges=month_ranges, 
-                                                         quantile_areas=test_quantile_areas, 
-                                                         quantiles_by_area=training_quantiles_by_area, 
-                                                         hours=None,
-                                                         quantile_threshold=quantile_threshold)
-        
-        test_obs = imerg_train_data[test_index, :, :]
-        
-        cv_mae_vals.append(np.abs(test_obs.flatten() - test_qmapped_fcst.flatten()).mean())
-        
-        cv_mae_95_vals.append(mae_above_threshold(test_obs.flatten(), test_qmapped_fcst.flatten(), 
-                                                  percentile_threshold=0.95))
+    quantile_training_dates = np.array(training_dates)[train_index]
+    quantile_val_dates = np.array(training_dates)[val_index]
+    quantile_training_hours = np.array(training_hours)[train_index]
+    quantile_val_hours = np.array(training_hours)[val_index]
     
-    mae_vals.append((quantile_threshold, np.mean(cv_mae_vals)))
-    mae_95_vals.append((quantile_threshold, np.mean(cv_mae_95_vals)))
+    # quantile mapping by month, pixel-by-pixel
+
+    date_hour_list = list(zip(quantile_training_dates, quantile_training_hours))
+    date_hour_list_val = list(zip(quantile_val_dates, quantile_val_hours))
+
+    date_chunks =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in date_hour_list if item[0].month in month_range] for month_range in month_ranges}
+    date_indexes =  {k : [date_hour_list.index(item) for item in chunk] for k, chunk in date_chunks.items()}
+
+    date_chunks_val =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in date_hour_list_val if item[0].month in month_range] for month_range in month_ranges}
+    date_indexes_val =  {k : [date_hour_list_val.index(item) for item in chunk] for k, chunk in date_chunks_val.items()}
+
+    quantiles_by_month_range = {}
+
+    fcst_corrected_single_pixel = np.empty(ifs_quantile_val_data.shape)
+    fcst_corrected_single_pixel[:,:,:] = np.nan
+
+    for t_name, d in tqdm(date_indexes.items(), total=len(month_ranges)):
+        fcst = ifs_quantile_training_data[d, :, :]
+        obs = imerg_quantile_training_data[d, :, :]
+        
+        quantiles_by_month_range[t_name] = {'fcst': np.quantile(fcst, quantile_locs, axis=0), 'obs': np.quantile(obs,  quantile_locs, axis=0)}
+        
+        # Correct the forecast in the validation set using these quantiles
+        d_val = date_indexes_val[t_name]
+        fcst_val = ifs_quantile_val_data[d_val, :, :]
+        obs_val = imerg_quantile_val_data[d_val, :, :]
+        
+        (n_val_samples, x_vals, y_vals) = fcst_val.shape
+        
+        for x in range(x_vals):
+            for y in range(y_vals):
+                fcst_corrected_single_pixel[d_val, x, y] = np.interp(fcst_val[:, x, y], 
+                                                                    quantiles_by_month_range[t_name]['fcst'][:, x, y], 
+                                                                    quantiles_by_month_range[t_name]['obs'][:, x, y])
     
-    with open(output_fp, 'wb+') as ofh:
-        pickle.dump({'mae': mae_vals, 'mae_95': mae_95_vals}, ofh)
+    # quantile mapping by dividing into chunks
+    quantiles_by_area_dict = {}
+    corrected_fcst_dict = {'single_pixel': fcst_corrected_single_pixel}
+    for n_chunks in tqdm(range(1,13)):
+        quantile_areas = get_quantile_areas(dates=list(quantile_training_dates), month_ranges=month_ranges, latitude_range=latitude_range, 
+                                            longitude_range=longitude_range, num_lat_lon_chunks=n_chunks, hours=quantile_training_hours)
+        quantiles_by_area_dict[n_chunks] = get_quantiles_by_area(quantile_areas, fcst_data=ifs_quantile_training_data, obs_data=imerg_quantile_training_data, 
+                                                quantile_locs=quantile_locs)
+        
+        corrected_fcst_dict[n_chunks] = get_quantile_mapped_forecast(fcst=ifs_quantile_val_data, dates=quantile_val_dates, 
+                                                hours=quantile_val_hours, month_ranges=month_ranges, 
+                                                quantile_areas=quantile_areas, 
+                                                quantiles_by_area=quantiles_by_area_dict[n_chunks])
+
+
+        with open(f'/user/home/uz22147/repos/downscaling-cgan/notebooks/tmp/corrected_fcst_dict_{i}.pkl', 'wb+') as ofh:
+            pickle.dump(corrected_fcst_dict, ofh)
+
+        with open(f'/user/home/uz22147/repos/downscaling-cgan/notebooks/tmp/quantiles_by_area_dict_{i}.pkl', 'wb+') as ofh:
+            pickle.dump(quantiles_by_area_dict, ofh)
+        
+#     cv_mae_vals.append(np.abs(test_obs.flatten() - test_qmapped_fcst.flatten()).mean())
+    
+#     cv_mae_95_vals.append(mae_above_threshold(test_obs.flatten(), test_qmapped_fcst.flatten(), 
+#                                                 percentile_threshold=0.95))
+
+# mae_vals.append((quantile_threshold, np.mean(cv_mae_vals)))
+# mae_95_vals.append((quantile_threshold, np.mean(cv_mae_95_vals)))
+
+# with open(output_fp, 'wb+') as ofh:
+#     pickle.dump({'mae': mae_vals, 'mae_95': mae_95_vals}, ofh)
