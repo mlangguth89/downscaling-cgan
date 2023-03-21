@@ -294,7 +294,7 @@ if __name__=='__main__':
     date_range = date_range_from_year_month_range(full_ym_range)
     all_dates = get_obs_dates(date_range[0], date_range[-1], 
                         obs_data_source=obs_data_source, data_paths=DATA_PATHS)
-    all_year_months = list(set([f"{d.year}{d.month:02d}" for d in all_dates]))
+    all_year_months = sorted(set([f"{d.year}{d.month:02d}" for d in all_dates]))
 
     
     for ym in all_year_months:
@@ -359,7 +359,7 @@ if __name__=='__main__':
                 print(data_idx)
                 print(len(dates))
                 
-                raise IndexError
+                break
             
             obs_vals.append(obs)
             fcst_vals.append(fcst)
@@ -374,5 +374,5 @@ if __name__=='__main__':
         arrays = {'obs': obs_array, 'fcst_array': fcst_array, 
                 'dates': dates, 'hours': hours}
         
-        with open(f"training_data_{'_'.join(ym)}_{n_samples}.pkl", 'wb+') as ofh:
+        with open(f"training_data_{'_'.join(ym_range)}_{n_samples}.pkl", 'wb+') as ofh:
             pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)

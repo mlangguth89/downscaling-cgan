@@ -2,7 +2,7 @@ import logging
 import numpy as np
 from tqdm import tqdm
 from itertools import chain
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, HuberRegressor
 
 
 logger = logging.getLogger(__name__)
@@ -121,9 +121,9 @@ def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quan
                         
                     tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
                     
+                    
                     imerg_quantiles = [item[1] for item in quantiles_by_area[area_name]['obs_quantiles']]
                     ifs_quantiles = [item[1] for item in quantiles_by_area[area_name]['fcst_quantiles']]
-                    
 
                     quantile_locs = [item[0] for item in quantiles_by_area[area_name]['obs_quantiles']]
                     assert set(quantile_locs) == set([item[0] for item in quantiles_by_area[area_name]['fcst_quantiles']])
@@ -154,16 +154,16 @@ def get_exponential_tail_params(data, percentile_threshold=0.9999):
     threshold_val = np.quantile(data, percentile_threshold)
     
     vals_over_threshold = data[np.where(data >= threshold_val)]
-    vals, bins = np.histogram(vals_over_threshold - threshold_val, bins=100)
+    vals, bins = np.histogram(vals_over_threshold - threshold_val, bins=100, density=False)
     
     bin_centres = np.array([0.5*(bins[n] + bins[n+1]) for n in range(len(bins)-1)]).reshape(-1, 1)
 
     # find first element that is 1; cut off fitting at this point
-    first1 = np.where(vals == 1)[0][0]
+    first1 = np.where(vals <= 1)[0][0]
 
     vals = vals[:first1]
     bin_centres = bin_centres[:first1]
 
-    reg = LinearRegression().fit(bin_centres, np.log(vals))
+    reg = HuberRegressor().fit(bin_centres, np.log(vals))
     
     return reg.coef_, reg.intercept_, (bin_centres, vals)                
