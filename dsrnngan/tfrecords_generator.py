@@ -14,7 +14,7 @@ import pandas as pd
 import git
 
 from dsrnngan import read_config
-from dsrnngan.data import file_exists
+from dsrnngan.data import file_exists, denormalise
 from dsrnngan.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 
 logger = logging.getLogger(__file__)
@@ -335,6 +335,10 @@ def write_data(year_month_range,
         records_folder = data_paths["TFRecords"]["tfrecords_path"]
         
         config = read_config.read_config()
+        
+        class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
+        if class_bin_boundaries:
+            num_class = len(class_bin_boundaries) + 1
 
         if not os.path.isdir(records_folder):
             os.mkdir(records_folder)
@@ -421,9 +425,18 @@ def write_data(year_month_range,
                         example = tf.train.Example(features=features)
                         example_to_string = example.SerializeToString()
                         
-                        # Removing this for the moment while we figure out appropriate threshold
-                        clss = random.choice(range(num_class))
-                        # clss = min(int(np.floor(((observations > 0.1).mean()*num_class))), num_class-1)  # all class binning is here!
+                        # If provided, bin data according to bin boundaries (typically quartiles)
+                        if class_bin_boundaries:
+                                                    
+                            threshold = 0.1
+                            rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                            boundary_comparison = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries]
+                            if any(boundary_comparison):
+                                clss = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries].index(True)
+                            else:
+                                clss = len(class_bin_boundaries) + 1
+                        else:
+                            clss = random.choice(range(num_class))
 
                         fle_hdles[clss].write(example_to_string)
                         

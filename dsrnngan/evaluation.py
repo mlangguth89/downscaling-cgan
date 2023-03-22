@@ -507,10 +507,6 @@ def evaluate_multiple_checkpoints(*,
         if save_generated_samples:
             with open(os.path.join(output_folder, f"arrays-{model_number}.pkl"), 'wb+') as ofh:
                 pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
-
-        # if model_number in ranks_to_save:
-        fname = f"ranks-{model_number}.npz"
-        np.savez_compressed(os.path.join(output_folder, fname), ranks=ranks, lowres=lowress, hires=hiress)
         
 
 def calculate_ralsd_rmse(truth, samples):
@@ -555,20 +551,24 @@ def calculate_ralsd_rmse(truth, samples):
     return np.array(ralsd_all)
 
 
-def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, dates, hours, longitude_range, latitude_range):
+def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, persisted_fcst_array, dates, hours, longitude_range, latitude_range):
     
     hourly_data_obs = {}
     hourly_data_sample = {}
     hourly_data_fcst = {}
+    hourly_data_fcst_persisted = {}
+    hourly_counts = {}
 
     from_zone = tz.gettz('UTC')
-    
+
     (n_samples, _, _) = truth_array.shape
 
     for n in tqdm(range(n_samples)):
         obs = truth_array[n,:,:].copy()
         sample = samples_gen_array[n,:,:,0].copy()
         fcst = fcst_array[n, :, :].copy()
+        persisted_fcst = persisted_fcst_array[n, :, :].copy()
+        
         h = hours[n]
         d = dates[n]
         
@@ -583,17 +583,16 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, dates, hours, 
             local_hour = utc_datetime.astimezone(to_zone).hour
             
             if local_hour not in hourly_data_obs:
-                hourly_data_obs[local_hour] = [obs ]
-                hourly_data_sample[local_hour] = [sample]
-                hourly_data_fcst[local_hour] = [fcst]
+                hourly_data_obs[local_hour] = obs.mean()
+                hourly_data_sample[local_hour] = sample.mean()
+                hourly_data_fcst[local_hour] = fcst.mean()
+                hourly_data_fcst_persisted[local_hour] = persisted_fcst.mean()
+                hourly_counts[local_hour] = 1
             else:
-                hourly_data_obs[local_hour] += [obs]
-                hourly_data_sample[local_hour] += [sample]
-                hourly_data_fcst[local_hour] += [fcst]
-    
-    for hr in tqdm(hourly_data_fcst.keys()):
-        hourly_data_obs[hr] = np.stack(hourly_data_obs[hr], axis=0)
-        hourly_data_sample[hr] = np.stack(hourly_data_sample[hr], axis=0)
-        hourly_data_fcst[hr] = np.stack(hourly_data_fcst[hr], axis=0)
-    
-    return hourly_data_obs, hourly_data_sample, hourly_data_fcst
+                hourly_data_obs[local_hour] += obs.mean()
+                hourly_data_sample[local_hour] += sample.mean()
+                hourly_data_fcst[local_hour] += fcst.mean()
+                hourly_data_fcst_persisted[local_hour] += persisted_fcst.mean()
+                hourly_counts[local_hour] += 1
+        
+    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_data_fcst_persisted, hourly_counts
