@@ -12,7 +12,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
-
+from metpy import plots as metpy_plots
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from properscoring import crps_ensemble
 
