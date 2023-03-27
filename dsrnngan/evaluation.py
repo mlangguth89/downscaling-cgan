@@ -551,12 +551,12 @@ def calculate_ralsd_rmse(truth, samples):
     return np.array(ralsd_all)
 
 
-def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, persisted_fcst_array, dates, hours, longitude_range, latitude_range):
+def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, 
+                      dates, hours, longitude_range, latitude_range):
     
     hourly_data_obs = {}
     hourly_data_sample = {}
     hourly_data_fcst = {}
-    hourly_data_fcst_persisted = {}
     hourly_counts = {}
 
     from_zone = tz.gettz('UTC')
@@ -567,7 +567,6 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, persisted_fcst
         obs = truth_array[n,:,:].copy()
         sample = samples_gen_array[n,:,:,0].copy()
         fcst = fcst_array[n, :, :].copy()
-        persisted_fcst = persisted_fcst_array[n, :, :].copy()
         
         h = hours[n]
         d = dates[n]
@@ -586,13 +585,11 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, persisted_fcst
                 hourly_data_obs[local_hour] = obs.mean()
                 hourly_data_sample[local_hour] = sample.mean()
                 hourly_data_fcst[local_hour] = fcst.mean()
-                hourly_data_fcst_persisted[local_hour] = persisted_fcst.mean()
                 hourly_counts[local_hour] = 1
             else:
                 hourly_data_obs[local_hour] += obs.mean()
                 hourly_data_sample[local_hour] += sample.mean()
                 hourly_data_fcst[local_hour] += fcst.mean()
-                hourly_data_fcst_persisted[local_hour] += persisted_fcst.mean()
                 hourly_counts[local_hour] += 1
         
-    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_data_fcst_persisted, hourly_counts
+    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts

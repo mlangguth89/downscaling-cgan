@@ -75,14 +75,11 @@ class TestTfrecordsGenerator(unittest.TestCase):
                     forecast_data_source='ifs', 
                     observational_data_source='imerg',
                     hours=[18],
-                    img_chunk_width=200,
-                    img_size=200,
                     num_class=4,
-                    log_precip=True,
-                    fcst_norm=True,
-                    scaling_factor=1,
+                    normalise=True,
                     data_paths=data_paths,
                     debug=True,
+                    constants=True,
                     latitude_range=DEFAULT_LATITUDE_RANGE,
                     longitude_range=DEFAULT_LONGITUDE_RANGE)
             

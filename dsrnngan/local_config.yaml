@@ -18,6 +18,7 @@ DATA:
     input_channels: 20 # e.g. Number of variables from forecast data
     constant_fields: 2
     input_image_width: 200 # Assumes a square image
+    num_samples: 320000
     normalise: True
     num_classes: 4 # Number of bins to split data into
     min_latitude: -11.95
@@ -53,6 +54,7 @@ TRAIN:
     ensemble_size: 8  # size of pred ensemble for content loss
     CL_type: "ensmeanMSE" # type of content loss to use: 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'
     content_loss_weight: 1000.0
+    img_chunk_width: 200
 
 VAL:
     val_range: ['201806', '201905'] # cannot pass a list if using create_fixed_dataset

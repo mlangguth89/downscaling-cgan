@@ -339,6 +339,10 @@ def write_data(year_month_range,
         class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
         if class_bin_boundaries:
             num_class = len(class_bin_boundaries) + 1
+        num_samples = config['DATA']['num_samples']
+        input_image_width = config['DATA']['input_image_width']
+        num_samples_per_image = int(np.ceil(num_samples/len(dates)))
+        num_samples_per_dim = int(np.ceil(np.sqrt(num_samples_per_image)))
 
         if not os.path.isdir(records_folder):
             os.mkdir(records_folder)
@@ -396,50 +400,65 @@ def write_data(year_month_range,
                 try:
                     
                     sample = dgc.__getitem__(batch)
+                    (depth, width, height) = sample[1]['output'].shape
+                    spacing_w = int(np.floor(width/num_samples_per_dim))
+                    spacing_h = int(np.floor(height/num_samples_per_dim))
                 
-                    for k in range(sample[1]['output'].shape[0]):
-
-                        observations = sample[1]['output'][k, :, :].flatten()
-
-                        forecast = sample[0]['lo_res_inputs'][k, :, :, :].flatten()
-                        
-                        const = sample[0]['hi_res_inputs'][k, :, :, :].flatten()
+                    for k in range(depth):
+                        for ii in range(num_samples_per_image):
                             
-                        # Check no Null values
-                        if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                            raise ValueError('Unexpected NaN values in data')
-                        
-                        # Check for empty data
-                        if forecast.sum() == 0 or const.sum() == 0:
-                            raise ValueError('one or more of arrays is all zeros')
-                        
-                        # Check hi res data has same dimensions
-                            
-                        feature = {
-                            'generator_input': _float_feature(forecast),
-                            'constants': _float_feature(const),
-                            'generator_output': _float_feature(observations)
-                        }
+                            n_rows = ii // num_samples_per_dim
+                            n_cols = ii - n_rows * num_samples_per_dim
+                            idx = n_rows*spacing_w
+                            idy = n_cols*spacing_h
 
-                        features = tf.train.Features(feature=feature)
-                        example = tf.train.Example(features=features)
-                        example_to_string = example.SerializeToString()
-                        
-                        # If provided, bin data according to bin boundaries (typically quartiles)
-                        if class_bin_boundaries:
-                                                    
-                            threshold = 0.1
-                            rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
-                            boundary_comparison = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries]
-                            if any(boundary_comparison):
-                                clss = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries].index(True)
+                            observations = sample[1]['output'][k, 
+                                                               idx:(idx+input_image_width), 
+                                                               idy:(idy+input_image_width)].flatten()
+
+                            forecast = sample[0]['lo_res_inputs'][k, 
+                                                                  idx:(idx+input_image_width), 
+                                                                  idy:(idy+input_image_width), :].flatten()
+                            
+                            const = sample[0]['hi_res_inputs'][k, 
+                                                               idx:(idx+input_image_width), 
+                                                               idy:(idy+input_image_width), :].flatten()
+                                
+                            # Check no Null values
+                            if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                                raise ValueError('Unexpected NaN values in data')
+                            
+                            # Check for empty data
+                            if forecast.sum() == 0 or const.sum() == 0:
+                                raise ValueError('one or more of arrays is all zeros')
+                            
+                            # Check hi res data has same dimensions
+                                
+                            feature = {
+                                'generator_input': _float_feature(forecast),
+                                'constants': _float_feature(const),
+                                'generator_output': _float_feature(observations)
+                            }
+
+                            features = tf.train.Features(feature=feature)
+                            example = tf.train.Example(features=features)
+                            example_to_string = example.SerializeToString()
+                            
+                            # If provided, bin data according to bin boundaries (typically quartiles)
+                            if class_bin_boundaries:
+                                                        
+                                threshold = 0.1
+                                rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                                boundary_comparison = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries]
+                                if any(boundary_comparison):
+                                    clss = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries].index(True)
+                                else:
+                                    clss = len(class_bin_boundaries) 
                             else:
-                                clss = len(class_bin_boundaries) + 1
-                        else:
-                            clss = random.choice(range(num_class))
+                                clss = random.choice(range(num_class))
 
-                        fle_hdles[clss].write(example_to_string)
-                        
+                            fle_hdles[clss].write(example_to_string)
+                            
                 except FileNotFoundError as e:
                     print(f"Error loading hour={hour}, date={date}")
             
@@ -459,9 +478,10 @@ def write_train_test_data(*args, training_range,
                data_label='train', **kwargs)
     
     if validation_range:
-        print('\n*** Writing validation data')
-        write_data(validation_range, *args,
-               data_label='validation', **kwargs)
+        pass # Not using this at the moment
+        # print('\n*** Writing validation data')
+        # write_data(validation_range, *args,
+        #        data_label='validation', **kwargs)
         
     if test_range:
         print('\n*** Writing test data')

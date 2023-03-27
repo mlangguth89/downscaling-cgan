@@ -62,11 +62,14 @@ parser.add_argument('--no-shuffle-eval', action='store_true',
                     help='Boolean, will turn off shuffling at evaluation.')
 parser.add_argument('--save-generated-samples', action='store_true',
                     help='Flag to trigger saving of the evaluation arrays')
+parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting of classes',
+                    type=float
+                    )
 
 def main(restart, do_training, evaluate, plot_ranks, num_images,
          noise_factor, ensemble_size, shuffle_eval=True, records_folder=None, evalnum=None, model_numbers=None, 
          seed=None, num_samples_override=None,
-         val_start=None, val_end=None, save_generated_samples=False
+         val_start=None, val_end=None, save_generated_samples=False, training_weights=None
          ):
     
     if records_folder is None:
@@ -121,7 +124,10 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     lr_disc = config["DISCRIMINATOR"]["learning_rate_disc"]
     
     training_range = config['TRAIN']['training_range']
-    training_weights = config["TRAIN"]["training_weights"]
+    
+    if training_weights is None:
+        training_weights = config["TRAIN"]["training_weights"]
+        
     num_epochs = config["TRAIN"].get("num_epochs")
     num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
     steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
@@ -131,6 +137,8 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     CL_type = config["TRAIN"]["CL_type"]
     content_loss_weight = config["TRAIN"]["content_loss_weight"]
     crop_size = config['TRAIN'].get('img_chunk_width')
+    
+    print(f'Crop size: {crop_size}')
         
     val_range = config['VAL'].get('val_range')
     if val_start:
@@ -354,6 +362,8 @@ if __name__ == "__main__":
     
     gpu_devices = tf.config.list_physical_devices('GPU')
     
+    print(gpu_devices)
+    
     if len(gpu_devices) == 0:
         logger.debug('GPU devices are not being seen')
     logger.debug(gpu_devices)
@@ -383,4 +393,5 @@ if __name__ == "__main__":
         val_end=args.val_ym_end,
         ensemble_size=args.ensemble_size,
         shuffle_eval=not args.no_shuffle_eval,
-        save_generated_samples=args.save_generated_samples)
+        save_generated_samples=args.save_generated_samples,
+        training_weights=args.training_weights)
