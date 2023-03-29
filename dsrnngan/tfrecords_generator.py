@@ -401,8 +401,8 @@ def write_data(year_month_range,
                     
                     sample = dgc.__getitem__(batch)
                     (depth, width, height) = sample[1]['output'].shape
-                    spacing_w = int(np.floor(width/num_samples_per_dim))
-                    spacing_h = int(np.floor(height/num_samples_per_dim))
+                    spacing_w = int(np.floor((width - input_image_width)/num_samples_per_dim))
+                    spacing_h = int(np.floor((height - input_image_width)/num_samples_per_dim))
                 
                     for k in range(depth):
                         for ii in range(num_samples_per_image):
@@ -423,7 +423,7 @@ def write_data(year_month_range,
                             const = sample[0]['hi_res_inputs'][k, 
                                                                idx:(idx+input_image_width), 
                                                                idy:(idy+input_image_width), :].flatten()
-                                
+       
                             # Check no Null values
                             if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
                                 raise ValueError('Unexpected NaN values in data')
