@@ -339,9 +339,9 @@ def write_data(year_month_range,
         class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
         if class_bin_boundaries:
             num_class = len(class_bin_boundaries) + 1
-        num_samples = config['DATA']['num_samples']
+
         input_image_width = config['DATA']['input_image_width']
-        num_samples_per_image = int(np.ceil(num_samples/len(dates)))
+        num_samples_per_image = config['DATA']['num_samples_per_image']
         num_samples_per_dim = int(np.ceil(np.sqrt(num_samples_per_image)))
 
         if not os.path.isdir(records_folder):

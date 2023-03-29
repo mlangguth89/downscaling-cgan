@@ -38,15 +38,18 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': True,
-               'rank_hist': True,
-               'rapsd': True,
-               'quantiles': True,
-               'hist': True,
-               'crps': True,
+metric_dict = {'examples': False,
+               'rank_hist': False,
+               'rapsd': False,
+               'quantiles': False,
+               'hist': False,
+               'crps': False,
                'fss': True,
-               'diurnal': True
+               'diurnal': False,
+               'confusion_matrix': False
                }
+
+plot_persistence = False
 
 ################################################################################
 ## Setup
@@ -171,7 +174,10 @@ imerg_train_data = np.concatenate(imerg_train_data, axis=0)
 ifs_train_data = np.concatenate(ifs_train_data, axis=0)
 
 # identify best threshold and train on all the data
-quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude_range, longitude_range, hours=training_hours, num_lat_lon_chunks=2)
+quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude_range, 
+                                    longitude_range, 
+                                    hours=training_hours,
+                                    num_lat_lon_chunks=1)
 quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=ifs_train_data, obs_data=imerg_train_data, 
                                           quantile_locs=quantile_locs)
 
@@ -211,6 +217,9 @@ hourly_historical_std = daily_historical_std / 24
 #################################################################################################
 ## Plot examples
 #################################################################################################
+
+print('*********** Plotting Examples **********************')
+
 
 if metric_dict['examples']:
     tp_index = data.all_ifs_fields.index('tp')
@@ -286,6 +295,9 @@ if metric_dict['examples']:
 ###  Rank histogram
 ##################################################################################
 
+print('*********** Plotting Rank histogram **********************')
+
+
 if metric_dict['rank_hist']:
     rng = np.random.default_rng()
     noise_factor = 1e-6
@@ -309,10 +321,13 @@ if metric_dict['rank_hist']:
 
     ax.set_ylim([0, max(h)+0.01])
     ax.set_title('Rank histogram ')
-    plt.savefig(f'plots/rank_hist_{model_number}.png')
+    plt.savefig(f'plots/rank_hist_{model_number}.pdf', format='pdf')
 
 #################################################################################
 ## RAPSD
+
+print('*********** Plotting RAPSD **********************')
+
 
 if metric_dict['rapsd']:
 
@@ -350,7 +365,9 @@ if metric_dict['rapsd']:
     ax.plot(rapsd_fcst, 'r', label='IFS')
     ax.plot(rapsd_fcst_corrected, 'r--', label='IFS qmap')
     ax.plot(rapsd_pred, 'b', label='cGAN sample') # Single member of ensemble
-    ax.plot(rapsd_fcst_persisted, 'k--', label='Persisted')
+    
+    if plot_persistence:
+        ax.plot(rapsd_fcst_persisted, 'k--', label='Persisted')
     plt.xscale('log')
     plt.yscale('log')
     ax.set_ylabel('RAPSD')
@@ -361,6 +378,7 @@ if metric_dict['rapsd']:
 
 #################################################################################
 ## Q-Q plot
+print('*********** Plotting Q-Q  **********************')
 
 if metric_dict['quantiles']:
 
@@ -390,10 +408,15 @@ if metric_dict['quantiles']:
         s1 = ax.scatter(truth_quantiles, sample_quantiles, c='blue', marker='+', label='cGAN', s=size, cmap=cmap)
         s2 = ax.scatter(truth_quantiles, fcst_quantiles, c='red', marker='x', label='IFS', s=size, cmap=cmap)
         s3 = ax.scatter(truth_quantiles, fcst_corrected_quantiles, c='green', marker='.', label='IFS qmap', s=size, cmap=cmap, alpha=0.7)
-        s4 = ax.scatter(truth_quantiles, persisted_fcst_quantiles, c='black', marker='+', label='Persisted', s=size, cmap=cmap)
+        
+        if plot_persistence:
+            s4 = ax.scatter(truth_quantiles, persisted_fcst_quantiles, c='black', marker='+', label='Persisted', s=size, cmap=cmap)
         
         if not marker_handles:
-            marker_handles = [s1, s2, s3, s4]
+            if plot_persistence:
+                marker_handles = [s1, s2, s3, s4]
+            else:
+                marker_handles = [s1, s2, s3]
 
     # all_marker_handles = list(itertools.chain.from_iterable(marker_handles.values()))
     ax.legend(handles=marker_handles, loc='upper left')
@@ -451,6 +474,8 @@ if metric_dict['quantiles']:
 
 #################################################################################
 ## Histograms
+
+print('*********** Plotting Histograms **********************')
 
 if metric_dict['hist']:
     (q_99pt9, q_99pt99) = np.quantile(truth_array, [0.999, 0.9999])
@@ -560,6 +585,8 @@ if metric_dict['hist']:
 #################################################################################
 
 ## CRPS
+print('*********** Plotting CRPS **********************')
+
 
 if metric_dict['crps']:
     # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
@@ -586,8 +613,10 @@ if metric_dict['crps']:
 #################################################################################
 
 ## Fractional Skill Score
+print('*********** Plotting FSS **********************')
 
-if metric_dict['crps']:
+
+if metric_dict['fss']:
 
     window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100] + [150, 200]
     daily_thresholds = [1, 5, 20, 30, 50] # 1mm/day = drizzle, 50 mm/day = extreme
@@ -595,24 +624,28 @@ if metric_dict['crps']:
     fss_cgan = []
     fss_fcst = []
     fss_fcst_qmap = []
+    fss_persistence = []
 
     for thr in daily_thresholds:
 
         tmp_fss_cgan = []
         tmp_fss_fcst = []
         tmp_fss_fcst_qmap = []
+        tmp_fss_persistence = []
 
         for w in tqdm(window_sizes):
             
             tmp_fss_cgan.append(fss(truth_array, samples_gen_array, w, thr/24.0, mode='constant'))
             tmp_fss_fcst.append(fss(truth_array, fcst_array, w, thr/24.0, mode='constant'))
             tmp_fss_fcst_qmap.append(fss(truth_array, fcst_corrected, w, thr/24.0, mode='constant'))
+            # tmp_fss_persistence.append(fss(truth_array, persisted_fcst_array, w, thr/24.0, mode='constant'))
         
         fss_cgan.append(tmp_fss_cgan)
         fss_fcst.append(tmp_fss_fcst)
         fss_fcst_qmap.append(tmp_fss_fcst_qmap)
+        # fss_persistence.append(tmp_fss_persistence)
 
-    fig, axs = plt.subplots(3, 1, figsize = (16, 16))
+    fig, axs = plt.subplots(3, 1, figsize = (18, 18))
     fig.tight_layout(pad=4.0)
     linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (0, (1,10))]
 
@@ -621,10 +654,13 @@ if metric_dict['crps']:
         axs[0].plot(window_sizes, [item for item in fss_cgan[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
         axs[1].plot(window_sizes, [item for item in fss_fcst[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
         axs[2].plot(window_sizes, [item for item in fss_fcst_qmap[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
+        # axs[3].plot(window_sizes, [item for item in fss_persistence[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
 
         axs[0].set_title('cGAN sample')
         axs[1].set_title('IFS')
         axs[2].set_title('IFS qmap')
+        # axs[3].set_title('Persistence')
+
 
     for ax in axs:    
         ax.hlines(0.5, 0, max(window_sizes), linestyles='dashed', colors=['r'])
@@ -637,19 +673,18 @@ if metric_dict['crps']:
 
 #################################################################################
 
+print('*********** Plotting Diurnal cycle **********************')
+
+
 if metric_dict['diurnal']:
-    ## Diurnal cycle
-    hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_data_fcst_persisted, hourly_counts = get_diurnal_cycle(truth_array, 
-                                                                                                                        samples_gen_array, 
-                                                                                                                        fcst_array, 
-                                                                                                                        persisted_fcst_array, 
-                                                                                                                        dates, hours, longitude_range, latitude_range)
+    ## Diurnal cycletruth_array, samples_gen_array, fcst_array, persisted_fcst_array, dates, hours, longitude_range, latitude_range
+    hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts = get_diurnal_cycle(truth_array, samples_gen_array,
+                                                                                             fcst_array, dates, hours, longitude_range, latitude_range)
 
     fig, ax = plt.subplots(1,1, figsize=(10,10))
     diurnal_data_dict = {'IMERG': hourly_data_obs,
                         'cGAN sample': hourly_data_sample,
-                        'IFS': hourly_data_fcst,
-                        'Persisted': hourly_data_fcst_persisted}
+                        'IFS': hourly_data_fcst}
 
     for name, data in diurnal_data_dict.items():
         
@@ -671,10 +706,10 @@ if metric_dict['diurnal']:
     hourly_season_data_obs, hourly_season_data_sample, hourly_season_data_fcst, hourly_season_data_fcst_persisted, hourly_season_counts = {}, {}, {}, {}, {}
 
     for n, (season, month_range) in enumerate(seasons_dict.items()):
-        hourly_season_data_obs[season], hourly_season_data_sample[season], hourly_season_data_fcst[season], hourly_season_data_fcst_persisted[season], hourly_season_counts[season] = get_diurnal_cycle( truth_array, 
+        hourly_season_data_obs[season], hourly_season_data_sample[season], hourly_season_data_fcst[season], hourly_season_counts[season] = get_diurnal_cycle( truth_array, 
                                                                                                 samples_gen_array, 
                                                                                                 fcst_array, dates, hours, 
-                                                                                                longitude_range=lon_range, latitude_range=lat_range)
+                                                                                                longitude_range=longitude_range, latitude_range=latitude_range)
 
     # Plot diurnal cycle for the different areas
 
@@ -682,8 +717,7 @@ if metric_dict['diurnal']:
     fig.tight_layout(pad=3)
     diurnal_data_dict = {'IMERG': hourly_season_data_obs,
                         'cGAN sample': hourly_season_data_sample,
-                        'IFS': hourly_season_data_fcst,
-                        'Persisted': hourly_season_data_fcst_persisted}
+                        'IFS': hourly_season_data_fcst}
 
     for n, season in enumerate(seasons_dict):
         for name, data in diurnal_data_dict.items():
@@ -699,3 +733,27 @@ if metric_dict['diurnal']:
     plt.savefig(f'plots/diurnal_cycle_seasonal_{model_type}_{model_number}.pdf')
 
 #################################################################################
+
+if metric_dict.get('confusion_matrix'):
+    
+    # Confusion matrix
+    from sklearn.metrics import confusion_matrix
+    
+    daily_thresholds = [1, 5, 20, 30, 50]
+    hourly_thresholds = [item/24.0 for item in daily_thresholds]
+
+    for threshold in hourly_thresholds:
+        y_true = (truth_array > threshold).astype(np.int0).flatten()
+
+        y_dict = {
+                'ifs': (fcst_array > threshold).astype(np.int0).flatten(),
+                'cgan' : (samples_gen_array[:,:,:,0]> threshold).astype(np.int0).flatten(),
+                'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten(),
+                'persistence': (persisted_fcst_array > threshold).astype(np.int0).flatten()}
+
+        confusion_matrices = {}
+        for k, v in tqdm(y_dict.items()):
+            confusion_matrices[k] = confusion_matrix(y_true, v)
+            
+        with open(f'plots/confusion_matrices_thr{int(threshold*24)}.pkl', 'wb+') as ofh:
+            pickle.dump(confusion_matrices, ofh)

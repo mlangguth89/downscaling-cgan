@@ -132,9 +132,9 @@ def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quan
                                 
                     # Deal with zeros; assign random bin
                     ifs_zero_quantiles = [n for n, q in enumerate(ifs_quantiles) if q == 0.0]
-                    
-                    zero_inds = np.argwhere(tmp_fcst_array == 0.0)
-                    fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
+                    if ifs_zero_quantiles:
+                        zero_inds = np.argwhere(tmp_fcst_array == 0.0)
+                        fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
                     
                     # Find nearest quantile to the threshold
                     quantile_threshold_ix = np.abs(np.array(quantile_locs) - quantile_threshold).argmin()

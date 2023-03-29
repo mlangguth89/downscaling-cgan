@@ -240,16 +240,22 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             seed=seed)
 
         if restart: # load weights and run status
+            try:
+                model.load(model.filenames_from_root(model_weights_root))
+                with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
+                    run_status = json.load(f)
+                training_samples = run_status["training_samples"]
+                checkpoint = int(training_samples / (steps_per_checkpoint * batch_size)) + 1
 
-            model.load(model.filenames_from_root(model_weights_root))
-            with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
-                run_status = json.load(f)
-            training_samples = run_status["training_samples"]
-            checkpoint = int(training_samples / (steps_per_checkpoint * batch_size)) + 1
+                log_file = "{}/log.txt".format(log_folder)
+                log = pd.read_csv(log_file)
+                log_list = [log]
+            except FileNotFoundError:
+                # Catch case where folder exists but no model saved yet
+                training_samples = 0
 
-            log_file = "{}/log.txt".format(log_folder)
-            log = pd.read_csv(log_file)
-            log_list = [log]
+                log_file = os.path.join(log_folder, "log.txt")
+                log_list = []
 
         else:  # initialize run status
             training_samples = 0
