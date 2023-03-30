@@ -67,6 +67,29 @@ def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude
     
     return im
 
+
+def plot_fss_scores(fss_results, output_folder, output_suffix):
+    fig, axs = plt.subplots(len(fss_results['thresholds']), 1, figsize = (10, 20))
+    fig.tight_layout(pad=4.0)
+    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (0, (1,10))]
+
+    for n, thr in enumerate(fss_results['thresholds']):
+        
+        for m, (name, scores) in enumerate(fss_results['scores'].items()):
+            axs[n].plot(fss_results['window_sizes'], scores[n], label=name, color='k', linestyle=linestyles[m])
+            
+
+        axs[n].set_title(f'Threshold = {thr:0.1f} mm/hr')
+
+    for ax in axs:    
+        ax.hlines(0.5, 0, max(fss_results['window_sizes']), linestyles='dashed', colors=['r'])
+        ax.set_ylim(0,1)
+        ax.set_xlabel('Neighbourhood size')
+        ax.set_ylabel('FSS')
+        ax.set_xlim(0, max(fss_results['window_sizes']))
+        ax.legend()
+        
+    plt.savefig(os.path.join(output_folder, f'fractional_skill_score_{output_suffix}.pdf'), format='pdf')
     
 # def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
 #                        lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,

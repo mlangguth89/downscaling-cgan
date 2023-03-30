@@ -423,6 +423,11 @@ def write_data(year_month_range,
                             const = sample[0]['hi_res_inputs'][k, 
                                                                idx:(idx+input_image_width), 
                                                                idy:(idy+input_image_width), :].flatten()
+                            
+                            if sample[0]['hi_res_inputs'][k, 
+                                                               idx:(idx+input_image_width), 
+                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, config['DATA']['constant_fields']):
+                                raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
        
                             # Check no Null values
                             if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():

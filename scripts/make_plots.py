@@ -44,9 +44,9 @@ metric_dict = {'examples': False,
                'quantiles': False,
                'hist': False,
                'crps': False,
-               'fss': True,
+               'fss': False,
                'diurnal': False,
-               'confusion_matrix': False
+               'confusion_matrix': True
                }
 
 plot_persistence = False
@@ -618,58 +618,46 @@ print('*********** Plotting FSS **********************')
 
 if metric_dict['fss']:
 
-    window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100] + [150, 200]
-    daily_thresholds = [1, 5, 20, 30, 50] # 1mm/day = drizzle, 50 mm/day = extreme
+    from dsrnngan.evaluation import get_fss_scores
+    from dsrnngan.plots import plot_fss_scores
 
-    fss_cgan = []
-    fss_fcst = []
-    fss_fcst_qmap = []
-    fss_persistence = []
+    window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
+    n_samples = truth_array.shape[0]
+    fss_data_dict = {
+                        'cgan': samples_gen_array[:n_samples, :, :, 0],
+                        'ifs': fcst_array[:n_samples, :, :],
+                        'fcst_qmap': fcst_corrected[:n_samples, :, :]}
 
-    for thr in daily_thresholds:
+    # get quantiles
+    quantile_locs = [0.5, 0.985, 0.999, 0.9999]
+    fss_results = get_fss_scores(truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
 
-        tmp_fss_cgan = []
-        tmp_fss_fcst = []
-        tmp_fss_fcst_qmap = []
-        tmp_fss_persistence = []
-
-        for w in tqdm(window_sizes):
+    # Save results
+    with open(f'plots/fss_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(fss_results, ofh)
             
-            tmp_fss_cgan.append(fss(truth_array, samples_gen_array, w, thr/24.0, mode='constant'))
-            tmp_fss_fcst.append(fss(truth_array, fcst_array, w, thr/24.0, mode='constant'))
-            tmp_fss_fcst_qmap.append(fss(truth_array, fcst_corrected, w, thr/24.0, mode='constant'))
-            # tmp_fss_persistence.append(fss(truth_array, persisted_fcst_array, w, thr/24.0, mode='constant'))
+    plot_fss_scores(fss_results=fss_results, output_folder='plots', output_suffix=f'{model_type}_{model_number}')
+    
+    
+    # FSS for regions
+    fss_area_results = {}
+    for n, (area, area_range) in enumerate(special_areas.items()):
         
-        fss_cgan.append(tmp_fss_cgan)
-        fss_fcst.append(tmp_fss_fcst)
-        fss_fcst_qmap.append(tmp_fss_fcst_qmap)
-        # fss_persistence.append(tmp_fss_persistence)
-
-    fig, axs = plt.subplots(3, 1, figsize = (18, 18))
-    fig.tight_layout(pad=4.0)
-    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (0, (1,10))]
-
-    for n, thr in enumerate(daily_thresholds):
+        lat_range_ends = area_range['lat_range']
+        lon_range_ends = area_range['lon_range']
+        lat_range_index = area_range['lat_index_range']
+        lon_range_index = area_range['lon_index_range']
+        lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
+        lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
         
-        axs[0].plot(window_sizes, [item for item in fss_cgan[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
-        axs[1].plot(window_sizes, [item for item in fss_fcst[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
-        axs[2].plot(window_sizes, [item for item in fss_fcst_qmap[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
-        # axs[3].plot(window_sizes, [item for item in fss_persistence[n]], label=f'{thr} mm/day', color='b', linestyle=linestyles[n])
-
-        axs[0].set_title('cGAN sample')
-        axs[1].set_title('IFS')
-        axs[2].set_title('IFS qmap')
-        # axs[3].set_title('Persistence')
-
-
-    for ax in axs:    
-        ax.hlines(0.5, 0, max(window_sizes), linestyles='dashed', colors=['r'])
-        ax.set_ylim(0,1)
-        ax.set_xlabel('Neighbourhood size')
-        ax.set_ylabel('FSS')
-        ax.legend()
+        area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
+        fss_data_dict = {
+                        'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
+                        'ifs': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]}  
+        fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
         
-    plt.savefig(f'plots/fractional_skill_score_{model_type}_{model_number}.pdf', format='pdf')
+        plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{model_type}_{model_number}')
 
 #################################################################################
 
@@ -698,6 +686,9 @@ if metric_dict['diurnal']:
     ax.set_xlabel('Hour')
     ax.set_ylabel('Average mm/hr')
     plt.savefig(f'plots/diurnal_cycle_{model_type}_{model_number}.pdf')
+    
+    with open(f'plots/diurnal_cycle_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(diurnal_data_dict, ofh)
     
     
     # Seasonal diurnal cycle
@@ -731,6 +722,9 @@ if metric_dict['diurnal']:
         ax[n].set_ylabel('Average mm/hr')
         ax[n].set_title(season)
     plt.savefig(f'plots/diurnal_cycle_seasonal_{model_type}_{model_number}.pdf')
+    
+    with open(f'plots/diurnal_cycle_seasonal_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(diurnal_data_dict, ofh)
 
 #################################################################################
 
@@ -739,9 +733,11 @@ if metric_dict.get('confusion_matrix'):
     # Confusion matrix
     from sklearn.metrics import confusion_matrix
     
-    daily_thresholds = [1, 5, 20, 30, 50]
-    hourly_thresholds = [item/24.0 for item in daily_thresholds]
+    quantile_locations = [0.1, 0.5, 0.75, 0.9, 0.99, 0.999, 0.9999]
+    hourly_thresholds = np.quantile(truth_array, quantile_locations)
 
+    results = {'quantile_locations': quantile_locations,
+               'conf_mat': []}
     for threshold in hourly_thresholds:
         y_true = (truth_array > threshold).astype(np.int0).flatten()
 
@@ -751,9 +747,10 @@ if metric_dict.get('confusion_matrix'):
                 'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten(),
                 'persistence': (persisted_fcst_array > threshold).astype(np.int0).flatten()}
 
-        confusion_matrices = {}
+        tmp_results_dict = {'threshold': threshold}    
         for k, v in tqdm(y_dict.items()):
-            confusion_matrices[k] = confusion_matrix(y_true, v)
-            
-        with open(f'plots/confusion_matrices_thr{int(threshold*24)}.pkl', 'wb+') as ofh:
-            pickle.dump(confusion_matrices, ofh)
+            tmp_results_dict[k] = confusion_matrix(y_true, v)
+        
+        results['conf_mat'].append(tmp_results_dict)
+        with open(f'plots/confusion_matrices.pkl', 'wb+') as ofh:
+            pickle.dump(results, ofh)

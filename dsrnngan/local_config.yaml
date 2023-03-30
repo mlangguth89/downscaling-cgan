@@ -55,7 +55,7 @@ TRAIN:
     ensemble_size: 8  # size of pred ensemble for content loss
     CL_type: "ensmeanMSE" # type of content loss to use: 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'
     content_loss_weight: 1000.0
-    img_chunk_width: 200
+    # img_chunk_width: 200
 
 VAL:
     val_range: ['201806', '201905'] # cannot pass a list if using create_fixed_dataset
