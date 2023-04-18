@@ -596,7 +596,7 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array,
 
 def get_fss_scores(truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples):
 
-    hourly_thresholds = [0.1] + list(np.quantile(truth_array, quantile_locs))
+    hourly_thresholds = list(np.quantile(truth_array, quantile_locs))
 
     fss_results = {'quantile_locations': quantile_locs, 'thresholds': hourly_thresholds, 'window_sizes': window_sizes, 'scores': {}}
 

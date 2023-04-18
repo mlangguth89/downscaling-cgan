@@ -103,7 +103,7 @@ def create_mixed_dataset(data_label: str,
         else:
             sampled_ds = sampled_ds.map(_dataset_downsampler_list)
         
-    sampled_ds = sampled_ds.prefetch(buffer_size=AUTOTUNE)
+    sampled_ds = sampled_ds.prefetch(2)
     return sampled_ds
 
 # Note, if we wanted fewer classes, we can use glob syntax to grab multiple classes as once
@@ -233,12 +233,14 @@ def create_dataset(data_label: str,
     else:
         int_seed = None
 
-    fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
+    # fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
+    
+    files_ds = tf.data.Dataset.list_files(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
     ignore_order = tf.data.Options()
     ignore_order.experimental_deterministic = False 
      
-    ds = tf.data.TFRecordDataset(fl,
+    ds = tf.data.TFRecordDataset(files_ds,
                                  num_parallel_reads=AUTOTUNE)
     
     ds = ds.with_options(
@@ -250,16 +252,17 @@ def create_dataset(data_label: str,
     ds = ds.map(lambda x: _parse_batch(x,
                                        insize=fcst_shape,
                                        consize=con_shape,
-                                       outsize=out_shape),
-                num_parallel_calls=AUTOTUNE)
+                                       outsize=out_shape))
+                # num_parallel_calls=AUTOTUNE)
    
-    if crop_size:
-        if return_dic:
-            ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed),
-                        num_parallel_calls=AUTOTUNE)
-        else:
-            ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed),
-                        num_parallel_calls=AUTOTUNE)
+    # if crop_size:
+    #     if return_dic:
+    #         ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed),
+    #                     num_parallel_calls=AUTOTUNE)
+    #     else:
+    #         ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed),
+    #                     num_parallel_calls=AUTOTUNE)
+    
     if repeat:
         return ds.repeat()
     else:
@@ -342,7 +345,6 @@ def write_data(year_month_range,
 
         input_image_width = config['DATA']['input_image_width']
         num_samples_per_image = config['DATA']['num_samples_per_image']
-        num_samples_per_dim = int(np.ceil(np.sqrt(num_samples_per_image)))
 
         if not os.path.isdir(records_folder):
             os.mkdir(records_folder)
@@ -401,16 +403,12 @@ def write_data(year_month_range,
                     
                     sample = dgc.__getitem__(batch)
                     (depth, width, height) = sample[1]['output'].shape
-                    spacing_w = int(np.floor((width - input_image_width)/num_samples_per_dim))
-                    spacing_h = int(np.floor((height - input_image_width)/num_samples_per_dim))
                 
                     for k in range(depth):
                         for ii in range(num_samples_per_image):
                             
-                            n_rows = ii // num_samples_per_dim
-                            n_cols = ii - n_rows * num_samples_per_dim
-                            idx = n_rows*spacing_w
-                            idy = n_cols*spacing_h
+                            idx = random.randint(0, width-input_image_width)
+                            idy = random.randint(0, height-input_image_width)
 
                             observations = sample[1]['output'][k, 
                                                                idx:(idx+input_image_width), 

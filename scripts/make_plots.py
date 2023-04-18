@@ -45,8 +45,8 @@ metric_dict = {'examples': False,
                'hist': False,
                'crps': False,
                'fss': False,
-               'diurnal': False,
-               'confusion_matrix': True
+               'diurnal': True,
+               'confusion_matrix': False
                }
 
 plot_persistence = False
@@ -68,7 +68,8 @@ model_type = args.model_type
 log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
                'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
                'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n2000_201806-201905_e20',
-               'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10'}
+               'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
+               'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10'}
 
 if model_type not in log_folders:
     raise ValueError('Model type not found')
@@ -143,7 +144,8 @@ range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'mark
               3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 512},
               4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 256},
               5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 64 },
-              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 20}}
+              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 20},
+              7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 20}}
                   
 percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
 percentiles=np.concatenate(percentiles_list)
@@ -321,7 +323,7 @@ if metric_dict['rank_hist']:
 
     ax.set_ylim([0, max(h)+0.01])
     ax.set_title('Rank histogram ')
-    plt.savefig(f'plots/rank_hist_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/rank_hist__{model_type}_{model_number}.pdf', format='pdf')
 
 #################################################################################
 ## RAPSD
@@ -370,8 +372,8 @@ if metric_dict['rapsd']:
         ax.plot(rapsd_fcst_persisted, 'k--', label='Persisted')
     plt.xscale('log')
     plt.yscale('log')
-    ax.set_ylabel('RAPSD')
-    ax.set_xlabel('frequency')
+    ax.set_ylabel('Power Spectral Density')
+    ax.set_xlabel('Wavenumber')
     ax.legend()
     plt.rcParams.update({'font.size': 16})
     plt.savefig(f'plots/rapsd_{model_type}_{model_number}.pdf', format='pdf')
@@ -383,20 +385,26 @@ print('*********** Plotting Q-Q  **********************')
 if metric_dict['quantiles']:
 
     # Quantiles for annotating plot
-    (q_99pt9, q_99pt99) = np.quantile(truth_array, [0.999, 0.9999])
+    (q_99pt9, q_99pt99, q_99pt999) = np.quantile(truth_array, [0.999, 0.9999, 0.99999])
 
     fig, ax = plt.subplots(1,1, figsize=(8,8))
+    
+    truth_quantiles = {}
+    sample_quantiles = {}
+    fcst_quantiles = {}
+    fcst_corrected_quantiles = {}
+    persisted_fcst_quantiles = {}
 
     marker_handles = None
     for v in range_dict.values():
         
         quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
         
-        truth_quantiles = np.quantile(truth_array, quantile_boundaries)
-        sample_quantiles = np.quantile(samples_gen_array[:,:,:,0], quantile_boundaries)
-        fcst_quantiles = np.quantile(fcst_array, quantile_boundaries)
-        fcst_corrected_quantiles = np.quantile(fcst_corrected, quantile_boundaries)
-        persisted_fcst_quantiles = np.quantile(persisted_fcst_array, quantile_boundaries)
+        truth_quantiles[k] = np.quantile(truth_array, quantile_boundaries)
+        sample_quantiles[k] = np.quantile(samples_gen_array[:,:,:,0], quantile_boundaries)
+        fcst_quantiles[k] = np.quantile(fcst_array, quantile_boundaries)
+        fcst_corrected_quantiles[k] = np.quantile(fcst_corrected, quantile_boundaries)
+        persisted_fcst_quantiles[k] = np.quantile(persisted_fcst_array, quantile_boundaries)
 
         max_fcst_val = max(max(sample_quantiles), max(fcst_quantiles))
         max_truth_val = max(truth_quantiles)
@@ -419,15 +427,18 @@ if metric_dict['quantiles']:
                 marker_handles = [s1, s2, s3]
 
     # all_marker_handles = list(itertools.chain.from_iterable(marker_handles.values()))
-    ax.legend(handles=marker_handles, loc='upper left')
+    ax.legend(handles=marker_handles, loc='center left')
     ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
-    ax.set_xlabel('iMERG (mm/hr)')
+    ax.set_xlabel('Observations (mm/hr)')
     ax.set_ylabel('Model (mm/hr)')
 
-    ax.vlines(q_99pt9, 0, max(sample_quantiles), linestyles='--')
-    ax.vlines(q_99pt99, 0, max(sample_quantiles), linestyles='--')
-    ax.text(q_99pt9 - 5, max(sample_quantiles) - 20, '$99.9^{th}$')
-    ax.text(q_99pt99 -6 , max(sample_quantiles) - 20, '$99.99^{th}$')
+    largest_key = max(sample_quantiles)
+    ax.vlines(q_99pt9, 0, max(sample_quantiles[largest_key]), linestyles='--')
+    ax.vlines(q_99pt99, 0, max(sample_quantiles[largest_key]), linestyles='--')
+    ax.vlines(q_99pt999, 0, max(sample_quantiles[largest_key]), linestyles='--')
+    ax.text(q_99pt9 , max(sample_quantiles[largest_key]) - 20, '$99.9^{th}$')
+    ax.text(q_99pt99 , max(sample_quantiles[largest_key]) - 20, '$99.99^{th}$')
+    ax.text(q_99pt999  , max(sample_quantiles[largest_key]) - 20, '$99.999^{th}$')
 
     plt.rcParams.update({'font.size': 20})
     plt.savefig(f'plots/quantiles_total_{model_type}_{model_number}.pdf', format='pdf')
@@ -485,7 +496,7 @@ if metric_dict['hist']:
     fig.tight_layout(pad=4)
     bin_boundaries=np.arange(0,300,4)
 
-    data_dict = {'IMERG': {'data': truth_array, 'histtype': 'stepfilled', 'alpha':0.6, 'facecolor': 'grey'}, 
+    data_dict = {'Obs (IMERG)': {'data': truth_array, 'histtype': 'stepfilled', 'alpha':0.6, 'facecolor': 'grey'}, 
                 'IFS': {'data': fcst_array, 'histtype': 'step', 'edgecolor': 'red'},
                 'IFS qmap': {'data': fcst_corrected, 'histtype': 'step', 'edgecolor': 'red', 'linestyle': '--'},
                 'cGAN sample': {'data': samples_gen_array[:,:,:,0], 'histtype': 'step', 'edgecolor': 'blue'}}
@@ -622,7 +633,8 @@ if metric_dict['fss']:
     from dsrnngan.plots import plot_fss_scores
 
     window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
-    n_samples = truth_array.shape[0]
+    # n_samples = truth_array.shape[0]
+    n_samples = 10
     fss_data_dict = {
                         'cgan': samples_gen_array[:n_samples, :, :, 0],
                         'ifs': fcst_array[:n_samples, :, :],
@@ -669,10 +681,10 @@ if metric_dict['diurnal']:
     hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts = get_diurnal_cycle(truth_array, samples_gen_array,
                                                                                              fcst_array, dates, hours, longitude_range, latitude_range)
 
-    fig, ax = plt.subplots(1,1, figsize=(10,10))
-    diurnal_data_dict = {'IMERG': hourly_data_obs,
-                        'cGAN sample': hourly_data_sample,
-                        'IFS': hourly_data_fcst}
+    fig, ax = plt.subplots(1,1, figsize=(5,5))
+    diurnal_data_dict = {'Obs (IMERG)': hourly_data_obs,
+                        'GAN': hourly_data_sample,
+                        'Fcst (IFS)': hourly_data_fcst}
 
     for name, data in diurnal_data_dict.items():
         
@@ -685,7 +697,9 @@ if metric_dict['diurnal']:
     ax.legend()
     ax.set_xlabel('Hour')
     ax.set_ylabel('Average mm/hr')
-    plt.savefig(f'plots/diurnal_cycle_{model_type}_{model_number}.pdf')
+    
+    plt.rcParams.update({'font.size': 20})
+    plt.savefig(f'plots/diurnal_cycle_{model_type}_{model_number}.pdf', bbox_inches='tight')
     
     with open(f'plots/diurnal_cycle_{model_type}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(diurnal_data_dict, ofh)

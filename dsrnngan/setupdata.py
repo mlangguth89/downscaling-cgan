@@ -64,7 +64,7 @@ def setup_full_image_dataset(year_month_range,
                              data_paths,
                              latitude_range,
                              longitude_range,
-                             batch_size=1,
+                             batch_size=2,
                              downsample=False,
                              hour='random',
                              shuffle=True

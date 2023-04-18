@@ -96,22 +96,15 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     downscaling_steps = config['DOWNSCALING']['steps']
     downscaling_factor = config['DOWNSCALING']['downscaling_factor']
     
+    input_image_width = config['DATA']['input_image_width']
     fcst_data_source=config['DATA']['fcst_data_source']
     obs_data_source=config['DATA']['obs_data_source']
     input_channels = config['DATA']['input_channels']
     constant_fields = config['DATA']['constant_fields']
-    min_latitude = config['DATA']['min_latitude']
-    max_latitude = config['DATA']['max_latitude']
-    latitude_step_size = config['DATA']['latitude_step_size']
-    min_longitude = config['DATA']['min_longitude']
-    max_longitude = config['DATA']['max_longitude']
-    longitude_step_size = config['DATA']['longitude_step_size']
-    lat_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-    lon_range=np.arange(min_longitude, max_longitude, longitude_step_size)
     
-    input_image_shape = (len(lat_range), len(lon_range), input_channels)
+    input_image_shape = (input_image_width, input_image_width, input_channels)
     output_image_shape = (downscaling_factor * input_image_shape[0], downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (len(lat_range), len(lon_range), constant_fields)
+    constants_image_shape = (input_image_width, input_image_width, constant_fields)
     
     load_constants = config['DATA'].get('load_constants', True)    
     
