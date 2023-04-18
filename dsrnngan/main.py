@@ -7,6 +7,7 @@ import logging
 from glob import glob
 from pathlib import Path
 import tensorflow as tf
+import types
 
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
@@ -93,45 +94,20 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
     downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False)
     
-    downscaling_steps = config['DOWNSCALING']['steps']
-    downscaling_factor = config['DOWNSCALING']['downscaling_factor']
-    
-    input_image_width = config['DATA']['input_image_width']
-    fcst_data_source=config['DATA']['fcst_data_source']
-    obs_data_source=config['DATA']['obs_data_source']
-    input_channels = config['DATA']['input_channels']
-    constant_fields = config['DATA']['constant_fields']
-    
-    input_image_shape = (input_image_width, input_image_width, input_channels)
-    output_image_shape = (downscaling_factor * input_image_shape[0], downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (input_image_width, input_image_width, constant_fields)
-    
-    load_constants = config['DATA'].get('load_constants', True)    
-    
-    filters_gen = config["GENERATOR"]["filters_gen"]
-    lr_gen = float(config["GENERATOR"]["learning_rate_gen"])
-    noise_channels = config["GENERATOR"]["noise_channels"]
-    latent_variables = config["GENERATOR"]["latent_variables"]
-    
-    filters_disc = config["DISCRIMINATOR"]["filters_disc"]
-    lr_disc = config["DISCRIMINATOR"]["learning_rate_disc"]
+    ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
+
+    input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
+    output_image_shape = (ds_config.downscaling_factor * input_image_shape[0], ds_config.downscaling_factor * input_image_shape[1], 1)
+    constants_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.constant_fields)
     
     training_range = config['TRAIN']['training_range']
     
     if training_weights is None:
         training_weights = config["TRAIN"]["training_weights"]
-        
-    num_epochs = config["TRAIN"].get("num_epochs")
-    num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
-    steps_per_checkpoint = config["TRAIN"]["steps_per_checkpoint"]
-    batch_size = config["TRAIN"]["batch_size"]
-    kl_weight = config["TRAIN"]["kl_weight"]
-    ensemble_size = ensemble_size or config["TRAIN"]["ensemble_size"]
-    CL_type = config["TRAIN"]["CL_type"]
-    content_loss_weight = config["TRAIN"]["content_loss_weight"]
-    crop_size = config['TRAIN'].get('img_chunk_width')
+
+    ensemble_size = ensemble_size or train_config.ensemble_size  
     
-    print(f'Crop size: {crop_size}')
+    print(f'Crop size: {train_config.crop_size}')
         
     val_range = config['VAL'].get('val_range')
     if val_start:
@@ -144,35 +120,30 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
     
     # otherwise these are of type string, e.g. '1e-5'
-    lr_gen = float(lr_gen)
-    lr_disc = float(lr_disc)
-    kl_weight = float(kl_weight)
+
     noise_factor = float(noise_factor)
-    content_loss_weight = float(content_loss_weight)
 
     if mode not in ['GAN', 'VAEGAN', 'det']:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
 
     if ensemble_size is not None:
-        if CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
+        if train_config.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
     if evaluate and val_range is None:
         raise ValueError('Must specify validation range when using --evaluate flag')
     
-    assert math.prod(downscaling_steps) == downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
-    
     # Calculate number of samples from epochs:
     if num_samples_override is not None:
-        num_samples = num_samples_override
+        train_config.num_samples = num_samples_override
     else:
-        if num_samples is None:
-            if num_epochs is None:
+        if train_config.num_samples is None:
+            if train_config.num_epochs is None:
                 raise ValueError('Must specify either num_epochs or num_samples')
             num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
-            num_samples = num_data_points * num_epochs
+            train_config.num_samples = num_data_points * train_config.num_epochs
         
-    num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
+    num_checkpoints = int(train_config.num_samples/(train_config.steps_per_checkpoint * train_config.batch_size))
     checkpoint = 1
     
     # Get Git commit hash
@@ -198,26 +169,26 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         model = setupmodel.setup_model(
             mode=mode,
             architecture=architecture,
-            downscaling_steps=downscaling_steps,
-            input_channels=input_channels,
-            constant_fields=constant_fields,
-            latent_variables=latent_variables,
-            filters_gen=filters_gen,
-            filters_disc=filters_disc,
-            noise_channels=noise_channels,
+            downscaling_steps=ds_config.steps,
+            input_channels=data_config.input_channels,
+            constant_fields=data_config.constant_fields,
+            latent_variables=gen_config.latent_variables,
+            filters_gen=gen_config.filters_gen,
+            filters_disc=dis_config.filters_disc,
+            noise_channels=gen_config.noise_channels,
             padding=padding,
-            lr_disc=lr_disc,
-            lr_gen=lr_gen,
-            kl_weight=kl_weight,
+            lr_disc=dis_config.lr_disc,
+            lr_gen=gen_config.lr_gen,
+            kl_weight=train_config.kl_weight,
             ensemble_size=ensemble_size,
-            CLtype=CL_type,
-            content_loss_weight=content_loss_weight)
+            CLtype=train_config.CL_type,
+            content_loss_weight=train_config.content_loss_weight)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
             training_range=training_range,
             validation_range=val_range,
-            fcst_data_source=fcst_data_source,
-            obs_data_source=obs_data_source,
+            fcst_data_source=data_config.fcst_data_source,
+            obs_data_source=data_config.obs_data_source,
             latitude_range=latitude_range,
             longitude_range=longitude_range,
             val_size=val_size,
@@ -227,7 +198,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             con_shape=constants_image_shape,
             out_shape=output_image_shape,
             weights=training_weights,
-            batch_size=batch_size,
+            batch_size=train_config.batch_size,
             load_full_image=False,
             crop_size=crop_size,
             seed=seed)
@@ -238,7 +209,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                 with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
                     run_status = json.load(f)
                 training_samples = run_status["training_samples"]
-                checkpoint = int(training_samples / (steps_per_checkpoint * batch_size)) + 1
+                checkpoint = int(training_samples / (train_config.steps_per_checkpoint * train_config.batch_size)) + 1
 
                 log_file = "{}/log.txt".format(log_folder)
                 log = pd.read_csv(log_file)
@@ -258,7 +229,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
 
         plot_fname = os.path.join(log_folder, "progress.pdf")
 
-        while (training_samples < num_samples):  # main training loop
+        while (training_samples < train_config.num_samples):  # main training loop
 
             logger.debug("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
 
@@ -267,14 +238,14 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                          mode=mode,
                                          batch_gen_train=batch_gen_train,
                                          batch_gen_valid=batch_gen_valid,
-                                         noise_channels=noise_channels,
-                                         latent_variables=latent_variables,
+                                         noise_channels=gen_config.noise_channels,
+                                         latent_variables=gen_config.latent_variables,
                                          checkpoint=checkpoint,
-                                         steps_per_checkpoint=steps_per_checkpoint,
+                                         steps_per_checkpoint=train_config.steps_per_checkpoint,
                                          plot_samples=val_size,
                                          plot_fn=plot_fname)
 
-            training_samples += steps_per_checkpoint * batch_size
+            training_samples += train_config.steps_per_checkpoint * train_config.batch_size
             checkpoint += 1
 
             # save results
@@ -303,7 +274,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
     # selection used to avoid storing gigabytes of data
-    interval = steps_per_checkpoint * batch_size
+    interval = train_config.steps_per_checkpoint * train_config.batch_size
     
     # Get latest model number
     latest_model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
@@ -322,15 +293,15 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         Neval = max(finalchkpt // 3, 1)
         model_numbers = [(finalchkpt - ii)*interval for ii in range((Neval-1), -1, -1)]
     elif evalnum == "full":
-        model_numbers = np.arange(0, num_samples + 1, interval)[1:].tolist()
+        model_numbers = np.arange(0, train_config.num_samples + 1, interval)[1:].tolist()
 
     # evaluate model performance
     if evaluate:
         logger.debug('Performing evaluation')
         evaluation.evaluate_multiple_checkpoints(mode=mode,
                                                  arch=architecture,
-                                                 fcst_data_source=fcst_data_source,
-                                                 obs_data_source=obs_data_source,
+                                                 fcst_data_source=data_config.fcst_data_source,
+                                                 obs_data_source=data_config.obs_data_source,
                                                  validation_range=val_range,
                                                  latitude_range=latitude_range,
                                                  longitude_range=longitude_range,
@@ -342,14 +313,14 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  model_numbers=model_numbers,
                                                  ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
-                                                 filters_gen=filters_gen,
-                                                 filters_disc=filters_disc,
-                                                 input_channels=input_channels,
-                                                 latent_variables=latent_variables,
-                                                 noise_channels=noise_channels,
+                                                 filters_gen=gen_config.filters_gen,
+                                                 filters_disc=dis_config.filters_disc,
+                                                 input_channels=data_config.input_channels,
+                                                 latent_variables=gen_config.latent_variables,
+                                                 noise_channels=gen_config.noise_channels,
                                                  padding=padding,
                                                  ensemble_size=ensemble_size,
-                                                 constant_fields=constant_fields,
+                                                 constant_fields=data_config.constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples)

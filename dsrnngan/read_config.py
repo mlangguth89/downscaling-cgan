@@ -2,6 +2,8 @@ import os
 import sys
 import tensorflow as tf
 import numpy as np
+import types
+import math
 
 from dsrnngan.utils import load_yaml_file
 
@@ -77,3 +79,27 @@ def get_lat_lon_range_from_config(config=None):
     longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
     
     return latitude_range, longitude_range
+
+
+
+def get_config_objects(config):
+    
+    ds_config =  types.SimpleNamespace(**config['DOWNSCALING'])    
+    data_config = types.SimpleNamespace(**config['DATA'])
+    gen_config = types.SimpleNamespace(**config['GENERATOR'])
+    dis_config = types.SimpleNamespace(**config['DISCRIMINATOR'])
+    train_config = types.SimpleNamespace(**config['TRAIN'])
+    
+    train_config.num_epochs = config["TRAIN"].get("num_epochs")
+    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
+
+    train_config.crop_size = config['TRAIN'].get('img_chunk_width')
+    
+    gen_config.lr_gen = float(gen_config.lr_gen)
+    dis_config.lr_disc = float(dis_config.lr_disc)
+    train_config.kl_weight = float(train_config.kl_weight)
+    train_config.content_loss_weight = float(train_config.content_loss_weight)
+    
+    assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
+    
+    return ds_config, data_config, gen_config, dis_config, train_config
