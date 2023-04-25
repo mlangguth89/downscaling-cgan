@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=1-0:00:00
-#SBATCH --mem=5gb
+#SBATCH --mem=150gb
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=qmap-cv
 #SBATCH --partition short

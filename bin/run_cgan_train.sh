@@ -1,14 +1,15 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --time=0-80:00:00
-#SBATCH --mem=150gb
+#SBATCH --time=8-00:00:00
+#SBATCH --mem=400gb
 #SBATCH --gres=gpu:1
-#SBATCH --ntasks-per-node=1
 #SBATCH --job-name=cgan-train
 #SBATCH --partition cnu
 #SBATCH --output=logs/slurm-%A.out
 
 # GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
+
+# try with --gres=gpu:rtx_3090:1
 
 source ~/.bashrc
 source ~/.initConda.sh
@@ -33,7 +34,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval-blitz --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/43ae7be47e9a182e
+srun python -m dsrnngan.main --evaluate --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/f6998afe16c9f955 --training-weights 0.25 0.25 0.25 0.25
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

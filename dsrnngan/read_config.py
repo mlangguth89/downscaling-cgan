@@ -7,7 +7,10 @@ import math
 
 from dsrnngan.utils import load_yaml_file
 
-def read_config(config_filename='local_config.yaml'):
+def read_config(config_filename=None):
+    
+    if config_filename is None:
+        config_filename = 'local_config.yaml'
         
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_filename)
     try:
@@ -95,8 +98,8 @@ def get_config_objects(config):
 
     train_config.crop_size = config['TRAIN'].get('img_chunk_width')
     
-    gen_config.lr_gen = float(gen_config.lr_gen)
-    dis_config.lr_disc = float(dis_config.lr_disc)
+    gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
+    dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
     train_config.kl_weight = float(train_config.kl_weight)
     train_config.content_loss_weight = float(train_config.content_loss_weight)
     

@@ -313,7 +313,8 @@ def write_data(year_month_range,
                constants=True,
                latitude_range=None,
                longitude_range=None,
-               debug=False):
+               debug=False,
+               config=None):
 
     from .data_generator import DataGenerator
     logger.info('Start of write data')
@@ -337,7 +338,8 @@ def write_data(year_month_range,
             
         records_folder = data_paths["TFRecords"]["tfrecords_path"]
         
-        config = read_config.read_config()
+        if not config:
+            config = read_config.read_config()
         
         class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
         if class_bin_boundaries:

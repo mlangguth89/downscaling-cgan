@@ -24,7 +24,7 @@ from dsrnngan.noise import NoiseGenerator
 from dsrnngan.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
 from dsrnngan.data import DATA_PATHS
 
-model_folder='/user/work/uz22147/logs/cgan/d34d309eb0e00b04'
+model_folder='/user/work/uz22147/logs/cgan/ff62fde11969a16f'
 
 model_weights_root = os.path.join(model_folder, "models")
 config_path = os.path.join(model_folder, 'setup_params.yaml')
@@ -37,7 +37,7 @@ with open(config_path, 'r') as f:
     except yaml.YAMLError as exc:
         print(exc)
 
-mode = setup_params["GENERAL"]["mode"]
+mode = setup_params["MODEL"]["mode"]
 arch = setup_params["MODEL"]["architecture"]
 padding = setup_params["MODEL"]["padding"]
 batch_size = 1  # setup_params["TRAIN"]["batch_size"]
@@ -48,8 +48,8 @@ constant_fields = setup_params['DATA']['constant_fields']
 input_image_width = setup_params['DATA']['input_image_width']
 output_image_width = input_image_width * df_dict['downscaling_factor']
 constants_image_width = input_image_width
-problem_type = setup_params["GENERAL"]["problem_type"]
-downsample = setup_params['GENERAL']['downsample']
+problem_type = setup_params["MODEL"]["problem_type"]
+downsample = setup_params['MODEL']['downsample']
 filters_gen = setup_params["GENERATOR"]["filters_gen"]
 noise_channels = setup_params["GENERATOR"]["noise_channels"]
 latent_variables = setup_params["GENERATOR"]["latent_variables"]
@@ -120,7 +120,7 @@ class TestEvaluation(unittest.TestCase):
 
     def test_eval_one_chkpt(self):
         
-        gen = setupdata.load_model_from_folder(model_folder='/user/home/uz22147/logs/cgan/38fba564f1c9852b', model_number=38400)
+        gen = setupdata.load_model_from_folder(model_folder='/user/work/uz22147/logs/cgan/38fba564f1c9852b', model_number=38400)
 
         records_folder = '/user/work/uz22147/tfrecords/d34d309eb0e00b04/'
         _, data_gen_valid = setupdata.load_data_from_folder('/user/work/uz22147/tfrecords/d34d309eb0e00b04/')

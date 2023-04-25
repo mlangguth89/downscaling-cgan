@@ -70,7 +70,7 @@ parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting 
 def main(restart, do_training, evaluate, plot_ranks, num_images,
          noise_factor, ensemble_size, shuffle_eval=True, records_folder=None, evalnum=None, model_numbers=None, 
          seed=None, num_samples_override=None,
-         val_start=None, val_end=None, save_generated_samples=False, training_weights=None
+         val_start=None, val_end=None, save_generated_samples=False, training_weights=None, debug=False
          ):
     
     if records_folder is None:
@@ -177,8 +177,8 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             filters_disc=dis_config.filters_disc,
             noise_channels=gen_config.noise_channels,
             padding=padding,
-            lr_disc=dis_config.lr_disc,
-            lr_gen=gen_config.lr_gen,
+            lr_disc=dis_config.learning_rate_disc,
+            lr_gen=gen_config.learning_rate_gen,
             kl_weight=train_config.kl_weight,
             ensemble_size=ensemble_size,
             CLtype=train_config.CL_type,
@@ -200,7 +200,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             weights=training_weights,
             batch_size=train_config.batch_size,
             load_full_image=False,
-            crop_size=crop_size,
+            crop_size=train_config.crop_size,
             seed=seed)
 
         if restart: # load weights and run status
@@ -248,6 +248,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             training_samples += train_config.steps_per_checkpoint * train_config.batch_size
             checkpoint += 1
 
+
             # save results
             model.save(model_weights_root)
             run_status = {
@@ -267,6 +268,9 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             # Save model weights each checkpoint
             gen_weights_file = os.path.join(model_weights_root, "gen_weights-{:07d}.h5".format(training_samples))
             model.gen.save_weights(gen_weights_file)
+            
+            if debug:
+                break
 
     else:
         logger.debug("Training skipped...")

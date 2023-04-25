@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=1-0:00:00
-#SBATCH --mem=75gb
+#SBATCH --mem=150gb
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=plots
 #SBATCH --partition short
@@ -21,7 +21,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m scripts.make_plots --model-number 153600 --model-type cropped
+srun python -m scripts.make_plots --model-number 288000 --model-type cropped_4000
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

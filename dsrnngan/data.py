@@ -447,16 +447,7 @@ def preprocess(variable: str,
             raise ValueError(f'Unrecognised normalisation type for variable {var_name}')
 
     return ds
-    """
-    Function to pick between various different sources of observational data
-    Args:
-        data_source: str, one of nimrod, imerg
-        *args:
-        **kwargs:
 
-    Returns:
-
-    """
 
 def load_observational_data(data_source: str, *args, **kwargs):
     """
@@ -857,9 +848,9 @@ def load_fcst_stack(data_source: str, fields: list,
     return np.stack(field_arrays, -1)
 
 
-def get_ifs_stats(field, latitude_vals, longitude_vals, output_dir=None, 
-                   use_cached=True, year=NORMALISATION_YEAR,
-                   ifs_data_dir=IFS_PATH, hours=all_fcst_hours):
+def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_dir: str=None, 
+                   use_cached: bool=True, year: int=NORMALISATION_YEAR,
+                   ifs_data_dir: str=IFS_PATH, hours: list=all_fcst_hours):
 
     min_lat = int(min(latitude_vals))
     max_lat = int(max(latitude_vals))
@@ -967,8 +958,10 @@ def load_era5_month_raw(variable, year, month, latitude_vals=None, longitude_val
     return ds
 
 
-def load_era5_day_raw(variable, year, month, day, latitude_vals=None, longitude_vals=None,
-                      era_data_dir=ERA5_PATH, interpolate=True):
+def load_era5_day_raw(variable: str, year: int, month: int, 
+                      day: int, latitude_vals: list=None, 
+                      longitude_vals: list=None,
+                      era_data_dir: str=ERA5_PATH, interpolate: bool=True):
 
     month_ds = load_era5_month_raw(variable, year, month, latitude_vals=latitude_vals,
                                     longitude_vals=longitude_vals,
@@ -979,8 +972,9 @@ def load_era5_day_raw(variable, year, month, day, latitude_vals=None, longitude_
     return day_ds
 
 
-def get_era5_stats(variable, longitude_vals, latitude_vals, year=NORMALISATION_YEAR, output_dir=None,
-                   era_data_dir=ERA5_PATH, use_cached=False):
+def get_era5_stats(variable: str, longitude_vals: list, latitude_vals: list, 
+                   year: int=NORMALISATION_YEAR, output_dir: int=None,
+                   era_data_dir: int=ERA5_PATH, use_cached: bool=False):
     
     min_lat = int(min(latitude_vals))
     max_lat = int(max(latitude_vals))
@@ -1070,7 +1064,9 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 
     return y
 
-def get_imerg_filepaths(year, month, day, hour, imerg_data_dir=IMERG_PATH, file_ending='.nc'):
+def get_imerg_filepaths(year: int, month: int, day: int, 
+                        hour: int, imerg_data_dir: str=IMERG_PATH, 
+                        file_ending: str='.nc'):
     
     dt_start = datetime(year, month, day, hour, 0, 0) 
         
@@ -1130,9 +1126,9 @@ def load_imerg_raw(year: int, month: int, day: int,
     return ds
 
 
-def load_imerg(date, hour=18, data_dir=IMERG_PATH,
-               latitude_vals=None, longitude_vals=None,
-               log_precip=False):
+def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
+               latitude_vals: list=None, longitude_vals: list=None,
+               log_precip: bool=False):
     """
 
      Function to fetch iMERG data, designed to match the structure of the load_radar function, so they can be
