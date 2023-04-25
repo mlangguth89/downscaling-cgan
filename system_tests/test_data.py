@@ -254,8 +254,6 @@ class TestLoad(unittest.TestCase):
         day = 1
         lat_vals = np.arange(0, 1, 0.1)
         lon_vals = np.arange(33, 34, 0.1)
-        # lat_vals = [0, 0.01]
-        # lon_vals = [33, 33.01]
 
         var_name_lookup = VAR_LOOKUP_ERA5
 

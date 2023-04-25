@@ -12,6 +12,7 @@ from dsrnngan.data import DATA_PATHS, denormalise
 from dsrnngan.utils import date_range_from_year_month_range, load_yaml_file
 from dsrnngan.noise import NoiseGenerator
 from dsrnngan import setupmodel, setupdata
+from dsrnngan import read_config
 
 
 def setup_batch_gen(val: bool,
@@ -73,7 +74,7 @@ def setup_full_image_dataset(year_month_range,
 
     date_range = date_range_from_year_month_range(year_month_range)
     dates = get_obs_dates(date_range[0], date_range[-1], 
-                          obs_data_source=obs_data_source, data_paths=data_paths)
+                          obs_data_source=obs_data_source, data_paths=data_paths, hour=hour)
     data_full = DataGeneratorFull(dates=dates,
                                   forecast_data_source=fcst_data_source, 
                                   observational_data_source=obs_data_source,
@@ -167,36 +168,25 @@ def load_model_from_folder(model_folder, model_number=None):
     model_weights_root = os.path.join(model_folder, "models")
     config_path = os.path.join(model_folder, 'setup_params.yaml')
     
-
     if model_number is None:
         model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
     else:
         model_fp = os.path.join(model_weights_root, f'gen_weights-{model_number:07d}.h5')
         
     setup_params = load_yaml_file(config_path)
-    
-    df_dict = setup_params['DOWNSCALING']
-    mode = setup_params["GENERAL"]["mode"]
-    architecture = setup_params["MODEL"]["architecture"]
-    padding = setup_params["MODEL"]["padding"]
-    input_channels = setup_params['DATA']['input_channels']
-    constant_fields = setup_params['DATA']['constant_fields']
-    filters_gen = setup_params["GENERATOR"]["filters_gen"]
-    noise_channels = setup_params["GENERATOR"]["noise_channels"]
-    latent_variables = setup_params["GENERATOR"]["latent_variables"]
-    filters_disc = setup_params["DISCRIMINATOR"]["filters_disc"]
+    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(setup_params)
 
     print('setting up inputs')
-    model = setupmodel.setup_model(mode=mode,
-                                   architecture=architecture,
-                                   downscaling_steps=df_dict["steps"],
-                                   input_channels=input_channels,
-                                   filters_gen=filters_gen,
-                                   filters_disc=filters_disc,
-                                   noise_channels=noise_channels,
-                                   latent_variables=latent_variables,
-                                   padding=padding,
-                                   constant_fields=constant_fields)
+    model = setupmodel.setup_model(mode=model_config.mode,
+                                   architecture=model_config.architecture,
+                                   downscaling_steps=ds_config.steps,
+                                   input_channels=data_config.input_channels,
+                                   filters_gen=gen_config.filters_gen,
+                                   filters_disc=dis_config.filters_disc,
+                                   noise_channels=gen_config.noise_channels,
+                                   latent_variables=gen_config.latent_variables,
+                                   padding=model_config.padding,
+                                   constant_fields=data_config.constant_fields)
 
     gen = model.gen
     
@@ -205,53 +195,54 @@ def load_model_from_folder(model_folder, model_number=None):
     
     return gen
 
-def load_data_from_folder(records_folder, batch_size=1, load_full_image=True):
-    """
-    Loads daata from folder: if load full image is true then this fetches data directly from source,
-    if not it will load from the previously created tfrecords
-
-    Args:
-        records_folder (_type_): _description_
-        batch_size (int, optional): _description_. Defaults to 1.
-        load_full_image (bool, optional): _description_. Defaults to True.
-
-    Returns:
-        _type_: _description_
-    """
-    setup_params = load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
-
-    fcst_data_source=setup_params['DATA']['fcst_data_source']
-    obs_data_source=setup_params['DATA']['obs_data_source']
-    downsample = setup_params['GENERAL']['downsample']
-
-    training_range = setup_params['TRAIN'].get('training_range')
-    validation_range = setup_params['VAL'].get('val_range')
+def load_data_from_config(config: dict, records_folder: str=None,
+                          batch_size: int=1, load_full_image: bool=True, 
+                          data_paths: dict=DATA_PATHS, hour: int='random'):
     
-    min_latitude = setup_params['DATA']['min_latitude']
-    max_latitude = setup_params['DATA']['max_latitude']
-    latitude_step_size = setup_params['DATA']['latitude_step_size']
-    min_longitude = setup_params['DATA']['min_longitude']
-    max_longitude = setup_params['DATA']['max_longitude']
-    longitude_step_size = setup_params['DATA']['longitude_step_size']
-    latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-    longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+    model_config, _, _, data_config, _, _, train_config, val_config = read_config.get_config_objects(config)
+    
+    latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude + data_config.latitude_step_size, data_config.latitude_step_size)
+    longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude + data_config.latitude_step_size, data_config.longitude_step_size)
     
     data_gen_train, data_gen_valid = setupdata.setup_data(
         records_folder=records_folder,
-        fcst_data_source=fcst_data_source,
-        obs_data_source=obs_data_source,
+        fcst_data_source=data_config.fcst_data_source,
+        obs_data_source=data_config.obs_data_source,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
         load_full_image=load_full_image,
-        validation_range=validation_range,
-        training_range=training_range,
+        validation_range=val_config.val_range,
+        training_range=train_config.training_range,
         batch_size=batch_size,
-        downsample=downsample,
-        data_paths=DATA_PATHS)
+        downsample=model_config.downsample,
+        data_paths=data_paths,
+        hour=hour)
     
     return data_gen_train, data_gen_valid
 
-def generate_prediction(data_iterator, generator, noise_channels, ensemble_size = 1, 
+def load_data_from_folder(records_folder: str=None, 
+                          batch_size: int=1, load_full_image: bool=True, 
+                          data_paths: dict=DATA_PATHS):
+    """
+    Loads data from folder: if load full image is true then this fetches data directly from source,
+    if not it will load from the previously created tfrecords
+
+    Args:
+        records_folder (str, optional): Folder with TF records in it; only required if load_full_image=False. Defaults to None.
+        batch_size (int, optional): Batch size. Defaults to 1.
+        load_full_image (bool, optional): Whether or not to load the full image. Defaults to True.
+        data_paths (dict, optional): Dict of data paths
+        
+
+    Returns:
+        data_gen_train, data_gen_valid: generators for training and validation data
+    """
+    setup_params = load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
+    data_gen_train, data_gen_valid = load_data_from_config(setup_params, batch_size, load_full_image, data_paths)
+    return data_gen_train, data_gen_valid
+
+def generate_prediction(data_iterator, generator, 
+                        noise_channels, ensemble_size=1, 
                         batch_size=1, denormalise_data=False):
         
     inputs, outputs = next(data_iterator)
@@ -283,7 +274,7 @@ if __name__=='__main__':
     from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
     from dsrnngan.data import get_obs_dates
     
-    data_config.fcst_data_source = 'ifs'
+    fcst_data_source = 'ifs'
     obs_data_source='imerg'
     full_ym_range = ['201603', '201803']
     n_samples = 'all'
@@ -296,7 +287,6 @@ if __name__=='__main__':
     
     for ym in all_year_months:
         ym_range = [ym]
-        
 
         if n_samples == 'all':
             ym_date_range = date_range_from_year_month_range(ym_range)
@@ -305,7 +295,7 @@ if __name__=='__main__':
             n_samples = 24*len(ym_dates)
     
         data_gen = setup_full_image_dataset(ym_range,
-                                fcst_data_source=data_config.fcst_data_source,
+                                fcst_data_source=fcst_data_source,
                                 obs_data_source=obs_data_source,
                                 load_constants=True,
                                 data_paths=DATA_PATHS,
@@ -317,7 +307,7 @@ if __name__=='__main__':
                                 shuffle=False
                                 )
         
-        tpidx = input_field_lookup[data_config.fcst_data_source.lower()].index('tp')
+        tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
         
         obs_vals, fcst_vals, dates, hours = [], [], [], []
         

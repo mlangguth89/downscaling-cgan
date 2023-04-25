@@ -120,7 +120,6 @@ def create_single_sample(*,
                    ensemble_size,
                    denormalise_data=True):
     
-    
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
     
     batch_size = 1  # do one full-size image at a time

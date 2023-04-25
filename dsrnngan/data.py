@@ -186,9 +186,10 @@ def standardise_dataset(ds: xr.Dataset):
     
     return ds
 
-def get_obs_dates(start_date: datetime, 
-                  end_date: datetime, obs_data_source: str, 
-                  data_paths=DATA_PATHS):
+def get_obs_dates(start_date: datetime,
+                  end_date: datetime,  hour: int, obs_data_source: str, 
+                  data_paths=DATA_PATHS,
+                  ):
     """
     Get dates for which there is observational data available
     Args:
@@ -205,7 +206,7 @@ def get_obs_dates(start_date: datetime,
     
     obs_dates = set([item for item in date_range if file_exists(data_source=obs_data_source, year=item.year,
                                                     month=item.month, day=item.day,
-                                                    data_paths=data_paths)])
+                                                    data_paths=data_paths, hour=hour)])
     
     return sorted(obs_dates)
 
@@ -244,7 +245,7 @@ def get_dates(years, obs_data_source: str,
 
 
 def file_exists(data_source: str, year: int,
-                month: int, day:int, 
+                month: int, day:int, hour='random',
                 data_paths=DATA_PATHS):
     """
     Check if file exists
@@ -259,6 +260,10 @@ def file_exists(data_source: str, year: int,
     Returns:
         bool: True if file exists
     """
+    
+    if hour == 'random':
+        hour = 0
+        
     data_path = data_paths["GENERAL"].get(data_source.upper()) 
     
     if not data_path:
@@ -271,7 +276,7 @@ def file_exists(data_source: str, year: int,
         
     elif data_source == 'imerg':
         for file_type in ['.HDF5', '.nc']:
-            fps = get_imerg_filepaths(year, month, day, 0, file_ending=file_type)
+            fps = get_imerg_filepaths(year, month, day, hour, file_ending=file_type, imerg_data_dir=data_path)
             if os.path.isfile(fps[0]):
                 return True
 

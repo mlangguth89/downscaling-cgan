@@ -105,11 +105,11 @@ weights_fn = os.path.join(log_folder, 'models', 'gen_weights-{}.h5'.format(model
 dates = get_dates(predict_year)
 
 if problem_type == "normal":
-    downsample = False
+    model_config.downsample = False
     plot_input_title = 'Forecast'
     input_channels = 9
 elif problem_type == "superresolution":
-    downsample = True
+    model_config.downsample = True
     plot_input_title = 'Downsampled'
     input_channels = 1  # superresolution problem doesn't have all 9 input fields
 
@@ -139,7 +139,7 @@ data_benchmarks = DataGeneratorFull(dates=dates,
                                     normalise=False,
                                     shuffle=True,
                                     hour='random',
-                                    downsample=downsample)
+                                    downsample=model_config.downsample)
 
 ###########
 

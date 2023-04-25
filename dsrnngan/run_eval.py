@@ -38,10 +38,10 @@ num_images = 256
 
 if problem_type == 'normal':
     input_channels = 9
-    downsample = False
+    model_config.downsample = False
 elif problem_type == 'superresolution':
     input_channels = 1
-    downsample = True
+    model_config.downsample = True
 
 if mode in ("GAN", "VAEGAN"):
     ensemble_size = 100
@@ -55,7 +55,7 @@ evaluation.evaluate_multiple_checkpoints(mode=mode,
                                          val_years=val_years,
                                          log_fname=out_fn,
                                          weights_dir=model_weights_root,
-                                         downsample=downsample,
+                                         downsample=model_config.downsample,
                                          add_noise=add_noise,
                                          noise_factor=noise_factor,
                                          model_numbers=model_numbers,

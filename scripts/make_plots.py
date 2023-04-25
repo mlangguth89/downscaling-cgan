@@ -39,15 +39,15 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': False,
-               'rank_hist': False,
-               'rapsd': False,
-               'quantiles': False,
-               'hist': False,
-               'crps': False,
-               'fss': False,
+metric_dict = {'examples': True,
+               'rank_hist': True,
+               'rapsd': True,
+               'quantiles': True,
+               'hist': True,
+               'crps': True,
+               'fss': True,
                'diurnal': True,
-               'confusion_matrix': False
+               'confusion_matrix': True
                }
 
 plot_persistence = False
@@ -70,7 +70,8 @@ log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201
                'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
                'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n2000_201806-201905_e20',
                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
-               'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10'}
+               'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10',
+               'cropped_v2': '/user/work/uz22147/logs/cgan/f6998afe16c9f955/n4000_201806-201905_e10'}
 
 if model_type not in log_folders:
     raise ValueError('Model type not found')

@@ -87,17 +87,26 @@ def get_lat_lon_range_from_config(config=None):
 
 def get_config_objects(config):
     
+    local_config = types.SimpleNamespace(**config['LOCAL'])
+    model_config = types.SimpleNamespace(**config['MODEL'])
     ds_config =  types.SimpleNamespace(**config['DOWNSCALING'])    
     data_config = types.SimpleNamespace(**config['DATA'])
     gen_config = types.SimpleNamespace(**config['GENERATOR'])
     dis_config = types.SimpleNamespace(**config['DISCRIMINATOR'])
     train_config = types.SimpleNamespace(**config['TRAIN'])
+    val_config = types.SimpleNamespace(**config['VAL'])
     
     train_config.num_epochs = config["TRAIN"].get("num_epochs")
     train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
     train_config.crop_size = config['TRAIN'].get('img_chunk_width')
     
-    data_config.load_constants = config['DATA'].get('load_constants', True)   
+    val_config.val_range = config['VAL'].get('val_range')
+    val_config.val_size = config.get("VAL", {}).get("val_size")
+    
+    data_config.load_constants = config['DATA'].get('load_constants', True) 
+    
+    model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
+    model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 
     
     gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
     dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
@@ -106,4 +115,4 @@ def get_config_objects(config):
     
     assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
     
-    return ds_config, data_config, gen_config, dis_config, train_config
+    return model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config

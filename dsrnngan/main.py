@@ -66,7 +66,7 @@ def main(restart: bool, do_training: bool, num_images: int,
          noise_factor: float, ensemble_size: int, shuffle_eval: bool=True, records_folder: str=None, evalnum: str=None, eval_model_numbers: list=None, 
          seed: int=None, num_samples_override: int=None,
          val_start: str=None, val_end: str=None, save_generated_samples: bool=False, training_weights: list=None, debug: bool=False,
-         output_suffix: str=None
+         output_suffix: str=None, log_folder=None
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -88,6 +88,7 @@ def main(restart: bool, do_training: bool, num_images: int,
         training_weights (list, optional): List of floats, fraction of samples to take from each class in the training data. Defaults to None. If None then is read from the config
         debug (bool, optional): Whether or not to use in debug mode (stops training after first checkpoint). Defaults to False.
         output_suffix (str, optional): Suffix to append to output folder name. Defaults to None.
+        log_folder (str, optional): root folder to store results in. Defaults to None. If None then will be taken from config.
 
     """
     if records_folder is None:
@@ -104,58 +105,44 @@ def main(restart: bool, do_training: bool, num_images: int,
 
     # TODO either change this to use a toml file or e.g. pydantic input validation
     logger.debug('Reading config')
-    architecture = config["MODEL"]["architecture"]
-    padding = config["MODEL"]["padding"]
-    log_folder = config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
+
+    log_folder = log_folder or config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
     
     if output_suffix:
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
         log_folder = log_folder + output_suffix
     
-    mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
-    downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False)
-    
-    ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
+    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
     
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (ds_config.downscaling_factor * input_image_shape[0], ds_config.downscaling_factor * input_image_shape[1], 1)
     constants_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.constant_fields)
     
-    training_range = config['TRAIN']['training_range']
-    
     if training_weights is None:
-        training_weights = config["TRAIN"]["training_weights"]
+        training_weights = train_config.training_weights
 
     ensemble_size = ensemble_size or train_config.ensemble_size  
-        
-    val_range = config['VAL'].get('val_range')
-    if val_start:
-        val_range[0] = val_start
-    if val_end:
-        val_range[1] = val_end
 
-    val_size = config.get("VAL", {}).get("val_size")
+    if val_start:
+        val_config.val_range[0] = val_start
+    if val_end:
+        val_config.val_range[1] = val_end
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
-    
-    # otherwise these are of type string, e.g. '1e-5'
 
     noise_factor = float(noise_factor)
 
-    if mode not in ['GAN', 'VAEGAN', 'det']:
+    if model_config.mode not in ['GAN', 'VAEGAN', 'det']:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
 
     if ensemble_size is not None:
         if train_config.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
-    if eval_model_numbers or evalnum:
-        evaluate = True
-    else:
-        evaluate = False
+    evaluate = (eval_model_numbers or evalnum)
     
-    if evaluate and val_range is None:
+    if evaluate and val_config.val_range is None:
         raise ValueError('Must specify validation range when using --evaluate flag')
     
     # Calculate number of samples from epochs:
@@ -165,7 +152,7 @@ def main(restart: bool, do_training: bool, num_images: int,
         if train_config.num_samples is None:
             if train_config.num_epochs is None:
                 raise ValueError('Must specify either num_epochs or num_samples')
-            num_data_points = len(utils.date_range_from_year_month_range(training_range)) * len(data.all_fcst_hours)
+            num_data_points = len(utils.date_range_from_year_month_range(train_config.training_range)) * len(data.all_fcst_hours)
             train_config.num_samples = num_data_points * train_config.num_epochs
         
     num_checkpoints = int(train_config.num_samples/(train_config.steps_per_checkpoint * train_config.batch_size))
@@ -192,8 +179,8 @@ def main(restart: bool, do_training: bool, num_images: int,
         logger.debug('Starting training')
         # initialize GAN
         model = setupmodel.setup_model(
-            mode=mode,
-            architecture=architecture,
+            mode=model_config.mode,
+            architecture=model_config.architecture,
             downscaling_steps=ds_config.steps,
             input_channels=data_config.input_channels,
             constant_fields=data_config.constant_fields,
@@ -201,7 +188,7 @@ def main(restart: bool, do_training: bool, num_images: int,
             filters_gen=gen_config.filters_gen,
             filters_disc=dis_config.filters_disc,
             noise_channels=gen_config.noise_channels,
-            padding=padding,
+            padding=model_config.padding,
             lr_disc=dis_config.learning_rate_disc,
             lr_gen=gen_config.learning_rate_gen,
             kl_weight=train_config.kl_weight,
@@ -210,15 +197,15 @@ def main(restart: bool, do_training: bool, num_images: int,
             content_loss_weight=train_config.content_loss_weight)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
-            training_range=training_range,
-            validation_range=val_range,
+            training_range=train_config.training_range,
+            validation_range=val_config.val_range,
             fcst_data_source=data_config.fcst_data_source,
             obs_data_source=data_config.obs_data_source,
             latitude_range=latitude_range,
             longitude_range=longitude_range,
-            val_size=val_size,
+            val_size=val_config.val_size,
             records_folder=records_folder,
-            downsample=downsample,
+            downsample=model_config.downsample,
             fcst_shape=input_image_shape,
             con_shape=constants_image_shape,
             out_shape=output_image_shape,
@@ -259,14 +246,14 @@ def main(restart: bool, do_training: bool, num_images: int,
 
             # train for some number of batches
             loss_log = train.train_model(model=model,
-                                         mode=mode,
+                                         mode=model_config.mode,
                                          batch_gen_train=batch_gen_train,
                                          batch_gen_valid=batch_gen_valid,
                                          noise_channels=gen_config.noise_channels,
                                          latent_variables=gen_config.latent_variables,
                                          checkpoint=checkpoint,
                                          steps_per_checkpoint=train_config.steps_per_checkpoint,
-                                         plot_samples=val_size,
+                                         plot_samples=val_config.val_size,
                                          plot_fn=plot_fname)
 
             training_samples += train_config.steps_per_checkpoint * train_config.batch_size
@@ -326,17 +313,17 @@ def main(restart: bool, do_training: bool, num_images: int,
     # evaluate model performance
     if evaluate:
         logger.debug('Performing evaluation')
-        evaluation.evaluate_multiple_checkpoints(mode=mode,
-                                                 arch=architecture,
+        evaluation.evaluate_multiple_checkpoints(mode=model_config.mode,
+                                                 arch=model_config.architecture,
                                                  fcst_data_source=data_config.fcst_data_source,
                                                  obs_data_source=data_config.obs_data_source,
-                                                 validation_range=val_range,
+                                                 validation_range=val_config.val_range,
                                                  latitude_range=latitude_range,
                                                  longitude_range=longitude_range,
                                                  log_folder=log_folder,
                                                  weights_dir=model_weights_root,
                                                  records_folder=records_folder,
-                                                 downsample=downsample,
+                                                 downsample=model_config.downsample,
                                                  noise_factor=noise_factor,
                                                  model_numbers=eval_model_numbers,
                                                  ranks_to_save=ranks_to_save,
@@ -346,12 +333,14 @@ def main(restart: bool, do_training: bool, num_images: int,
                                                  input_channels=data_config.input_channels,
                                                  latent_variables=gen_config.latent_variables,
                                                  noise_channels=gen_config.noise_channels,
-                                                 padding=padding,
+                                                 padding=model_config.padding,
                                                  ensemble_size=ensemble_size,
                                                  constant_fields=data_config.constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples)
+    
+    return log_folder
 
 
 if __name__ == "__main__":
