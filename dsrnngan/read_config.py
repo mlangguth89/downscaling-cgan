@@ -94,9 +94,10 @@ def get_config_objects(config):
     train_config = types.SimpleNamespace(**config['TRAIN'])
     
     train_config.num_epochs = config["TRAIN"].get("num_epochs")
-    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs
-
+    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
     train_config.crop_size = config['TRAIN'].get('img_chunk_width')
+    
+    data_config.load_constants = config['DATA'].get('load_constants', True)   
     
     gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
     dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)

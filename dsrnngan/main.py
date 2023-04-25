@@ -7,15 +7,12 @@ import logging
 from glob import glob
 from pathlib import Path
 import tensorflow as tf
-import types
-
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
 
 from dsrnngan import data
 from dsrnngan import evaluation
-from dsrnngan import plots
 from dsrnngan import read_config
 from dsrnngan import setupdata
 from dsrnngan import setupmodel
@@ -38,15 +35,11 @@ parser.add_argument('--no-train', dest='do_training', action='store_false',
 parser.add_argument('--restart', dest='restart', action='store_true',
                     help="Restart training from latest checkpoint")
 group = parser.add_mutually_exclusive_group()
-group.add_argument('--model-numbers', nargs='+', default=None,
+group.add_argument('--eval-model-numbers', nargs='+', default=None,
                     help='Model number(s) to evaluate on (space separated)')
 group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full")
 group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short")
 group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz")
-parser.add_argument('--evaluate', action='store_true',
-                    help="Boolean: if true will run evaluation")
-parser.add_argument('--plot-ranks', dest='plot_ranks', action='store_true',
-                    help="Plot rank histograms")
 parser.add_argument('--num-samples', type=int,
                     help="Override of num samples")
 parser.add_argument('--num-images', type=int, default=20,
@@ -66,13 +59,37 @@ parser.add_argument('--save-generated-samples', action='store_true',
 parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting of classes',
                     type=float
                     )
+parser.add_argument('--output-suffix', default=None, 
+                    help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
 
-def main(restart, do_training, evaluate, plot_ranks, num_images,
-         noise_factor, ensemble_size, shuffle_eval=True, records_folder=None, evalnum=None, model_numbers=None, 
-         seed=None, num_samples_override=None,
-         val_start=None, val_end=None, save_generated_samples=False, training_weights=None, debug=False
+def main(restart: bool, do_training: bool, num_images: int,
+         noise_factor: float, ensemble_size: int, shuffle_eval: bool=True, records_folder: str=None, evalnum: str=None, eval_model_numbers: list=None, 
+         seed: int=None, num_samples_override: int=None,
+         val_start: str=None, val_end: str=None, save_generated_samples: bool=False, training_weights: list=None, debug: bool=False,
+         output_suffix: str=None
          ):
-    
+    """ Function for training and evaluating a cGAN, from a dataset of tf records
+
+    Args:
+        restart (bool): If True then will restart training from latest checkpoint       
+        do_training (bool): If True then will run training on model 
+        num_images (int): Number of images to evaluate on
+        noise_factor (float): Noise factor to add to CRPS evaluation
+        ensemble_size (int): Size of ensemble to evaluate on
+        shuffle_eval (bool, optional): If False then no shuffling of data before evaluation (for cases where you want to assess on a contiguous range of dates). Defaults to True.
+        records_folder (str, optional): Location of tfrecords. Defaults to None. If None then will try to infer folder from tehash of the config.
+        evalnum (str, optional): String representing type of evaluation: blitz, full, short. Defaults to None.
+        eval_model_numbers (list, optional): List of models numbers to evaluate. Defaults to None.
+        seed (int, optional): Optional random seed. Defaults to None.
+        num_samples_override (int, optional): Total of samples to use in traininig. Defaults to None. If None then will read from config
+        val_start (str, optional): Validation start in YYYYMM format. Defaults to None.
+        val_end (str, optional): Validation end in YYYYMM format. Defaults to None.
+        save_generated_samples (bool, optional): If True then generated samples are stored for further analysis. Defaults to False.
+        training_weights (list, optional): List of floats, fraction of samples to take from each class in the training data. Defaults to None. If None then is read from the config
+        debug (bool, optional): Whether or not to use in debug mode (stops training after first checkpoint). Defaults to False.
+        output_suffix (str, optional): Suffix to append to output folder name. Defaults to None.
+
+    """
     if records_folder is None:
         
         config = read_config.read_config()
@@ -91,11 +108,16 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     padding = config["MODEL"]["padding"]
     log_folder = config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
+    
+    if output_suffix:
+        output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
+        log_folder = log_folder + output_suffix
+    
     mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
     downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False)
     
     ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
-
+    
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (ds_config.downscaling_factor * input_image_shape[0], ds_config.downscaling_factor * input_image_shape[1], 1)
     constants_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.constant_fields)
@@ -106,8 +128,6 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         training_weights = config["TRAIN"]["training_weights"]
 
     ensemble_size = ensemble_size or train_config.ensemble_size  
-    
-    print(f'Crop size: {train_config.crop_size}')
         
     val_range = config['VAL'].get('val_range')
     if val_start:
@@ -130,6 +150,11 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
         if train_config.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
             raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
 
+    if eval_model_numbers or evalnum:
+        evaluate = True
+    else:
+        evaluate = False
+    
     if evaluate and val_range is None:
         raise ValueError('Must specify validation range when using --evaluate flag')
     
@@ -200,7 +225,6 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
             weights=training_weights,
             batch_size=train_config.batch_size,
             load_full_image=False,
-            crop_size=train_config.crop_size,
             seed=seed)
 
         if restart: # load weights and run status
@@ -287,17 +311,17 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
     # last 4 checkpoints, or all checkpoints if < 4
     ranks_to_save = [(finalchkpt - ii)*interval for ii in range(3, -1, -1)] if finalchkpt >= 4 else [ii*interval for ii in range(1, finalchkpt+1)]
 
-    if model_numbers:
-        ranks_to_save = model_numbers
+    if eval_model_numbers:
+        ranks_to_save = eval_model_numbers
         pass
     elif evalnum == "blitz":
-        model_numbers = ranks_to_save.copy()  # should not be modifying list in-place, but just in case!
+        eval_model_numbers = ranks_to_save.copy()  # should not be modifying list in-place, but just in case!
     elif evalnum == "short":
         # last 1/3rd of checkpoints
         Neval = max(finalchkpt // 3, 1)
-        model_numbers = [(finalchkpt - ii)*interval for ii in range((Neval-1), -1, -1)]
+        eval_model_numbers = [(finalchkpt - ii)*interval for ii in range((Neval-1), -1, -1)]
     elif evalnum == "full":
-        model_numbers = np.arange(0, train_config.num_samples + 1, interval)[1:].tolist()
+        eval_model_numbers = np.arange(0, train_config.num_samples + 1, interval)[1:].tolist()
 
     # evaluate model performance
     if evaluate:
@@ -314,7 +338,7 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  records_folder=records_folder,
                                                  downsample=downsample,
                                                  noise_factor=noise_factor,
-                                                 model_numbers=model_numbers,
+                                                 model_numbers=eval_model_numbers,
                                                  ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
                                                  filters_gen=gen_config.filters_gen,
@@ -329,8 +353,6 @@ def main(restart, do_training, evaluate, plot_ranks, num_images,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples)
 
-    if plot_ranks:
-        plots.plot_histograms(os.path.join(log_folder, f"n{num_images}_{'-'.join(val_range)}_e{ensemble_size}"), val_range, ranks=ranks_to_save, N_ranks=11)
 
 if __name__ == "__main__":
     
@@ -345,27 +367,22 @@ if __name__ == "__main__":
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
     args = parser.parse_args()
     
-    if args.model_numbers:
-        model_numbers = [args.model_numbers] if not isinstance(args.model_numbers, list) else args.model_numbers
-        model_numbers = [int(mn) for mn in model_numbers]
+    if args.eval_model_numbers:
+        eval_model_numbers = [args.eval_model_numbers] if not isinstance(args.eval_model_numbers, list) else args.eval_model_numbers
+        eval_model_numbers = [int(mn) for mn in eval_model_numbers]
     else:
-        model_numbers = None
-    
-    if args.evaluate and args.evalnum is None and args.model_numbers is None:
-        raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', '--eval_blitz', or '--model-numbers X Y Z to specify length of evaluation")
-
+        eval_model_numbers = None
 
     main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
-        evaluate=args.evaluate,
-        plot_ranks=args.plot_ranks,
         noise_factor=args.noise_factor,
         num_samples_override=args.num_samples,
         num_images=args.num_images,
-        model_numbers=model_numbers,
+        eval_model_numbers=eval_model_numbers,
         val_start=args.val_ym_start,
         val_end=args.val_ym_end,
         ensemble_size=args.ensemble_size,
         shuffle_eval=not args.no_shuffle_eval,
         save_generated_samples=args.save_generated_samples,
-        training_weights=args.training_weights)
+        training_weights=args.training_weights,
+        output_suffix=args.output_suffix)

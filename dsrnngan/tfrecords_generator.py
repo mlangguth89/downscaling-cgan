@@ -32,8 +32,7 @@ AUTOTUNE = tf.data.AUTOTUNE
 def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
                   downsample=False, weights=None, 
-                  records_folder=records_folder, seed=None,
-                  crop_size=None):
+                  records_folder=records_folder, seed=None):
     return create_mixed_dataset(data_label, 
                                 batch_size,
                                 fcst_shape,
@@ -43,8 +42,7 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 downsample=downsample, 
                                 weights=weights, 
                                 folder=records_folder, 
-                                seed=seed,
-                                crop_size=crop_size)
+                                seed=seed)
 
 
 def create_mixed_dataset(data_label: str,
@@ -57,8 +55,7 @@ def create_mixed_dataset(data_label: str,
                          folder: str=records_folder,
                          shuffle_size: int=1024,
                          weights: list=None,
-                         seed: int=None,
-                         crop_size: int=None):
+                         seed: int=None):
     """_summary_
 
     Args:
@@ -89,8 +86,7 @@ def create_mixed_dataset(data_label: str,
                                folder=folder,
                                shuffle_size=shuffle_size,
                                repeat=repeat,
-                               seed=seed,
-                               crop_size=crop_size)
+                               seed=seed)
                 for i in range(classes)]
     
     sampled_ds = tf.data.Dataset.sample_from_datasets(datasets,
@@ -203,7 +199,6 @@ def create_dataset(data_label: str,
                    fcst_shape=(20, 20, 9),
                    con_shape=(200, 200, 2),
                    out_shape=(200, 200, 1),
-                   crop_size=None,
                    folder: str=records_folder,
                    shuffle_size: int=1024,
                    repeat=True,
@@ -232,8 +227,6 @@ def create_dataset(data_label: str,
             int_seed = seed
     else:
         int_seed = None
-
-    # fl = glob.glob(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
     files_ds = tf.data.Dataset.list_files(f"{folder}/{data_label}_*.{clss}.tfrecords")
     
@@ -254,14 +247,6 @@ def create_dataset(data_label: str,
                                        consize=con_shape,
                                        outsize=out_shape))
                 # num_parallel_calls=AUTOTUNE)
-   
-    # if crop_size:
-    #     if return_dic:
-    #         ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed),
-    #                     num_parallel_calls=AUTOTUNE)
-    #     else:
-    #         ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed),
-    #                     num_parallel_calls=AUTOTUNE)
     
     if repeat:
         return ds.repeat()
@@ -302,19 +287,40 @@ def create_fixed_dataset(year=None,
 def _float_feature(list_of_floats):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-def write_data(year_month_range,
-               data_label,
-               forecast_data_source, 
-               observational_data_source,
-               hours,
-               num_class=4,
-               normalise=True,
-               data_paths=DATA_PATHS,
-               constants=True,
-               latitude_range=None,
-               longitude_range=None,
-               debug=False,
-               config=None):
+def write_data(year_month_range: list,
+               data_label: str,
+               forecast_data_source: str, 
+               observational_data_source: str,
+               hours: list,
+               num_class: int=4,
+               normalise: bool=True,
+               data_paths: dict=DATA_PATHS,
+               constants: bool=True,
+               latitude_range: list=None,
+               longitude_range: list=None,
+               debug: bool=False,
+               config: dict=None) -> str:
+    """
+    Function to write training data to TF records
+
+    Args:
+        year_month_range (list): List of date strings in YYYYMM format. The code will take all dates between the maximum and minimum year months (inclusive)
+        data_label (str): Label to assign to data (e.g. train, validate)
+        forecast_data_source (str): Source of forecast data (e.g. ifs)
+        observational_data_source (str): Source of observational data (e.g. imerg)
+        hours (list): List of hours to include
+        num_class (int, optional): Number of classes to split data into. Defaults to 4.
+        normalise (bool, optional): Whether or not to normalise the input data. Defaults to True.
+        data_paths (dict, optional): Dict of paths to the data sources. Defaults to DATA_PATHS.
+        constants (bool, optional): Whether or not to include constants. Defaults to True.
+        latitude_range (list, optional): Latitude range to use. Defaults to None.
+        longitude_range (list, optional): Longitude range to use. Defaults to None.
+        debug (bool, optional): Debug mode. Defaults to False.
+        config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
+
+    Returns:
+        str: Name of directory that records have been written to
+    """
 
     from .data_generator import DataGenerator
     logger.info('Start of write data')
@@ -407,6 +413,10 @@ def write_data(year_month_range,
                     (depth, width, height) = sample[1]['output'].shape
                 
                     for k in range(depth):
+                        
+                        # NOTE: This kind of random cropping could also be done using Tensorflow during the data loading process. However, our experiments
+                        # found this to be much slower than pre-cropping whilst creating the tensorflow records. The trade-off is that more hard drive space is required to
+                        # store these examples, so the number of samples per image has to be chosen as high as possible to still get the benefit of the random cropping.
                         for ii in range(num_samples_per_image):
                             
                             idx = random.randint(0, width-input_image_width)
@@ -528,48 +538,33 @@ if __name__ == '__main__':
     parser.add_argument('--records-folder', type=str, default=None)
     
     # Load relevant parameters from local config
-
     config = read_config.read_config()
-    
-    training_range = config['TRAIN']['training_range']
+    ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
+      
     val_range = config['VAL'].get('val_range')
     test_range = config.get('EVAL', {}).get('test_range')
     
-    training_range = [str(item) for item in training_range]
+    training_range = [str(item) for item in train_config.training_range]
     if val_range:
         val_range = [str(item) for item in val_range]
     if test_range:
         test_range = [str(item) for item in test_range]
-    
-    fcst_data_source = config['DATA']['fcst_data_source']
-    obs_data_source = config['DATA']['obs_data_source']
-    normalise = config['DATA'].get('normalise', False)
-    num_classes = config['DATA']['num_classes']
-    img_size = config['DATA']['input_image_width']
-    min_latitude = config['DATA']['min_latitude']
-    max_latitude = config['DATA']['max_latitude']
-    latitude_step_size = config['DATA']['latitude_step_size']
-    min_longitude = config['DATA']['min_longitude']
-    max_longitude = config['DATA']['max_longitude']
-    longitude_step_size = config['DATA']['longitude_step_size']
-    
-    scaling_factor =  config['DOWNSCALING']['downscaling_factor']
-    load_constants = config['DATA'].get('load_constants', True)    
+       
     args = parser.parse_args()
     
     data_paths = DATA_PATHS
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_train_test_data(training_range=training_range,
+    write_train_test_data(training_range=train_config.training_range,
                           validation_range=val_range,
                           test_range=test_range,
-                            forecast_data_source=fcst_data_source, 
-                            observational_data_source=obs_data_source,
+                            forecast_data_source=data_config.fcst_data_source, 
+                            observational_data_source=data_config.obs_data_source,
                             hours=args.fcst_hours,
-                            num_class=num_classes,
-                            normalise=normalise,
+                            num_class=data_config.num_classes,
+                            normalise=data_config.normalise,
                             data_paths=data_paths,
-                            constants=load_constants,
-                            latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size),
-                            longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size))
+                            constants=data_config.load_constants,
+                            latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size),
+                            longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size))

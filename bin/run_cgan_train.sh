@@ -34,7 +34,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --evaluate --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/f6998afe16c9f955 --training-weights 0.25 0.25 0.25 0.25
+srun python -m dsrnngan.main --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/ff62fde11969a16f --training-weights 0.25 0.25 0.25 0.25 --output-suffix crop-test
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

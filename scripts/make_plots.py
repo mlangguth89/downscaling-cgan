@@ -20,8 +20,9 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
+from dsrnngan import read_config
 from dsrnngan.utils import load_yaml_file
-from dsrnngan.plots import plot_precip, plot_contourf
+from dsrnngan.plots import plot_contourf
 from dsrnngan.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan import data
 from dsrnngan.rapsd import  rapsd
@@ -103,16 +104,11 @@ dry_day_indexes = [item[0] for item in sorted_means[:10]]
 # Get lat/lon range from log folder
 base_folder = '/'.join(log_folder.split('/')[:-1])
 config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
+ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
 
 # Locations
-min_latitude = config['DATA']['min_latitude']
-max_latitude = config['DATA']['max_latitude']
-latitude_step_size = config['DATA']['latitude_step_size']
-min_longitude = config['DATA']['min_longitude']
-max_longitude = config['DATA']['max_longitude']
-longitude_step_size = config['DATA']['longitude_step_size']
-latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
+longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size)
 
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]

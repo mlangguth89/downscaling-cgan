@@ -30,7 +30,7 @@ class TestMain(unittest.TestCase):
         fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, str(data_folder / 'IFS'))
         ds = xr.load_dataset(fp)
         
-        # Mock IFS stats dicts
+        # Mock IFS stats dicts (to avoid having to create them in data collection stage)
         var_name = list(ds.data_vars)[0]
         stats = {'min': np.abs(ds[var_name]).min().values,
             'max': np.abs(ds[var_name]).max().values,
@@ -44,7 +44,7 @@ class TestMain(unittest.TestCase):
         
     def test_main_ifs_imerg(self):
         """
-        This test is just designed to check the training will run; still to implement 
+        This is an end-to-end test to check the training and tfrecord ; still to implement 
         something that checks the evaluation (requires checkpoints created successfully)
         """
         
@@ -53,6 +53,7 @@ class TestMain(unittest.TestCase):
         
         with tempfile.TemporaryDirectory() as tempdir:
             
+            # Set up con
             data_paths = {'GENERAL': {'IFS': ifs_path, 'IMERG': imerg_folder, 'LSM': os.path.join(constants_path, 'lsm_HRES_EAfrica.nc'), 
                                       'OROGRAPHY': os.path.join(constants_path, 'h_HRES_EAfrica.nc'), 'CONSTANTS': constants_path}, 
                           'TFRecords': {'tfrecords_path': tempdir}}
@@ -62,6 +63,7 @@ class TestMain(unittest.TestCase):
             
             setup_params['DOWNSCALING'] = {'downscaling_factor': 1, 'steps': [1]}
             setup_params['TRAIN']['steps_per_checkpoint'] = 1
+            setup_params['TRAIN']['img_chunk_width'] = 5
 
             setup_params['DATA'] = {
                 'fcst_data_source': 'ifs',
@@ -111,22 +113,23 @@ class TestMain(unittest.TestCase):
                                   '--num-samples',
                                   '10',
                                   '--records-folder',
-                                  records_folder])
+                                  records_folder, 
+                                  '--output-suffix',
+                                  'asdf'])
 
             main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
                 evalnum=args.evalnum,
-                evaluate=args.evaluate,
-                plot_ranks=args.plot_ranks,
                 noise_factor=args.noise_factor,
                 num_samples_override=args.num_samples,
                 num_images=args.num_images,
-                model_numbers=args.model_numbers,
+                eval_model_numbers=args.eval_model_numbers,
                 val_start=args.val_ym_start,
                 val_end=args.val_ym_end,
                 ensemble_size=args.ensemble_size,
                 shuffle_eval=not args.no_shuffle_eval,
                 save_generated_samples=args.save_generated_samples,
-                training_weights=args.training_weights, debug=True)
+                training_weights=args.training_weights, debug=True,
+                output_suffix=args.output_suffix)
                 
 
 

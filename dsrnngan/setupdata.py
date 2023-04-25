@@ -24,7 +24,6 @@ def setup_batch_gen(val: bool,
                     downsample: bool=False,
                     weights=None,
                     val_fixed=True,
-                    crop_size: int=None,
                     seed: int=None
                     ):
 
@@ -37,8 +36,7 @@ def setup_batch_gen(val: bool,
                            out_shape=out_shape,
                            downsample=downsample, 
                            weights=weights, 
-                           records_folder=records_folder, 
-                           crop_size=crop_size,
+                           records_folder=records_folder,
                            seed=seed)
 
     # note -- using create_fixed_dataset with a batch size not divisible by 16 will cause problems [is this true?]
@@ -157,7 +155,6 @@ def setup_data(records_folder,
             val_size=val_size,
             downsample=downsample,
             weights=weights,
-            crop_size=crop_size,
             seed=seed)
 
     gc.collect()
@@ -286,7 +283,7 @@ if __name__=='__main__':
     from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
     from dsrnngan.data import get_obs_dates
     
-    fcst_data_source = 'ifs'
+    data_config.fcst_data_source = 'ifs'
     obs_data_source='imerg'
     full_ym_range = ['201603', '201803']
     n_samples = 'all'
@@ -308,7 +305,7 @@ if __name__=='__main__':
             n_samples = 24*len(ym_dates)
     
         data_gen = setup_full_image_dataset(ym_range,
-                                fcst_data_source=fcst_data_source,
+                                fcst_data_source=data_config.fcst_data_source,
                                 obs_data_source=obs_data_source,
                                 load_constants=True,
                                 data_paths=DATA_PATHS,
@@ -320,7 +317,7 @@ if __name__=='__main__':
                                 shuffle=False
                                 )
         
-        tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
+        tpidx = input_field_lookup[data_config.fcst_data_source.lower()].index('tp')
         
         obs_vals, fcst_vals, dates, hours = [], [], [], []
         
