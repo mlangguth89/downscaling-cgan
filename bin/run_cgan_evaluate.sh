@@ -30,7 +30,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --no-train --eval-model-numbers 275200 --save-generated-samples --records-folder /user/work/uz22147/tfrecords/f6998afe16c9f955 --num-images 4000 --ensemble-size 10 --val-ym-start 201806 --val-ym-end 201905
+srun python -m dsrnngan.main --no-train --eval-model-numbers 275200 --save-generated-samples --no-shuffle-eval --records-folder /user/work/uz22147/tfrecords/f6998afe16c9f955 --num-images 7000 --ensemble-size 1 --val-ym-start 201806 --val-ym-end 201905
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 

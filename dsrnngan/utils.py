@@ -39,3 +39,22 @@ def date_range_from_year_month_range(year_month_range):
                                  day=monthrange(end_year, end_month)[1])
     
     return [item.date() for item in pd.date_range(start=start_date, end=end_date)]
+
+def get_best_model_number(log_folder: str, metric_column_name: str='CRPS_no_pooling'):
+    """
+    Get model number that has lowest value according to metric specified (defaults to CRPS)
+
+    Args:
+        log_folder (str): Path to evaluation results
+        metric_column_name (str): Name of column to optimise on. Defaults to CRPS_no_pooling 
+
+    Returns:
+        int: Model number
+    """
+    df = pd.read_csv(os.path.join(log_folder, 'eval_validation.csv'))
+
+    # find model_number with lowest CRPS
+    min_crps = df['CRPS_no_pooling'].min()
+    model_number = df[df.CRPS_no_pooling == min_crps]['N'].values[0]
+    
+    return model_number

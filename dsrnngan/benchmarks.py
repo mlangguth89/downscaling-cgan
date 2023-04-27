@@ -84,7 +84,7 @@ def get_quantiles_by_area(quantile_areas, fcst_data, obs_data, quantile_locs, qu
     return quantiles_by_area
 
 def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quantiles_by_area, hours=None, 
-                                 quantile_threshold=0.99999):
+                                 quantile_threshold=None):
     # Find indexes of dates in test set relative to the date chunks
     
     fcst = fcst.copy()
@@ -136,15 +136,16 @@ def get_quantile_mapped_forecast(fcst, dates, month_ranges, quantile_areas, quan
                         zero_inds = np.argwhere(tmp_fcst_array == 0.0)
                         fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(imerg_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
                     
-                    # Find nearest quantile to the threshold
-                    quantile_threshold_ix = np.abs(np.array(quantile_locs) - quantile_threshold).argmin()
-                    ifs_quantile_threshold = ifs_quantiles[quantile_threshold_ix]
-                    imerg_quantile_threshold = imerg_quantiles[quantile_threshold_ix]
-                    extreme_inds = np.argwhere(tmp_fcst_array >= ifs_quantile_threshold)
+                    if quantile_threshold is not None:
+                        # Find nearest quantile to the threshold
+                        quantile_threshold_ix = np.abs(np.array(quantile_locs) - quantile_threshold).argmin()
+                        ifs_quantile_threshold = ifs_quantiles[quantile_threshold_ix]
+                        imerg_quantile_threshold = imerg_quantiles[quantile_threshold_ix]
+                        extreme_inds = np.argwhere(tmp_fcst_array >= ifs_quantile_threshold)
 
-                    uplift = imerg_quantile_threshold - ifs_quantile_threshold
+                        uplift = imerg_quantile_threshold - ifs_quantile_threshold
 
-                    fcst_corrected[extreme_inds, lat_index, lon_index ] = tmp_fcst_array[extreme_inds] + uplift
+                        fcst_corrected[extreme_inds, lat_index, lon_index ] = tmp_fcst_array[extreme_inds] + uplift
     
     return fcst_corrected
 

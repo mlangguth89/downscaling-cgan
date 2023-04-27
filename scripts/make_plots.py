@@ -21,7 +21,7 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 
 from dsrnngan import read_config
-from dsrnngan.utils import load_yaml_file
+from dsrnngan.utils import load_yaml_file, get_best_model_number
 from dsrnngan.plots import plot_contourf
 from dsrnngan.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan import data
@@ -39,12 +39,12 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': True,
-               'rank_hist': True,
-               'rapsd': True,
-               'quantiles': True,
-               'hist': True,
-               'crps': True,
+metric_dict = {'examples': False,
+               'rank_hist': False,
+               'rapsd': False,
+               'quantiles': False,
+               'hist': False,
+               'crps': False,
                'fss': True,
                'diurnal': True,
                'confusion_matrix': True
@@ -59,11 +59,9 @@ plot_persistence = False
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
 parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME))
-parser.add_argument('--model-number', type=str, help='Checkpoint to evaluate on', default=str(HOME))
 parser.add_argument('--model-type', type=str, help='Choice of model type', default=str(HOME))
 args = parser.parse_args()
 
-model_number = args.model_number
 model_type = args.model_type
 
 log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
@@ -72,6 +70,9 @@ log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201
                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
                'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10',
                'cropped_v2': '/user/work/uz22147/logs/cgan/f6998afe16c9f955/n4000_201806-201905_e10'}
+
+
+model_number = get_best_model_number(log_folder=log_folders[model_type])
 
 if model_type not in log_folders:
     raise ValueError('Model type not found')
@@ -105,7 +106,7 @@ dry_day_indexes = [item[0] for item in sorted_means[:10]]
 # Get lat/lon range from log folder
 base_folder = '/'.join(log_folder.split('/')[:-1])
 config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
-ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
+model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
 
 # Locations
 latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
@@ -130,26 +131,28 @@ for k, v in special_areas.items():
 
 
 ################################################################################
-### Quantile mapping
+### Quantile mapping of IFS data
 
 
 # Quantiles
 step_size = 0.001
-range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 64},
-              1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 512},
-              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 1024},
-              3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 512},
-              4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 256},
-              5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 64 },
-              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 20},
-              7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 20}}
+range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 32},
+              1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 256},
+              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 512},
+              3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
+              4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 128},
+              5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
+              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10},
+              7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 10},
+              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10}}
                   
 percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
 percentiles=np.concatenate(percentiles_list)
 quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
 
 
-month_ranges = [[1,2], [3,4,5], [6,7,8,9], [10,11,12]]
+# month_ranges = [[1,2], [3,4,5], [6,7,8,9], [10,11,12]]
+month_ranges = [list(range(1, 13))]
 quantile_threshold = 0.999
 
 fps = glob('/user/work/uz22147/quantile_training_data/*_744.pkl')
@@ -185,7 +188,42 @@ fcst_corrected = get_quantile_mapped_forecast(fcst=fcst_array, dates=dates,
                                               quantile_areas=quantile_areas, 
                                               quantiles_by_area=quantiles_by_area)
                                             #   quantile_threshold=0.99999)
-                                            
+
+
+################################################################################
+### Quantile mapping of GAN data
+
+
+# NOTE:This requires data collection for the model 
+
+cgan_training_sample_dict = {'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1',
+                             'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1'}
+# model_number = 288000
+model_number = get_best_model_number(log_folder=cgan_training_sample_dict[model_type])
+with open(os.path.join(cgan_training_sample_dict[model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
+    arrays = pickle.load(ifh)
+    
+imerg_training_data = arrays['truth']
+cgan_training_data = arrays['samples_gen'][:,:,:,0]
+training_dates = [d[0] for d in arrays['dates']]
+training_hours = [h[0] for h in arrays['hours']]
+
+# identify best threshold and train on all the data
+quantile_locs = [np.round(item / 100.0, 10) for item in percentiles] + [1.0]
+
+# identify best threshold and train on all the data
+quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude_range, longitude_range, 
+                                    hours=training_hours, 
+                                    num_lat_lon_chunks=1)
+quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=cgan_training_data, 
+                                          obs_data=imerg_training_data, 
+                                          quantile_locs=quantile_locs)
+
+cgan_corrected = get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0].copy(), dates=dates, 
+                                              hours=hours, month_ranges=month_ranges, 
+                                              quantile_areas=quantile_areas, 
+                                              quantiles_by_area=quantiles_by_area)
+                                
 ################################################################################
 ## Climatological data for comparison.
 
@@ -288,7 +326,7 @@ if metric_dict['examples']:
     cb.ax.set_xlabel("Precipitation (mm / hr)", loc='center')
 
 
-    plt.savefig(f'cGAN_samples_IFS_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/cGAN_samples_IFS_{model_type}_{model_number}.pdf', format='pdf')
 
 ##################################################################################
 ###  Rank histogram
@@ -330,43 +368,28 @@ print('*********** Plotting RAPSD **********************')
 
 if metric_dict['rapsd']:
 
-    rapsd_truth = []
-    rapsd_pred = []
-    rapsd_fcst = []
-    rapsd_fcst_corrected = []  
-    rapsd_fcst_persisted = []
+    rapsd_data_dict = {
+                        'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'linestyle': '-'},
+                        'Obs (IMERG)': {'data': truth_array, 'color': 'k', 'linestyle': '-'},
+                        'Fcst': {'data': fcst_array, 'color': 'r', 'linestyle': '-'},
+                        'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'linestyle': '--'},
+                        'GAN + qmap': {'data': cgan_corrected, 'color': 'b', 'linestyle': '--'}}
 
-    for n in tqdm(range(n_samples)):
-            fft_freq_pred = rapsd(truth_array[n,:,:], fft_method=np.fft)
-            rapsd_truth.append(fft_freq_pred)
+    rapsd_results = {}
+    for k, v in rapsd_data_dict.items():
+            rapsd_results[k] = []
+            for n in tqdm(range(n_samples)):
             
-            fft_freq_pred = rapsd(samples_gen_array[n,:,:,0], fft_method=np.fft)
-            rapsd_pred.append(fft_freq_pred)
+                    fft_freq_pred = rapsd(v['data'][n,:,:], fft_method=np.fft)
+                    rapsd_results[k].append(fft_freq_pred)
 
-            fft_freq_fcst = rapsd(fcst_array[n, :, :], fft_method=np.fft)
-            rapsd_fcst.append(fft_freq_fcst)
-            
-            fft_freq_fcst_corrected = rapsd(fcst_corrected[n, :, :], fft_method=np.fft)
-            rapsd_fcst_corrected.append(fft_freq_fcst_corrected)
-            
-            fft_freq_fcst_persisted = rapsd(persisted_fcst_array[n, :, :], fft_method=np.fft)
-            rapsd_fcst_persisted.append(fft_freq_fcst_persisted)
-
-    rapsd_truth = np.mean(np.stack(rapsd_truth, axis=-1), axis=-1)
-    rapsd_pred = np.mean(np.stack(rapsd_pred, axis=-1), axis=-1)
-    rapsd_fcst = np.mean(np.stack(rapsd_fcst, axis=-1), axis=-1)
-    rapsd_fcst_corrected = np.mean(np.stack(rapsd_fcst_corrected, axis=-1), axis=-1)
-    rapsd_fcst_persisted = np.mean(np.stack(rapsd_fcst_persisted, axis=-1), axis=-1)
+            rapsd_results[k] = np.mean(np.stack(rapsd_results[k], axis=-1), axis=-1)
 
     fig, ax = plt.subplots(1,1)
 
-    ax.plot(rapsd_truth, label='IMERG', color='k')
-    ax.plot(rapsd_fcst, 'r', label='IFS')
-    ax.plot(rapsd_fcst_corrected, 'r--', label='IFS qmap')
-    ax.plot(rapsd_pred, 'b', label='cGAN sample') # Single member of ensemble
+    for k, v in rapsd_results.items():
+        ax.plot(v, label=k, color=rapsd_data_dict[k]['color'], linestyle=rapsd_data_dict[k]['linestyle'])
     
-    if plot_persistence:
-        ax.plot(rapsd_fcst_persisted, 'k--', label='Persisted')
     plt.xscale('log')
     plt.yscale('log')
     ax.set_ylabel('Power Spectral Density')
@@ -381,61 +404,61 @@ print('*********** Plotting Q-Q  **********************')
 
 if metric_dict['quantiles']:
 
+    
+    quantile_data_dict = {
+                    'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
+                    'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
+                    'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
+                    'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
+                    'GAN + qmap': {'data': cgan_corrected, 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
+
+    quantile_results = {}
+    for data_name, d in quantile_data_dict.items():
+            quantile_results[data_name] = {}
+            
+            for k, v in tqdm(range_dict.items()):
+            
+                quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
+                
+                quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
+
+    fig, ax = plt.subplots(1,1, figsize=(8,8))
+    marker_handles = None
+
     # Quantiles for annotating plot
     (q_99pt9, q_99pt99, q_99pt999) = np.quantile(truth_array, [0.999, 0.9999, 0.99999])
 
-    fig, ax = plt.subplots(1,1, figsize=(8,8))
-    
-    truth_quantiles = {}
-    sample_quantiles = {}
-    fcst_quantiles = {}
-    fcst_corrected_quantiles = {}
-    persisted_fcst_quantiles = {}
-
-    marker_handles = None
-    for v in range_dict.values():
-        
-        quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
-        
-        truth_quantiles[k] = np.quantile(truth_array, quantile_boundaries)
-        sample_quantiles[k] = np.quantile(samples_gen_array[:,:,:,0], quantile_boundaries)
-        fcst_quantiles[k] = np.quantile(fcst_array, quantile_boundaries)
-        fcst_corrected_quantiles[k] = np.quantile(fcst_corrected, quantile_boundaries)
-        persisted_fcst_quantiles[k] = np.quantile(persisted_fcst_array, quantile_boundaries)
-
-        max_fcst_val = max(max(sample_quantiles), max(fcst_quantiles))
-        max_truth_val = max(truth_quantiles)
-        
+    for k, v in tqdm(range_dict.items()):    
         size=v['marker_size']
         cmap = plt.colormaps["plasma"]
         marker = v['marker']
-
-        s1 = ax.scatter(truth_quantiles, sample_quantiles, c='blue', marker='+', label='cGAN', s=size, cmap=cmap)
-        s2 = ax.scatter(truth_quantiles, fcst_quantiles, c='red', marker='x', label='IFS', s=size, cmap=cmap)
-        s3 = ax.scatter(truth_quantiles, fcst_corrected_quantiles, c='green', marker='.', label='IFS qmap', s=size, cmap=cmap, alpha=0.7)
         
-        if plot_persistence:
-            s4 = ax.scatter(truth_quantiles, persisted_fcst_quantiles, c='black', marker='+', label='Persisted', s=size, cmap=cmap)
+        max_fcst_val = max(max(quantile_results['GAN'][k]), max(quantile_results['Fcst'][k]))
+        max_truth_val = max(quantile_results['Obs (IMERG)'][k])
+
+        marker_hndl_list = []
+        for data_name, res in quantile_results.items():
+            if data_name != 'Obs (IMERG)':
+                s = ax.scatter(quantile_results['Obs (IMERG)'][k], quantile_results[data_name][k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
+                            cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+                marker_hndl_list.append(s)
         
         if not marker_handles:
-            if plot_persistence:
-                marker_handles = [s1, s2, s3, s4]
-            else:
-                marker_handles = [s1, s2, s3]
-
+            marker_handles = marker_hndl_list
+        
     # all_marker_handles = list(itertools.chain.from_iterable(marker_handles.values()))
     ax.legend(handles=marker_handles, loc='center left')
     ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
     ax.set_xlabel('Observations (mm/hr)')
     ax.set_ylabel('Model (mm/hr)')
-
-    largest_key = max(sample_quantiles)
-    ax.vlines(q_99pt9, 0, max(sample_quantiles[largest_key]), linestyles='--')
-    ax.vlines(q_99pt99, 0, max(sample_quantiles[largest_key]), linestyles='--')
-    ax.vlines(q_99pt999, 0, max(sample_quantiles[largest_key]), linestyles='--')
-    ax.text(q_99pt9 , max(sample_quantiles[largest_key]) - 20, '$99.9^{th}$')
-    ax.text(q_99pt99 , max(sample_quantiles[largest_key]) - 20, '$99.99^{th}$')
-    ax.text(q_99pt999  , max(sample_quantiles[largest_key]) - 20, '$99.999^{th}$')
+    
+    largest_key = max(quantile_results['GAN'])
+    ax.vlines(q_99pt9, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
+    ax.vlines(q_99pt99, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
+    ax.vlines(q_99pt999, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
+    ax.text(q_99pt9 , max(quantile_results['GAN'][largest_key]) - 20, '$99.9^{th}$')
+    ax.text(q_99pt99 , max(quantile_results['GAN'][largest_key]) - 20, '$99.99^{th}$')
+    ax.text(q_99pt999  , max(quantile_results['GAN'][largest_key]) - 20, '$99.999^{th}$')
 
     plt.rcParams.update({'font.size': 20})
     plt.savefig(f'plots/quantiles_total_{model_type}_{model_number}.pdf', format='pdf')
@@ -447,35 +470,38 @@ if metric_dict['quantiles']:
     percentiles=np.concatenate(percentiles_list)
     quantile_boundaries = [item / 100 for item in percentiles]
 
-    fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, 18))
+    fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, len(special_areas)*10))
     fig.tight_layout(pad=4)
     for n, (area, area_range) in enumerate(special_areas.items()):
 
-
         lat_range = area_range['lat_index_range']
         lon_range = area_range['lon_index_range']
-        truth_quantiles = np.quantile(truth_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], quantile_boundaries)
-        sample_quantiles = np.quantile(samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0], quantile_boundaries)
-        fcst_quantiles = np.quantile(fcst_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], quantile_boundaries)
-        fcst_corrected_quantiles = np.quantile(fcst_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], quantile_boundaries)
         
-        max_val = max(truth_quantiles)
+        quantile_results = {}
+        for data_name, d in quantile_data_dict.items():
         
-        ax[n].scatter(truth_quantiles, sample_quantiles, marker='+', label='cgan')
-        ax[n].scatter(truth_quantiles, fcst_quantiles, marker='x', label='fcst')
-        ax[n].scatter(truth_quantiles, fcst_corrected_quantiles, marker='o', label='fcst qmap')
+            quantile_results[data_name] = np.quantile(d['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], quantile_boundaries)
+        
+        max_val = max(quantile_results['Obs (IMERG)'])
+        
+        for data_name, res in quantile_results.items():
+            if data_name != 'Obs (IMERG)':
+                ax[n].scatter(quantile_results['Obs (IMERG)'], res, c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
+                                cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+
         ax[n].plot(np.arange(0,max_val, 0.1), np.arange(0,max_val, 0.1), 'k--')
         ax[n].set_xlabel('truth')
         ax[n].set_ylabel('model')
         ax[n].set_title(area)
-        ax[n].legend(loc='upper left')
         
-        max_line_val = max(max(sample_quantiles), max_val, max(fcst_quantiles))
+        ax[n].legend(loc='center left')
+        
+        max_line_val = max(max(quantile_results['GAN']), max(quantile_results['Fcst']))
         (q_99pt9, q_99pt99) = np.quantile(truth_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], [0.999, 0.9999])
         ax[n].vlines(q_99pt9, 0, max_line_val, linestyles='--')
         ax[n].vlines(q_99pt99, 0, max_line_val, linestyles='--')
-        ax[n].text(q_99pt9 , max_line_val - 20, '$99.9^{th}$')
-        ax[n].text(q_99pt99 , max_line_val - 20, '$99.99^{th}$')
+        ax[n].text(q_99pt9 , max_line_val -2, '$99.9^{th}$')
+        ax[n].text(q_99pt99 , max_line_val -2, '$99.99^{th}$')
         
     fig.tight_layout(pad=2.0)
     plt.savefig(f'plots/quantiles_area_{model_type}_{model_number}.pdf', format='pdf')
@@ -495,8 +521,9 @@ if metric_dict['hist']:
 
     data_dict = {'Obs (IMERG)': {'data': truth_array, 'histtype': 'stepfilled', 'alpha':0.6, 'facecolor': 'grey'}, 
                 'IFS': {'data': fcst_array, 'histtype': 'step', 'edgecolor': 'red'},
-                'IFS qmap': {'data': fcst_corrected, 'histtype': 'step', 'edgecolor': 'red', 'linestyle': '--'},
-                'cGAN sample': {'data': samples_gen_array[:,:,:,0], 'histtype': 'step', 'edgecolor': 'blue'}}
+                'IFS + qmap': {'data': fcst_corrected, 'histtype': 'step', 'edgecolor': 'red', 'linestyle': '--'},
+                'cGAN': {'data': samples_gen_array[:,:,:,0], 'histtype': 'step', 'edgecolor': 'blue'},
+                'cGAN + qmap': {'data': cgan_corrected, 'histtype': 'step', 'edgecolor': 'blue', 'linestyle': '--'}}
     rainfall_amounts = {}
 
     edge_colours = ["blue", "green", "red", 'orange']
@@ -520,13 +547,16 @@ if metric_dict['hist']:
     #################################################################################
     ## Bias and RMSE
     # RMSE
-    rmse_dict = {'single_sample_rmse': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
-                'ensmean_rmse' : np.sqrt(np.mean(np.square(truth_array - np.mean(samples_gen_array, axis=-1)), axis=0)),
-                'fcst_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0))}
+    rmse_dict = {'GAN_rmse': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
+                'fcst_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
+                'GAN_qmap_rmse': np.sqrt(np.mean(np.square(truth_array - cgan_corrected), axis=0)),
+                'fcst_qmap_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected), axis=0))}
 
-    bias_dict = {'single_sample_bias': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
+    bias_dict = {'GAN_bias': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
                 'ensmean_bias' : np.mean(ensmean_array - truth_array, axis=0),
-                'fcst_bias' : np.mean(fcst_array - truth_array, axis=0)}
+                'fcst_bias' : np.mean(fcst_array - truth_array, axis=0), 
+                'GAN_qmap_bias': np.mean(cgan_corrected - truth_array, axis=0),
+                'fcst_qmap_bias' : np.mean(fcst_corrected - truth_array, axis=0)}
 
     fig, ax = plt.subplots(len(rmse_dict.keys())+1,2, 
                         subplot_kw={'projection' : ccrs.PlateCarree()},
@@ -550,6 +580,8 @@ if metric_dict['hist']:
     plt.colorbar(im, ax=ax[n+1,0])
 
     plt.savefig(f'plots/rmse_{model_type}_{model_number}.pdf', format='pdf')
+    
+    # Bias
 
     lat_range=np.arange(-10.05, 10.05, 0.1)
     lon_range=np.arange(25.05, 45.05, 0.1)
@@ -630,16 +662,19 @@ if metric_dict['fss']:
     from dsrnngan.plots import plot_fss_scores
 
     window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
-    # n_samples = truth_array.shape[0]
-    n_samples = 10
+    n_samples = truth_array.shape[0]
+    
     fss_data_dict = {
                         'cgan': samples_gen_array[:n_samples, :, :, 0],
                         'ifs': fcst_array[:n_samples, :, :],
-                        'fcst_qmap': fcst_corrected[:n_samples, :, :]}
+                        'fcst_qmap': fcst_corrected[:n_samples, :, :],
+                        'cgan_qmap': cgan_corrected[:n_samples, :, :]}
 
     # get quantiles
     quantile_locs = [0.5, 0.985, 0.999, 0.9999]
-    fss_results = get_fss_scores(truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
+    hourly_thresholds = np.quantile(truth_array, quantile_locs)
+
+    fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
     # Save results
     with open(f'plots/fss_{model_type}_{model_number}.pkl', 'wb+') as ofh:
@@ -662,11 +697,44 @@ if metric_dict['fss']:
         area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
         fss_data_dict = {
                         'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
-                        'ifs': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-                        'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]}  
+                        'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]}  
         fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
         
         plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{model_type}_{model_number}')
+        
+
+    # FSS for grid scale
+    # from dsrnngan.scoring import get_filtered_array
+
+    # mode = 'constant'
+
+    # for thr_index in range(len(hourly_thresholds)):
+
+    #     thr = hourly_thresholds[thr_index] # 0 = median
+
+    #     arrays_filtered = {}
+
+    #     for size in window_sizes:
+
+    #         arrays_filtered[size] = {}
+
+    #         for k, d in tqdm(fss_data_dict.items()):  
+    #             arrays_filtered[size][k] = []
+    #             for n in range(truth_array.shape[0]):
+    #                 # Convert to binary fields with the given intensity threshold
+    #                 I = (d >= thr).astype(np.single)
+
+    #                 # Compute fractions of pixels above the threshold within a square
+    #                 # neighboring area by applying a 2D moving average to the binary fields        
+    #                 arrays_filtered[size][k].append(get_filtered_array(int_array=I, mode=mode, size=size))
+
+    #         for k in arrays_filtered[size]:
+    #             arrays_filtered[size][k] = np.stack(arrays_filtered[size][k])
+
+    # with open(f'fss_grid_{model_type}_{model_number}_thr{thr_index}.pkl', 'wb+') as ofh:
+    #     pickle.dump(arrays_filtered, ofh)  
 
 #################################################################################
 

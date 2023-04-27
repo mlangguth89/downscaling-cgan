@@ -112,7 +112,8 @@ class TestEvaluation(unittest.TestCase):
                                         noise_channels=gen_config.noise_channels,
                                         latent_variables=gen_config.latent_variables,
                                         padding=model_config.padding,
-                                        data_paths=DATA_PATHS)
+                                        data_paths=DATA_PATHS,
+                                        shuffle=True)
 
         print('loading weights')
         gen.load_weights(most_recent_model)

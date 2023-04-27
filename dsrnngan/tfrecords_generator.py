@@ -539,7 +539,7 @@ if __name__ == '__main__':
     
     # Load relevant parameters from local config
     config = read_config.read_config()
-    ds_config, data_config, gen_config, dis_config, train_config = read_config.get_config_objects(config)
+    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
       
     val_range = config['VAL'].get('val_range')
     test_range = config.get('EVAL', {}).get('test_range')

@@ -19,7 +19,7 @@ DATA:
     constant_fields: 2
     input_image_width: 200 # Assumes a square image
     num_samples: 320000
-    num_samples_per_image: 4
+    num_samples_per_image: 8
     normalise: True
     num_classes: 4 # Number of bins to split data into
     min_latitude: -11.95

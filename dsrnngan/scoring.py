@@ -66,9 +66,23 @@ def mae_above_threshold(y_true, y_pred, percentile_threshold=0.95):
     return mae_95
 
 
+
+
 ##
 # The code below is based off the pysteps code, please refer to their license
 
+def get_filtered_array(int_array: np.ndarray, size: int, mode: str='constant'):
+    
+    if size > 1:
+        if mode == 'constant':
+            S = uniform_filter(int_array, size=size, mode="constant", cval=0.0)
+        else:
+            S = uniform_filter(int_array, size=size, mode=mode)
+    else:
+        S = int_array.copy()
+        
+    return S
+    
 def fss(obs_array, fcst_array, scale, thr, mode='constant'):
 
     """Accumulate ensemble forecast-observation pairs to an FSS object.
@@ -100,6 +114,7 @@ def fss(obs_array, fcst_array, scale, thr, mode='constant'):
     sum_fct_sq = 0
 
     for n in range(obs_array.shape[0]):
+        
         X_o = obs_array[n, :, :]
         X_f = fcst_array[n, :, :, :]
 
@@ -109,25 +124,13 @@ def fss(obs_array, fcst_array, scale, thr, mode='constant'):
 
         # Compute fractions of pixels above the threshold within a square
         # neighboring area by applying a 2D moving average to the binary fields
-        if scale > 1:
-            if mode == 'constant':
-                S_o = uniform_filter(I_o, size=scale, mode="constant", cval=0.0)
-            else:
-                S_o = uniform_filter(I_o, size=scale, mode=mode)
-        else:
-            S_o = I_o
+        
+        S_o = get_filtered_array(int_array=I_o, mode=mode, size=scale)
             
         for ii in range(X_f.shape[-1]):
-            if scale > 1:
-                if mode == 'constant':
-                    S_f = uniform_filter(I_f[:, :, ii], size=scale, mode="constant", cval=0.0)
-                else:
-                        
-                    S_f = uniform_filter(I_f[:, :, ii], size=scale, mode=mode)
-                
-            else:
-                S_f = I_f[:, :, ii]
-        
+            
+            S_f = get_filtered_array(int_array=I_f[:, :, ii], mode=mode, size=scale)
+                   
             sum_obs_sq += np.sum(S_o ** 2)
             sum_fct_obs += np.sum(S_f * S_o)
             sum_fct_sq += np.sum(S_f ** 2)

@@ -21,7 +21,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m scripts.make_plots --model-number 275200 --model-type cropped_v2
+srun python -m scripts.make_plots --model-type cropped_v2
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

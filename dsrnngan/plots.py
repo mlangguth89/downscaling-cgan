@@ -50,7 +50,7 @@ def plot_precip(np_array, ax, levels, linewidth=default_linewidth, extent=defaul
 def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
                   cmap='Reds'):
     
-    if value_range:
+    if value_range is not None:
         im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
                             cmap=cmap, 
                             levels=value_range, norm=colors.Normalize(min(value_range), max(value_range)),
