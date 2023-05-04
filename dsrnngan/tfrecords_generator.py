@@ -1,16 +1,12 @@
 import os
 import glob
-import datetime
 import random
 import time
 import numpy as np
 import tensorflow as tf
 import logging
-import hashlib
 from argparse import ArgumentParser
-from calendar import monthrange
 from tqdm import tqdm
-import pandas as pd
 import git
 
 from dsrnngan import read_config
@@ -31,7 +27,7 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
-                  downsample=False, weights=None, 
+                  downsample=False, weights=None, crop_size=None,
                   records_folder=records_folder, seed=None):
     return create_mixed_dataset(data_label, 
                                 batch_size,
@@ -41,6 +37,7 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 repeat=repeat, 
                                 downsample=downsample, 
                                 weights=weights, 
+                                crop_size=crop_size,
                                 folder=records_folder, 
                                 seed=seed)
 
@@ -55,6 +52,7 @@ def create_mixed_dataset(data_label: str,
                          folder: str=records_folder,
                          shuffle_size: int=1024,
                          weights: list=None,
+                         crop_size: int=None,
                          seed: int=None):
     """_summary_
 
@@ -69,6 +67,7 @@ def create_mixed_dataset(data_label: str,
         folder (str, optional): folder containing tf records. Defaults to records_folder.
         shuffle_size (int, optional): buffer size of shuffling. Defaults to 1024.
         weights (list, optional): list of floats, weights of classes when sampling. Defaults to None.
+        crop_size (int, optional): Size to crop randomly crop images to.
         seed (int, optional): seed for shuffling and sampling. Defaults to None.
 
     Returns:
@@ -86,6 +85,7 @@ def create_mixed_dataset(data_label: str,
                                folder=folder,
                                shuffle_size=shuffle_size,
                                repeat=repeat,
+                               crop_size=crop_size,
                                seed=seed)
                 for i in range(classes)]
     
@@ -201,7 +201,8 @@ def create_dataset(data_label: str,
                    out_shape=(200, 200, 1),
                    folder: str=records_folder,
                    shuffle_size: int=1024,
-                   repeat=True,
+                   repeat: bool=True,
+                   crop_size: int=None,
                    seed: int=None):
     """
     Load tfrecords and parse into appropriate shapes
@@ -214,6 +215,7 @@ def create_dataset(data_label: str,
         out_shape (tuple, optional): shape of the output (lat, lon, n_features). Defaults to (200, 200, 1).
         folder (_type_, optional): folder containing tf records. Defaults to records_folder.
         shuffle_size (int, optional): buffer size for shuffling. Defaults to 1024.
+        crop_size (int, optional): Size to crop randomly crop images to.
         repeat (bool, optional): create repeat dataset or not. Defaults to True.
 
     Returns:
@@ -228,17 +230,11 @@ def create_dataset(data_label: str,
     else:
         int_seed = None
     
-    files_ds = tf.data.Dataset.list_files(f"{folder}/{data_label}_*.{clss}.tfrecords")
-    
-    ignore_order = tf.data.Options()
-    ignore_order.experimental_deterministic = False 
+    files_ds = tf.data.Dataset.list_files(f"{folder}/{data_label}_*.{clss}.*.tfrecords")
      
     ds = tf.data.TFRecordDataset(files_ds,
                                  num_parallel_reads=AUTOTUNE)
     
-    ds = ds.with_options(
-        ignore_order
-    )
     
     ds = ds.shuffle(shuffle_size, seed=int_seed)
 
@@ -247,6 +243,15 @@ def create_dataset(data_label: str,
                                        consize=con_shape,
                                        outsize=out_shape))
                 # num_parallel_calls=AUTOTUNE)
+                
+    if crop_size:
+        if return_dic:
+            ds = ds.map(lambda x,y: _dataset_cropper_dict(x, y, crop_size=crop_size, seed=seed), 
+                                                          num_parallel_calls=AUTOTUNE)
+        else:
+            ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed), 
+                                                            num_parallel_calls=AUTOTUNE)
+        
     
     if repeat:
         return ds.repeat()
@@ -254,15 +259,15 @@ def create_dataset(data_label: str,
         return ds
 
 
-def create_fixed_dataset(year=None,
-                         mode='validation',
-                         batch_size=16,
-                         downsample=False,
-                         fcst_shape=(20, 20, 9),
-                         con_shape=(200, 200, 2),
-                         out_shape=(200, 200, 1),
-                         name=None,
-                         folder=records_folder):
+def create_fixed_dataset(year: int=None,
+                         mode: str='validation',
+                         batch_size: int=16,
+                         downsample: bool=False,
+                         fcst_shape: tuple=(20, 20, 9),
+                         con_shape: tuple=(200, 200, 2),
+                         out_shape: tuple=(200, 200, 1),
+                         name: str=None,
+                         folder: str=records_folder):
     assert year is not None or name is not None, "Must specify year or file name"
     if name is None:
         name = os.path.join(folder, f"{mode}{year}.tfrecords")
@@ -284,7 +289,7 @@ def create_fixed_dataset(year=None,
     return ds
 
 
-def _float_feature(list_of_floats):  # float32
+def _float_feature(list_of_floats: list):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
 def write_data(year_month_range: list,
@@ -299,7 +304,8 @@ def write_data(year_month_range: list,
                latitude_range: list=None,
                longitude_range: list=None,
                debug: bool=False,
-               config: dict=None) -> str:
+               config: dict=None,
+               num_shards: int=10) -> str:
     """
     Function to write training data to TF records
 
@@ -317,6 +323,7 @@ def write_data(year_month_range: list,
         longitude_range (list, optional): Longitude range to use. Defaults to None.
         debug (bool, optional): Debug mode. Defaults to False.
         config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
+        num_shards (int, optional): Number of shards to split each tfrecord into (to make sure records are not too big)
 
     Returns:
         str: Name of directory that records have been written to
@@ -329,7 +336,7 @@ def write_data(year_month_range: list,
     dates = date_range_from_year_month_range(year_month_range)
     start_date = dates[0]
     
-    # This is super slow! So removing it for now, there are checls further on that deal with it
+    # This is super slow! So removing it for now, there are checks further on that deal with it
     # dates = [item for item in dates if file_exists(data_source=observational_data_source, year=item.year,
     #                                                     month=item.month, day=item.day,
     #                                                     data_paths=data_paths)]
@@ -394,12 +401,14 @@ def write_data(year_month_range: list,
             print(f'Data generator initialization took {time.time() - start_time}')
             
             start_time = time.time()
-            fle_hdles = {}
+            
             if dates:
-                fle_hdles = []
-                for fh in range(num_class):
-                    flename = os.path.join(hash_dir, f"{data_label}_{hour}.{fh}.tfrecords")
-                    fle_hdles.append(tf.io.TFRecordWriter(flename))
+                fle_hdles = {}
+                for cl in range(num_class):
+                    fle_hdles[cl] = []
+                    for shard in range(num_shards):
+                        flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
+                        fle_hdles[cl].append(tf.io.TFRecordWriter(flename))
             
             print(f'File initialization took {time.time() - start_time}')
             print('starting fetching batches')
@@ -471,14 +480,18 @@ def write_data(year_month_range: list,
                                     clss = len(class_bin_boundaries) 
                             else:
                                 clss = random.choice(range(num_class))
+                                
+                            # Choose random shard
+                            fh = random.choice(fle_hdles[clss])
 
-                            fle_hdles[clss].write(example_to_string)
+                            fh.write(example_to_string)
                             
                 except FileNotFoundError as e:
                     print(f"Error loading hour={hour}, date={date}")
             
-            for fh in fle_hdles:
-                fh.close()
+            for cl, fhs in fle_hdles.items():
+                for fh in fhs:
+                    fh.close()
                     
         return hash_dir
     else:

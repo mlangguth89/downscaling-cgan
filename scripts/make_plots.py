@@ -39,12 +39,12 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': False,
-               'rank_hist': False,
-               'rapsd': False,
-               'quantiles': False,
-               'hist': False,
-               'crps': False,
+metric_dict = {'examples': True,
+               'rank_hist': True,
+               'rapsd': True,
+               'quantiles': True,
+               'hist': True,
+               'crps': True,
                'fss': True,
                'diurnal': True,
                'confusion_matrix': True

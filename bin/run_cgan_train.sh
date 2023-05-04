@@ -8,6 +8,7 @@
 #SBATCH --output=logs/slurm-%A.out
 
 # GPU can handle 200 x 200 x 64 x 2 arrays with 100gb
+# Memory needs to be around 400gb to get decent performance, particularly it seems when passing in larger datasets
 
 # try with --gres=gpu:rtx_3090:1
 
@@ -34,7 +35,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/5c577a485fbd1a72 --training-weights 0.25 0.25 0.25 0.25
+srun python -m dsrnngan.main --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/a0ec71842ab58eba --training-weights 0.25 0.25 0.25 0.25
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

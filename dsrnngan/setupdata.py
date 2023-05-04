@@ -5,6 +5,7 @@ import pickle
 from glob import glob
 import numpy as np
 from tqdm import tqdm
+from typing import Iterable, Generator
 
 from dsrnngan import tfrecords_generator
 from dsrnngan.tfrecords_generator import DataGenerator
@@ -15,15 +16,14 @@ from dsrnngan import setupmodel, setupdata
 from dsrnngan import read_config
 
 
-def setup_batch_gen(val: bool,
-                    records_folder: str,
+def setup_batch_gen(records_folder: str,
                     fcst_shape: tuple,
                     con_shape: tuple,
                     out_shape: tuple,
                     batch_size: int=64,
-                    val_size: int=None,
                     downsample: bool=False,
                     weights=None,
+                    crop_size: int=None,
                     val_fixed=True,
                     seed: int=None
                     ):
@@ -37,6 +37,7 @@ def setup_batch_gen(val: bool,
                            out_shape=out_shape,
                            downsample=downsample, 
                            weights=weights, 
+                           crop_size=crop_size,
                            records_folder=records_folder,
                            seed=seed)
 
@@ -90,28 +91,55 @@ def setup_full_image_dataset(year_month_range,
     return data_full
 
 
-def setup_data(records_folder,
-               fcst_data_source,
-               obs_data_source,
-               latitude_range,
-               longitude_range,
-               training_range=None,
-               validation_range=None,
-               hour='random',
-               val_size=None,
-               downsample=False,
-               fcst_shape=(20, 20, 9),
-               con_shape=(200, 200, 1),
-               out_shape=(200, 200, 1),
-               load_constants=True, # If True will load constants data
-               weights=None,
-               batch_size=None,
-               load_full_image=False,
-               seed=None,
-               data_paths=DATA_PATHS,
-               crop_size=None,
-               shuffle=True):
+def setup_data(fcst_data_source: str,
+               obs_data_source: str,
+               latitude_range: list[float],
+               longitude_range: list[float],
+               training_range: list[float]=None,
+               validation_range: list[float]=None,
+               records_folder: str=None,
+               hour: str='random',
+               downsample: bool=False,
+               fcst_shape: tuple[int]=(20, 20, 9),
+               con_shape: tuple[int]=(200, 200, 1),
+               out_shape: tuple[int]=(200, 200, 1),
+               load_constants: bool=True, # If True will load constants data
+               weights: Iterable=None,
+               batch_size: int=None,
+               load_full_image: bool=False,
+               seed: int=None,
+               data_paths: dict=DATA_PATHS,
+               crop_size: int=None,
+               permute_var_index: int=None,
+               shuffle: bool=True) -> tuple[Generator]:
+    """
+        Setup data for training or validation; if load_ful
 
+    Args:
+        fcst_data_source (str): Forecast data source, e.g. ifs
+        obs_data_source (str): Observation data source e.g. imerg
+        latitude_range (list[float]): Latitude range 
+        longitude_range (list[float]): Longitude range
+        training_range (list[float], optional): Range of training dates, list of YYYYMM format (just the start and end required). Defaults to None.
+        validation_range (list[float], optional): Range of validation dates, list of YYYYMM format (just the start and end required). Defaults to None.
+        records_folder (str, optional): Folder with tfrecords in it (required if load_full_image=False). Defaults to None.
+        hour (str, optional): Hour to load. Defaults to 'random'.
+        downsample (bool, optional): _description_. Defaults to False.
+        fcst_shape (tuple[int], optional): _description_. Defaults to (20, 20, 9).
+        con_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
+        out_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
+        load_constants (bool, optional): _description_. Defaults to True.
+        batch_size (int, optional): _description_. Defaults to None.
+        load_full_image (bool, optional): _description_. Defaults to False.
+        seed (int, optional): _description_. Defaults to None.
+        data_paths (dict, optional): _description_. Defaults to DATA_PATHS.
+        crop_size (int, optional): _description_. Defaults to None.
+        permute_var_index (int, optional): _description_. Defaults to None.
+        shuffle (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        tuple[Generator]: Tuple containing training data generator and validation data generator
+    """
     if load_full_image:
         if training_range is None:
             batch_gen_train = None
@@ -153,9 +181,9 @@ def setup_data(records_folder,
             con_shape=con_shape,
             out_shape=out_shape,
             batch_size=batch_size,
-            val_size=val_size,
             downsample=downsample,
             weights=weights,
+            crop_size=crop_size,
             seed=seed)
 
     gc.collect()
@@ -198,6 +226,19 @@ def load_model_from_folder(model_folder, model_number=None):
 def load_data_from_config(config: dict, records_folder: str=None,
                           batch_size: int=1, load_full_image: bool=True, 
                           data_paths: dict=DATA_PATHS, hour: int='random'):
+    """Load data based on config file
+
+    Args:
+        config (dict): _description_
+        records_folder (str, optional): Folder path to tf records. Defaults to None.
+        batch_size (int, optional): Size of batches. Defaults to 1.
+        load_full_image (bool, optional): If True will load full sized image. Defaults to True.
+        data_paths (dict, optional): Dict containing data paths. Defaults to DATA_PATHS.
+        hour (int, optional): Hour to load. Defaults to 'random'.
+
+    Returns:
+        _type_: _description_
+    """
     
     model_config, _, _, data_config, _, _, train_config, val_config = read_config.get_config_objects(config)
     

@@ -34,6 +34,30 @@ constants_path = str(data_folder / 'constants')
 era5_path = str(data_folder / 'ERA5')
 imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 
+def create_dummy_stats_data(year=2017):
+    
+    for field in all_ifs_fields:
+        fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, ifs_path)
+        ds = xr.load_dataset(fp)
+        
+        # Mock IFS stats dicts
+        var_name = list(ds.data_vars)[0]
+        stats = {'min': np.abs(ds[var_name]).min().values,
+            'max': np.abs(ds[var_name]).max().values,
+            'mean': ds[var_name].mean().values,
+            'std': ds[var_name].std().values}
+        
+        # Saving it as 2017 since that's the defualt 
+        output_fp = f'{constants_path}/IFS_norm_{field}_{year}_lat0-1lon33-34.pkl'
+        with open(output_fp, 'wb') as f:
+            pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
+        
+        # Save for another different lat / lon range
+        output_fp = f'{constants_path}/IFS_norm_{field}_{year}_lat0-0lon33-33.pkl'
+        with open(output_fp, 'wb') as f:
+            pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
+    
+
 class TestLoad(unittest.TestCase):
     
     def setUp(self) -> None:
@@ -43,27 +67,12 @@ class TestLoad(unittest.TestCase):
         self.temp_stats_dir_name = self.temp_stats_dir.name
                       
         if not os.path.isdir(os.path.join(constants_path, 'tp')):
-    
+            
+            create_dummy_stats_data()
+            
             for field in all_ifs_fields:
                 fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, ifs_path)
                 ds = xr.load_dataset(fp)
-                
-                # Mock IFS stats dicts
-                var_name = list(ds.data_vars)[0]
-                stats = {'min': np.abs(ds[var_name]).min().values,
-                    'max': np.abs(ds[var_name]).max().values,
-                    'mean': ds[var_name].mean().values,
-                    'std': ds[var_name].std().values}
-                
-                # Saving it as 2017 since that's the defualt 
-                output_fp = f'{constants_path}/IFS_norm_{field}_2017_lat0-1lon33-34.pkl'
-                with open(output_fp, 'wb') as f:
-                    pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
-                
-                # Save for another different lat / lon range
-                output_fp = f'{constants_path}/IFS_norm_{field}_2017_lat0-0lon33-33.pkl'
-                with open(output_fp, 'wb') as f:
-                    pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
                     
                 # Create mock data for calculating stats in IFS
                 all_dates = list(pd.date_range(start='2017-01-01', end='2017-12-01', freq='D'))
@@ -499,11 +508,11 @@ class TestLoad(unittest.TestCase):
         # TODO: get NIMROD data sample to enable this test to work with IFS + NIMROD
         # Check it works with IFS: 
 
-        ifs_batch_dates = ['20170705'] 
+        ifs_batch_dates = ['20170704'] 
         ifs_input_batch, imerg_batch = load_fcst_radar_batch(ifs_batch_dates, fcst_data_source='ifs', obs_data_source='imerg', fcst_fields=all_ifs_fields, 
                                           fcst_dir=ifs_path, obs_data_dir=imerg_folder, latitude_range=latitude_vals,
                                           longitude_range=longitude_vals, constants_dir=constants_path,
-                                          constants=True, hour=8, norm=False)
+                                          constants=True, hour=17, norm=False)
         self.assertEqual(len(ifs_input_batch), 2)
         self.assertEqual(len(ifs_input_batch[0]), len(ifs_batch_dates))
         self.assertEqual(len(ifs_input_batch[1]), len(ifs_batch_dates))

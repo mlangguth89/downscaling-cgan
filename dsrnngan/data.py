@@ -1,4 +1,4 @@
-""" File for handling data loading and saving. """
+""" Functions for handling data loading and saving. """
 from genericpath import isfile
 import os
 import re
@@ -8,6 +8,7 @@ import netCDF4
 from calendar import monthrange
 from tqdm import tqdm
 from glob import glob
+from typing import Iterable
 
 from datetime import datetime, timedelta, date
 import numpy as np
@@ -169,7 +170,7 @@ def order_coordinates(ds: xr.Dataset):
     else:
         return ds.transpose(lat_var_name, lon_var_name)
 
-def standardise_dataset(ds: xr.Dataset):
+def make_dataset_consistent(ds: xr.Dataset):
     """
     Ensure longitude and latitude are ordered in ascending order
 
@@ -177,7 +178,7 @@ def standardise_dataset(ds: xr.Dataset):
         ds (xr.Dataset): dataset
 
     Returns:
-        xr.Dataset: _description_
+        xr.Dataset: Dataset with data reordered
     """
     
     latitude_var, longitude_var = infer_lat_lon_names(ds)
@@ -500,7 +501,7 @@ def load_orography(oro_path: str=OROGRAPHY_PATH,
         else:
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
 
-    ds = standardise_dataset(ds)
+    ds = make_dataset_consistent(ds)
 
     # Normalise and clip below to remove spectral artefacts
     h_vals = ds['h'].values[0, :, :]
@@ -537,7 +538,7 @@ def load_land_sea_mask(lsm_path=LSM_PATH,
         else:
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
             
-    ds = standardise_dataset(ds)
+    ds = make_dataset_consistent(ds)
     
     lsm = ds['lsm'].values[0, :, :]
     
@@ -580,16 +581,16 @@ def load_hires_constants(batch_size: int=1, lsm_path: str=LSM_PATH,
 ### These functions work with IFS / Nimrod.
 # TODO: unify the functions that load data from different sources
 
-def load_fcst_radar_batch(batch_dates, 
-                          fcst_fields, 
-                          fcst_data_source, 
-                          obs_data_source, 
-                          fcst_dir,
-                          obs_data_dir,
-                          latitude_range=None,
-                          longitude_range=None,
-                          constants_dir=CONSTANTS_PATH,
-                          constants=False, hour=0, norm=False):
+def load_fcst_radar_batch(batch_dates: Iterable, 
+                          fcst_fields: list, 
+                          fcst_data_source: str, 
+                          obs_data_source: str, 
+                          fcst_dir: str,
+                          obs_data_dir: str,
+                          latitude_range: Iterable[float]=None,
+                          longitude_range: Iterable[float]=None,
+                          constants_dir: str=CONSTANTS_PATH,
+                          constants: bool=False, hour: int=0, norm: bool=False):
     batch_x = []
     batch_y = []
 
@@ -609,9 +610,11 @@ def load_fcst_radar_batch(batch_dates,
         batch_x.append(load_fcst_stack(fcst_data_source, fcst_fields, date, h,
                                        latitude_vals=latitude_range, longitude_vals=longitude_range, fcst_dir=fcst_dir,
                                        norm=norm, constants_dir=constants_dir))
-        batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=norm,
-                                               latitude_vals=latitude_range, longitude_vals=longitude_range,
-                                               data_dir=obs_data_dir))
+        
+        if obs_data_source is not None:
+            batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=norm,
+                                                latitude_vals=latitude_range, longitude_vals=longitude_range,
+                                                data_dir=obs_data_dir))
     if (not constants):
         return np.array(batch_x), np.array(batch_y)
     else:
@@ -756,7 +759,7 @@ def load_ifs_raw(field: str,
             ds = ds.sel(longitude=longitude_vals, method='backfill')
             ds = ds.sel(latitude=latitude_vals, method='backfill')
     
-    ds = standardise_dataset(ds)
+    ds = make_dataset_consistent(ds)
     ds = ds.transpose('latitude', 'longitude')
              
     return ds
@@ -954,7 +957,7 @@ def load_era5_month_raw(variable, year, month, latitude_vals=None, longitude_val
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
 
     # Make sure dataset is consistent with others
-    ds = standardise_dataset(ds)
+    ds = make_dataset_consistent(ds)
     
     if variable == 'tp':
         # Convert to mm
@@ -1125,7 +1128,7 @@ def load_imerg_raw(year: int, month: int, day: int,
         ds = ds.sel(lat=latitude_vals + 1e-6, method='nearest')
         
     # Make sure dataset is consistent with others
-    ds = standardise_dataset(ds)
+    ds = make_dataset_consistent(ds)
     ds = ds.transpose('lat', 'lon', 'latv', 'lonv')
 
     return ds

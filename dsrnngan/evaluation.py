@@ -70,9 +70,9 @@ def setup_inputs(*,
     # always uses full-sized images
     print('Loading full sized image dataset')
     _, data_gen_valid = setupdata.setup_data(
-        records_folder,
         fcst_data_source,
         obs_data_source,
+        records_folder=records_folder,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
         load_full_image=True,
@@ -216,6 +216,8 @@ def eval_one_chkpt(*,
     persisted_fcst_vals = []
     dates = []
     hours = []
+    cond_vals = []
+    const_vals = []
     
     ranks = []
     lowress = []
@@ -288,7 +290,8 @@ def eval_one_chkpt(*,
         
         dates.append(date)
         hours.append(hour)
-
+        cond_vals.append(cond)
+        const_vals.append(const)
 
         # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
     
@@ -368,6 +371,8 @@ def eval_one_chkpt(*,
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
     fcst_array = np.stack(fcst_vals, axis=0)
     persisted_fcst_array = np.stack(persisted_fcst_vals, axis=0)
+    cond_array = np.stack(cond_vals, axis=0)
+    const_array = np.stack(const_vals, axis=0)
     
     point_metrics = {}
         
@@ -393,9 +398,9 @@ def eval_one_chkpt(*,
     rank_arrays = (ranks, lowress, hiress)
     
     arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 
-              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours}
+              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours, 'cond': cond_array, 'const': const_array}
 
-    return rank_arrays, point_metrics, arrays
+    return point_metrics, arrays
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -477,7 +482,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, agg_metrics, arrays = eval_one_chkpt(mode=mode,
+        agg_metrics, arrays = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -488,8 +493,6 @@ def evaluate_multiple_checkpoints(*,
                                              noise_factor=noise_factor,
                                              latitude_range=latitude_range,
                                              longitude_range=longitude_range)
-        ranks, lowress, hiress = rank_arrays
-        OP = rank_OP(ranks)
                 
         # save one directory up from model weights, in same dir as logfile
         output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(validation_range)}_e{ensemble_size}")

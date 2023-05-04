@@ -157,7 +157,8 @@ class TestEvaluation(unittest.TestCase):
                    noise_factor=1e-3,
                    denormalise_data=True,
                    normalize_ranks=True,
-                   show_progress=True,)
+                   show_progress=True)
+        
         
     def test_eval_multiple_checkpoints(self):
         
@@ -195,3 +196,4 @@ class TestEvaluation(unittest.TestCase):
                                     constant_fields=data_config.constant_fields,
                                     data_paths=DATA_PATHS)
             
+        

@@ -43,7 +43,9 @@ def set_gpu_mode():
     if lc['use_gpu']:
         print('Setting up GPU')
         os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # remove environment variable (if it doesn't exist, nothing happens)
+        
         # set memory allocation to incremental if desired
+        # I think this is to ensure the GPU doesn't run out of memory
         if lc['gpu_mem_incr']:
             gpus = tf.config.list_physical_devices('GPU')
             if gpus:

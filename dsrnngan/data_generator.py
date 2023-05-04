@@ -1,6 +1,8 @@
 """ Data generator class for full-image evaluation of precipitation downscaling network """
+import random
 import numpy as np
 import tensorflow as tf
+from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
 from dsrnngan.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
@@ -9,11 +11,13 @@ from dsrnngan import read_config
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
-    def __init__(self, dates, batch_size, forecast_data_source, observational_data_source, data_paths=DATA_PATHS,
-                 shuffle=True, constants=True, hour='random', longitude_range=None,
-                 latitude_range=None, normalise=True,
-                 downsample=False, seed=None):
-
+    def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, data_paths: dict=DATA_PATHS,
+                 shuffle: bool=True, constants: bool=True, hour: Union[int, str]='random', longitude_range: Iterable[float]=None,
+                 latitude_range: Iterable[float]=None, normalise: bool=True,
+                 downsample: bool=False, seed: int=None):
+        
+        if seed is not None:
+            random.seed(seed)
         self.dates = dates
 
         if isinstance(hour, str):
@@ -36,6 +40,7 @@ class DataGenerator(Sequence):
 
         else:
             raise ValueError(f"Unsupported hour {hour}")
+    
 
         self.shuffle = shuffle
         if self.shuffle:
@@ -54,6 +59,18 @@ class DataGenerator(Sequence):
         self.downsample = downsample
         self.latitude_range = latitude_range
         self.longitude_range = longitude_range
+        
+        self.permute_var = None
+            
+        # if permute_fcst_index is not None:
+        #     if permute_fcst_index > len(self.fcst_fields):
+        #         raise ValueError(f'permute_fcst_index must be between 0 and {len(self.fcst_fields)}')
+        #     self.permute_var = self.fcst_fields[permute_fcst_index]
+        #     random.seed(seed)
+        #     permuted_indexes = random.sample(list(range(len(dates))), len(dates))
+            
+        #     self.permuted_dates = self.dates[permuted_indexes]
+        #     self.permuted_hours = self.hours[permuted_indexes]
                
         if self.downsample:
             # read downscaling factor from file
@@ -99,6 +116,20 @@ class DataGenerator(Sequence):
             latitude_range=self.latitude_range,
             longitude_range=self.longitude_range)
         
+        # if self.permute_var is not None:
+        #     data_x_batch, data_y_batch = load_fcst_radar_batch(
+        #         dates_batch,
+        #         fcst_dir=self.data_paths['GENERAL'][self.forecast_data_source.upper()],
+        #         obs_data_dir=self.data_paths['GENERAL'][self.observational_data_source.upper()],
+        #         constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
+        #         fcst_fields=[self.permute_var],
+        #         fcst_data_source=self.forecast_data_source,
+        #         obs_data_source=None,
+        #         hour=hours_batch,
+        #         norm=self.normalise,
+        #         latitude_range=self.latitude_range,
+        #         longitude_range=self.longitude_range)
+        
         if self.downsample:
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
@@ -121,6 +152,38 @@ class DataGenerator(Sequence):
         if self.shuffle:
             self.shuffle_data()
 
+class PermutedDataGenerator(Sequence):
+    """
+    A class designed to mimic the data generator, but returning values where the inputs have been permuted
+    
+    Designed to be used in a situation where data has already been gather
+    """
+    def __init__(self, lo_res_inputs: np.ndarray, hi_res_inputs: np.ndarray, outputs: np.ndarray, dates: np.ndarray, hours: np.ndarray,
+                 permute_fcst_index: int, seed: int=None):
+            
+            self.lo_res_inputs = lo_res_inputs
+            self.hi_res_inputs = hi_res_inputs
+            self.outputs = outputs
+            self.dates = dates
+            self.hours = hours
+            
+            num_forecast_vars = self.lo_res_inputs.shape[-1]
+            if permute_fcst_index > num_forecast_vars:
+                raise ValueError(f'permute_fcst_index must be between 0 and {num_forecast_vars}')
+            self.permute_fcst_index = permute_fcst_index
+            
+            random.seed(seed)
+            self.permuted_indexes = random.sample(list(range(len(self.dates))), len(self.dates))
 
+    def __getitem__(self, idx):
+
+        permuted_lo_res_inputs = self.lo_res_inputs.copy()
+        permuted_lo_res_inputs[:,:,:,self.permute_fcst_index] = permuted_lo_res_inputs[self.permuted_indexes, :, :, self.permute_fcst_index]
+        
+        return {"lo_res_inputs": permuted_lo_res_inputs[idx:idx+1, :, :, :],
+                "hi_res_inputs": self.hi_res_inputs[idx, :, :, :],
+                "dates": self.dates[idx,:], "hours": self.hours[idx, :]},\
+                {"output": self.outputs}
+                
 if __name__ == "__main__":
     pass

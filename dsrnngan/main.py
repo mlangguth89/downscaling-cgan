@@ -6,10 +6,14 @@ import git
 import logging
 from glob import glob
 from pathlib import Path
-import tensorflow as tf
+
+from tensorflow import config as tf_config
+
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
+
+
 
 from dsrnngan import data
 from dsrnngan import evaluation
@@ -91,6 +95,7 @@ def main(restart: bool, do_training: bool, num_images: int,
         log_folder (str, optional): root folder to store results in. Defaults to None. If None then will be taken from config.
 
     """
+    print('Reading config')
     if records_folder is None:
         
         config = read_config.read_config()
@@ -102,9 +107,6 @@ def main(restart: bool, do_training: bool, num_images: int,
     else:
         config = utils.load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
         data_paths = utils.load_yaml_file(os.path.join(records_folder, 'data_paths.yaml'))
-
-    # TODO either change this to use a toml file or e.g. pydantic input validation
-    logger.debug('Reading config')
 
     log_folder = log_folder or config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
@@ -210,6 +212,7 @@ def main(restart: bool, do_training: bool, num_images: int,
             con_shape=constants_image_shape,
             out_shape=output_image_shape,
             weights=training_weights,
+            crop_size=train_config.crop_size,
             batch_size=train_config.batch_size,
             load_full_image=False,
             seed=seed)
@@ -345,7 +348,8 @@ def main(restart: bool, do_training: bool, num_images: int,
 
 if __name__ == "__main__":
     
-    gpu_devices = tf.config.list_physical_devices('GPU')
+    print('Checking GPU devices')
+    gpu_devices = tf_config.list_physical_devices('GPU')
     
     print(gpu_devices)
     
@@ -353,7 +357,9 @@ if __name__ == "__main__":
         logger.debug('GPU devices are not being seen')
     logger.debug(gpu_devices)
     
+    print('Setting GPU mode')
     read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
+    
     args = parser.parse_args()
     
     if args.eval_model_numbers:
