@@ -305,7 +305,7 @@ def write_data(year_month_range: list,
                longitude_range: list=None,
                debug: bool=False,
                config: dict=None,
-               num_shards: int=10) -> str:
+               num_shards: int=1) -> str:
     """
     Function to write training data to TF records
 
@@ -335,12 +335,6 @@ def write_data(year_month_range: list,
       
     dates = date_range_from_year_month_range(year_month_range)
     start_date = dates[0]
-    
-    # This is super slow! So removing it for now, there are checks further on that deal with it
-    # dates = [item for item in dates if file_exists(data_source=observational_data_source, year=item.year,
-    #                                                     month=item.month, day=item.day,
-    #                                                     data_paths=data_paths)]
-    
     dates = [item for item in dates if file_exists(data_source=forecast_data_source, year=item.year,
                                                         month=item.month, day=item.day,
                                                         data_paths=data_paths)]
@@ -355,7 +349,8 @@ def write_data(year_month_range: list,
             config = read_config.read_config()
         
         class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
-        if class_bin_boundaries:
+        if class_bin_boundaries is not None:
+            print(f'Data will be bundled according to class bin boundaries provided: {class_bin_boundaries}')
             num_class = len(class_bin_boundaries) + 1
 
         input_image_width = config['DATA']['input_image_width']

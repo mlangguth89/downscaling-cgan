@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --time=8-00:00:00
-#SBATCH --mem=400gb
+#SBATCH --mem=550gb
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=cgan-train
 #SBATCH --partition cnu
@@ -35,7 +35,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.main --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/a0ec71842ab58eba --training-weights 0.25 0.25 0.25 0.25
+srun python -m dsrnngan.main --eval-short --restart --num-samples 320000 --records-folder /user/work/uz22147/tfrecords/78c7c571fa79eaf1 --training-weights 0.25 0.25 0.25 0.25
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
  

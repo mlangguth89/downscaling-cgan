@@ -17,9 +17,9 @@ DATA:
     obs_data_source: "imerg"
     input_channels: 20 # e.g. Number of variables from forecast data
     constant_fields: 2
-    input_image_width: 264 # Assumes a square image
+    input_image_width: 200 # Assumes a square image
     num_samples: 320000
-    num_samples_per_image: 1
+    num_samples_per_image: 6
     normalise: True
     num_classes: 4 # Number of bins to split data into
     min_latitude: -11.95
@@ -28,7 +28,6 @@ DATA:
     min_longitude: 25.05
     max_longitude: 51.45
     longitude_step_size: 0.1
-    class_bin_boundaries: [0.045, 0.067, 0.093] # These are the quartile boundaries for the training data
 
 DOWNSCALING:
     downscaling_factor: 1  # increase in image size in each dimension

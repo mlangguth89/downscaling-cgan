@@ -26,7 +26,7 @@ from dsrnngan.plots import plot_contourf
 from dsrnngan.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan import data
 from dsrnngan.rapsd import  rapsd
-from dsrnngan.scoring import fss
+from dsrnngan.scoring import fss, get_spread_error_data
 from dsrnngan.evaluation import get_diurnal_cycle
 from dsrnngan.benchmarks import get_quantile_areas, get_quantiles_by_area, get_quantile_mapped_forecast
 
@@ -39,14 +39,15 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': True,
-               'rank_hist': True,
-               'rapsd': True,
-               'quantiles': True,
-               'hist': True,
-               'crps': True,
-               'fss': True,
-               'diurnal': True,
+metric_dict = {'examples': False,
+               'rank_hist': False,
+               'spread_error': True,
+               'rapsd': False,
+               'quantiles': False,
+               'hist': False,
+               'crps': False,
+               'fss': False,
+               'diurnal': False,
                'confusion_matrix': True
                }
 
@@ -255,10 +256,11 @@ hourly_historical_std = daily_historical_std / 24
 ## Plot examples
 #################################################################################################
 
-print('*********** Plotting Examples **********************')
+
 
 
 if metric_dict['examples']:
+    print('*********** Plotting Examples **********************')
     tp_index = data.all_ifs_fields.index('tp')
 
     # plot configurations
@@ -332,10 +334,11 @@ if metric_dict['examples']:
 ###  Rank histogram
 ##################################################################################
 
-print('*********** Plotting Rank histogram **********************')
 
 
 if metric_dict['rank_hist']:
+    
+    print('*********** Plotting Rank histogram **********************') 
     rng = np.random.default_rng()
     noise_factor = 1e-6
     n_samples = 100
@@ -361,12 +364,43 @@ if metric_dict['rank_hist']:
     plt.savefig(f'plots/rank_hist__{model_type}_{model_number}.pdf', format='pdf')
 
 #################################################################################
+## Spread error
+
+if metric_dict['spread_error']:
+    print('*********** Plotting spread error **********************')
+    plt.rcParams.update({'font.size': 20})
+    
+    upper_percentile = 99.99
+    quantile_step_size = (100-upper_percentile) / 100
+    
+    data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
+                 'cgan_qmap': {'data': cgan_corrected, 'label': 'GAN + qmap'}}
+    fig, ax = plt.subplots(1,1)
+    for k, v in data_dict.items():
+        variance_mse_pairs = get_spread_error_data(n_samples=n_samples, observation_array=truth_array, ensemble_array=v['data'], 
+                                                   quantile_step_size=quantile_step_size)
+
+
+        # Currently leaving out the top one
+        ens_spread = [np.sqrt(item[0]) for item in variance_mse_pairs[:-1]]
+        rmse_err = [np.sqrt(item[1]) for item in variance_mse_pairs[:-1]]
+
+        ax.plot(ens_spread, rmse_err, label=v['label'])
+    ax.plot(np.linspace(0,max(ens_spread),10), np.linspace(0,max(ens_spread),10), '--')
+    ax.set_ylabel('RMSE')
+    ax.set_xlabel('Ensemble spread')
+    ax.set_title(f'Spread error up to {100*(1-quantile_step_size)}th percentile')
+    plt.savefig(f'plots/spread_error_{model_type}_{model_number}.pdf', format='pdf')
+
+#################################################################################
 ## RAPSD
 
-print('*********** Plotting RAPSD **********************')
 
 
+plt.rcParams.update({'font.size': 16})
 if metric_dict['rapsd']:
+    
+    print('*********** Plotting RAPSD **********************')
 
     rapsd_data_dict = {
                         'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'linestyle': '-'},
@@ -395,16 +429,16 @@ if metric_dict['rapsd']:
     ax.set_ylabel('Power Spectral Density')
     ax.set_xlabel('Wavenumber')
     ax.legend()
-    plt.rcParams.update({'font.size': 16})
+    
     plt.savefig(f'plots/rapsd_{model_type}_{model_number}.pdf', format='pdf')
 
 #################################################################################
 ## Q-Q plot
-print('*********** Plotting Q-Q  **********************')
+
 
 if metric_dict['quantiles']:
 
-    
+    print('*********** Plotting Q-Q  **********************')
     quantile_data_dict = {
                     'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
                     'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
@@ -509,9 +543,11 @@ if metric_dict['quantiles']:
 #################################################################################
 ## Histograms
 
-print('*********** Plotting Histograms **********************')
+
 
 if metric_dict['hist']:
+    print('*********** Plotting Histograms **********************')
+    
     (q_99pt9, q_99pt99) = np.quantile(truth_array, [0.999, 0.9999])
 
 
@@ -625,10 +661,11 @@ if metric_dict['hist']:
 #################################################################################
 
 ## CRPS
-print('*********** Plotting CRPS **********************')
-
 
 if metric_dict['crps']:
+    
+    print('*********** Plotting CRPS **********************')
+    
     # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
     crps_score_grid = crps_ensemble(truth_array, samples_gen_array)
     crps_score = crps_score_grid.mean()
@@ -652,12 +689,10 @@ if metric_dict['crps']:
 
 #################################################################################
 
-## Fractional Skill Score
-print('*********** Plotting FSS **********************')
-
+## Fractions Skill Score
 
 if metric_dict['fss']:
-
+    print('*********** Plotting FSS **********************')
     from dsrnngan.evaluation import get_fss_scores
     from dsrnngan.plots import plot_fss_scores
 
@@ -738,10 +773,9 @@ if metric_dict['fss']:
 
 #################################################################################
 
-print('*********** Plotting Diurnal cycle **********************')
-
-
 if metric_dict['diurnal']:
+    print('*********** Plotting Diurnal cycle **********************')
+
     ## Diurnal cycletruth_array, samples_gen_array, fcst_array, persisted_fcst_array, dates, hours, longitude_range, latitude_range
     hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts = get_diurnal_cycle(truth_array, samples_gen_array,
                                                                                              fcst_array, dates, hours, longitude_range, latitude_range)
@@ -808,14 +842,16 @@ if metric_dict['diurnal']:
 #################################################################################
 
 if metric_dict.get('confusion_matrix'):
-    
+    print('*********** Calculating confusion matrices **********************')
+
     # Confusion matrix
     from sklearn.metrics import confusion_matrix
     
-    quantile_locations = [0.1, 0.5, 0.75, 0.9, 0.99, 0.999, 0.9999]
-    hourly_thresholds = np.quantile(truth_array, quantile_locations)
+    # quantile_locations = [0.1, 0.5, 0.75, 0.9, 0.99, 0.999, 0.9999]
+    # hourly_thresholds = np.quantile(truth_array, quantile_locations)
+    hourly_thresholds = [0.1, 5, 20]
 
-    results = {'quantile_locations': quantile_locations,
+    results = {'hourly_thresholds': hourly_thresholds,
                'conf_mat': []}
     for threshold in hourly_thresholds:
         y_true = (truth_array > threshold).astype(np.int0).flatten()

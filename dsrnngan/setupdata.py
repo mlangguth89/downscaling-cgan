@@ -24,8 +24,9 @@ def setup_batch_gen(records_folder: str,
                     downsample: bool=False,
                     weights=None,
                     crop_size: int=None,
-                    val_fixed=True,
-                    seed: int=None
+                    seed: int=None,
+                    val=False,
+                    val_fixed=False,
                     ):
 
     tfrecords_generator.return_dic = False
@@ -110,7 +111,6 @@ def setup_data(fcst_data_source: str,
                seed: int=None,
                data_paths: dict=DATA_PATHS,
                crop_size: int=None,
-               permute_var_index: int=None,
                shuffle: bool=True) -> tuple[Generator]:
     """
         Setup data for training or validation; if load_ful
