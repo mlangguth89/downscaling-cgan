@@ -13,10 +13,10 @@ HOME = Path(os.getcwd())
 sys.path.insert(1, str(HOME))
 
 
-from dsrnngan.utils import load_yaml_file
-from dsrnngan.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range, denormalise
-from dsrnngan.benchmarks import get_quantile_areas, get_quantile_mapped_forecast, get_quantiles_by_area
-from dsrnngan.scoring import mae_above_threshold
+from dsrnngan.utils.utils import load_yaml_file
+from dsrnngan.data.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range, denormalise
+from dsrnngan.evaluation.benchmarks import get_quantile_areas, get_quantile_mapped_forecast, get_quantiles_by_area
+from dsrnngan.evaluation.scoring import mae_above_threshold
 
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 

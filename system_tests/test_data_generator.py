@@ -10,8 +10,8 @@ from pathlib import Path
 HOME = Path(__file__).parents[1]
 data_folder = HOME / 'system_tests' / 'data'
 
-from dsrnngan.data_generator import DataGenerator, PermutedDataGenerator
-from dsrnngan.data import DATA_PATHS
+from dsrnngan.data.data_generator import DataGenerator, PermutedDataGenerator
+from dsrnngan.data.data import DATA_PATHS
 from system_tests.test_data import create_dummy_stats_data
 
 ifs_path = str(data_folder / 'IFS')

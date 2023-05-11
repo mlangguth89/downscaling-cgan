@@ -7,13 +7,14 @@ import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Generator
 
-from dsrnngan import tfrecords_generator
-from dsrnngan.tfrecords_generator import DataGenerator
-from dsrnngan.data import DATA_PATHS, denormalise
-from dsrnngan.utils import date_range_from_year_month_range, load_yaml_file
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan import setupmodel, setupdata
-from dsrnngan import read_config
+from dsrnngan.data import tfrecords_generator
+from dsrnngan.data import setupdata
+from dsrnngan.data.tfrecords_generator import DataGenerator
+from dsrnngan.data.data import DATA_PATHS, denormalise
+from dsrnngan.utils.utils import date_range_from_year_month_range, load_yaml_file
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.model import setupmodel
+from dsrnngan.utils import read_config
 
 
 def setup_batch_gen(records_folder: str,
@@ -71,8 +72,8 @@ def setup_full_image_dataset(year_month_range,
                              shuffle=True
                              ):
 
-    from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
-    from dsrnngan.data import get_obs_dates
+    from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
+    from dsrnngan.data.data import get_obs_dates
 
     date_range = date_range_from_year_month_range(year_month_range)
     dates = get_obs_dates(date_range[0], date_range[-1], 
@@ -312,8 +313,8 @@ def generate_prediction(data_iterator, generator,
 
 if __name__=='__main__':
     
-    from dsrnngan.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
-    from dsrnngan.data import get_obs_dates
+    from dsrnngan.data.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
+    from dsrnngan.data.data import get_obs_dates
     
     fcst_data_source = 'ifs'
     obs_data_source='imerg'

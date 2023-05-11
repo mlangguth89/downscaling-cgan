@@ -5,12 +5,12 @@ import os
 import numpy as np
 from properscoring import crps_ensemble
 
-from dsrnngan import benchmarks
-from dsrnngan import read_config
-from dsrnngan.data import all_fcst_fields, get_dates
-from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
-from dsrnngan.evaluation import calculate_ralsd_rmse, log_line
-from dsrnngan.pooling import pool
+from dsrnngan.evaluation.evaluation import benchmarks
+from dsrnngan.utils.utils import read_config
+from dsrnngan.data.data import all_fcst_fields, get_dates
+from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation.evaluation import calculate_ralsd_rmse, log_line
+from dsrnngan.model.pooling import pool
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]

@@ -22,7 +22,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.setupdata
+srun python -m dsrnngan.data.setupdata
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

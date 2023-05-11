@@ -20,15 +20,15 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
-from dsrnngan import read_config
-from dsrnngan.utils import load_yaml_file, get_best_model_number
-from dsrnngan.plots import plot_contourf
-from dsrnngan.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
-from dsrnngan import data
-from dsrnngan.rapsd import  rapsd
-from dsrnngan.scoring import fss, get_spread_error_data
-from dsrnngan.evaluation import get_diurnal_cycle
-from dsrnngan.benchmarks import get_quantile_areas, get_quantiles_by_area, get_quantile_mapped_forecast
+from dsrnngan.utils.utils import read_config
+from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
+from dsrnngan.evaluation.plots import plot_contourf
+from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+from dsrnngan.data import data
+from dsrnngan.evaluation.rapsd import  rapsd
+from dsrnngan.evaluation.scoring import fss, get_spread_error_data
+from dsrnngan.evaluation.evaluation import get_diurnal_cycle
+from dsrnngan.evaluation.benchmarks import get_quantile_areas, get_quantiles_by_area, get_quantile_mapped_forecast
 
 def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     
@@ -88,11 +88,11 @@ samples_gen_array = arrays['samples_gen']
 fcst_array = arrays['fcst_array']
 persisted_fcst_array = arrays['persisted_fcst']
 ensmean_array = np.mean(arrays['samples_gen'], axis=-1)
-dates = [d[0] for d in arrays['dates']]
-hours = [h[0] for h in arrays['hours']]
+training_dates = [d[0] for d in arrays['dates']]
+training_hours = [h[0] for h in arrays['hours']]
 
 
-assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
+assert len(set(list(zip(training_dates, training_hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
 
 # Find dry and rainy days in sampled dataset
@@ -184,8 +184,8 @@ quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude
 quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=ifs_train_data, obs_data=imerg_train_data, 
                                           quantile_locs=quantile_locs)
 
-fcst_corrected = get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, 
-                                              hours=hours, month_ranges=month_ranges, 
+fcst_corrected = get_quantile_mapped_forecast(fcst=fcst_array, dates=training_dates, 
+                                              hours=training_hours, month_ranges=month_ranges, 
                                               quantile_areas=quantile_areas, 
                                               quantiles_by_area=quantiles_by_area)
                                             #   quantile_threshold=0.99999)
@@ -219,11 +219,12 @@ quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude
 quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=cgan_training_data, 
                                           obs_data=imerg_training_data, 
                                           quantile_locs=quantile_locs)
-
-cgan_corrected = get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0].copy(), dates=dates, 
-                                              hours=hours, month_ranges=month_ranges, 
-                                              quantile_areas=quantile_areas, 
-                                              quantiles_by_area=quantiles_by_area)
+cgan_corrected = samples_gen_array.copy()
+for n in range(cgan_corrected.shape[-1]):
+    cgan_corrected[:,:,:,n] = get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n].copy(), dates=training_dates, 
+                                                hours=training_hours, month_ranges=month_ranges, 
+                                                quantile_areas=quantile_areas, 
+                                                quantiles_by_area=quantiles_by_area)
                                 
 ################################################################################
 ## Climatological data for comparison.
@@ -292,8 +293,8 @@ if metric_dict['examples']:
         truth = truth_array[ix,:,:]
         fcst = fcst_array[ix,:,:]
         fcst_corr = fcst_corrected[ix, :, :]
-        date = dates[ix]
-        hour = hours[ix]
+        date = training_dates[ix]
+        hour = training_hours[ix]
         avg_img_gens = img_gens.mean(axis=-1)
         date_str = date.strftime('%d-%m-%Y') + f' {hour:02d}:00:00'
         
@@ -389,6 +390,7 @@ if metric_dict['spread_error']:
     ax.plot(np.linspace(0,max(ens_spread),10), np.linspace(0,max(ens_spread),10), '--')
     ax.set_ylabel('RMSE')
     ax.set_xlabel('Ensemble spread')
+    ax.legend()
     ax.set_title(f'Spread error up to {100*(1-quantile_step_size)}th percentile')
     plt.savefig(f'plots/spread_error_{model_type}_{model_number}.pdf', format='pdf')
 
@@ -407,7 +409,7 @@ if metric_dict['rapsd']:
                         'Obs (IMERG)': {'data': truth_array, 'color': 'k', 'linestyle': '-'},
                         'Fcst': {'data': fcst_array, 'color': 'r', 'linestyle': '-'},
                         'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'linestyle': '--'},
-                        'GAN + qmap': {'data': cgan_corrected, 'color': 'b', 'linestyle': '--'}}
+                        'GAN + qmap': {'data': cgan_corrected[:,:,:,0], 'color': 'b', 'linestyle': '--'}}
 
     rapsd_results = {}
     for k, v in rapsd_data_dict.items():
@@ -444,7 +446,7 @@ if metric_dict['quantiles']:
                     'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
                     'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
                     'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
-                    'GAN + qmap': {'data': cgan_corrected, 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
+                    'GAN + qmap': {'data': cgan_corrected[:, :, :, 0], 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
 
     quantile_results = {}
     for data_name, d in quantile_data_dict.items():
@@ -559,7 +561,7 @@ if metric_dict['hist']:
                 'IFS': {'data': fcst_array, 'histtype': 'step', 'edgecolor': 'red'},
                 'IFS + qmap': {'data': fcst_corrected, 'histtype': 'step', 'edgecolor': 'red', 'linestyle': '--'},
                 'cGAN': {'data': samples_gen_array[:,:,:,0], 'histtype': 'step', 'edgecolor': 'blue'},
-                'cGAN + qmap': {'data': cgan_corrected, 'histtype': 'step', 'edgecolor': 'blue', 'linestyle': '--'}}
+                'cGAN + qmap': {'data': cgan_corrected[:,:,:,0], 'histtype': 'step', 'edgecolor': 'blue', 'linestyle': '--'}}
     rainfall_amounts = {}
 
     edge_colours = ["blue", "green", "red", 'orange']
@@ -585,13 +587,13 @@ if metric_dict['hist']:
     # RMSE
     rmse_dict = {'GAN_rmse': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
                 'fcst_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
-                'GAN_qmap_rmse': np.sqrt(np.mean(np.square(truth_array - cgan_corrected), axis=0)),
+                'GAN_qmap_rmse': np.sqrt(np.mean(np.square(truth_array - cgan_corrected[:,:,:,0]), axis=0)),
                 'fcst_qmap_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected), axis=0))}
 
     bias_dict = {'GAN_bias': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
                 'ensmean_bias' : np.mean(ensmean_array - truth_array, axis=0),
                 'fcst_bias' : np.mean(fcst_array - truth_array, axis=0), 
-                'GAN_qmap_bias': np.mean(cgan_corrected - truth_array, axis=0),
+                'GAN_qmap_bias': np.mean(cgan_corrected[:,:,:,0] - truth_array, axis=0),
                 'fcst_qmap_bias' : np.mean(fcst_corrected - truth_array, axis=0)}
 
     fig, ax = plt.subplots(len(rmse_dict.keys())+1,2, 
@@ -693,8 +695,8 @@ if metric_dict['crps']:
 
 if metric_dict['fss']:
     print('*********** Plotting FSS **********************')
-    from dsrnngan.evaluation import get_fss_scores
-    from dsrnngan.plots import plot_fss_scores
+    from dsrnngan.evaluation.evaluation import get_fss_scores
+    from dsrnngan.evaluation.plots import plot_fss_scores
 
     window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
     n_samples = truth_array.shape[0]
@@ -703,7 +705,7 @@ if metric_dict['fss']:
                         'cgan': samples_gen_array[:n_samples, :, :, 0],
                         'ifs': fcst_array[:n_samples, :, :],
                         'fcst_qmap': fcst_corrected[:n_samples, :, :],
-                        'cgan_qmap': cgan_corrected[:n_samples, :, :]}
+                        'cgan_qmap': cgan_corrected[:n_samples, :, :, 0]}
 
     # get quantiles
     quantile_locs = [0.5, 0.985, 0.999, 0.9999]
@@ -734,7 +736,7 @@ if metric_dict['fss']:
                         'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
                         'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
                         'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-                        'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]}  
+                        'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
         fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
         
         plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{model_type}_{model_number}')
@@ -778,7 +780,7 @@ if metric_dict['diurnal']:
 
     ## Diurnal cycletruth_array, samples_gen_array, fcst_array, persisted_fcst_array, dates, hours, longitude_range, latitude_range
     hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts = get_diurnal_cycle(truth_array, samples_gen_array,
-                                                                                             fcst_array, dates, hours, longitude_range, latitude_range)
+                                                                                             fcst_array, training_dates, training_hours, longitude_range, latitude_range)
 
     fig, ax = plt.subplots(1,1, figsize=(5,5))
     diurnal_data_dict = {'Obs (IMERG)': hourly_data_obs,
@@ -812,7 +814,7 @@ if metric_dict['diurnal']:
     for n, (season, month_range) in enumerate(seasons_dict.items()):
         hourly_season_data_obs[season], hourly_season_data_sample[season], hourly_season_data_fcst[season], hourly_season_counts[season] = get_diurnal_cycle( truth_array, 
                                                                                                 samples_gen_array, 
-                                                                                                fcst_array, dates, hours, 
+                                                                                                fcst_array, training_dates, training_hours, 
                                                                                                 longitude_range=longitude_range, latitude_range=latitude_range)
 
     # Plot diurnal cycle for the different areas

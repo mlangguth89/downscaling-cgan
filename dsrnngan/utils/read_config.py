@@ -4,15 +4,19 @@ import tensorflow as tf
 import numpy as np
 import types
 import math
+from pathlib import Path
 
-from dsrnngan.utils import load_yaml_file
+HOME = Path(__file__).parents[2]
+CONFIG_FOLDER = HOME / 'config'
 
-def read_config(config_filename=None):
+from dsrnngan.utils.utils import load_yaml_file
+
+def read_config(config_filename=None, config_folder=CONFIG_FOLDER):
     
     if config_filename is None:
         config_filename = 'local_config.yaml'
         
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_filename)
+    config_path = os.path.join(config_folder, config_filename)
     try:
         localconfig = load_yaml_file(config_path)
     except FileNotFoundError as e:
@@ -23,8 +27,8 @@ def read_config(config_filename=None):
     return localconfig
 
 
-def get_data_paths():
-    data_config_paths = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_paths.yaml')
+def get_data_paths(config_folder=CONFIG_FOLDER):
+    data_config_paths = os.path.join(config_folder, 'data_paths.yaml')
 
     try:
         all_data_paths = load_yaml_file(data_config_paths)

@@ -12,7 +12,7 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
-from dsrnngan.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, load_ifs_raw
+from dsrnngan.data.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, load_ifs_raw
 
 hours = range(24)
 

@@ -11,10 +11,11 @@ from matplotlib import colorbar, colors, gridspec
 from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
 
-from dsrnngan import data, read_config
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan.rapsd import plot_spectrum1d, rapsd
-from dsrnngan.thresholded_ranks import findthresh
+from dsrnngan.utils import read_config
+from dsrnngan.data import data
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.evaluation.rapsd import plot_spectrum1d, rapsd
+from dsrnngan.evaluation.thresholded_ranks import findthresh
 
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,6 +31,21 @@ spacing = 10
 
 cmap = ListedColormap(sns.color_palette(palette, 256))
 cmap.set_under('white')
+
+step_size = 0.001
+range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 32},
+              1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 256},
+              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 512},
+              3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
+              4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 128},
+              5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
+              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10},
+              7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 10},
+              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10}}
+                  
+percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
+percentiles=np.concatenate(percentiles_list)
+quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
 
 def plot_precip(np_array, ax, levels, linewidth=default_linewidth, extent=default_extent):
     precip_cmap = ListedColormap(metpy_plots.ctables.colortables["precipitation"][:len(levels)-1], 'precipitation')

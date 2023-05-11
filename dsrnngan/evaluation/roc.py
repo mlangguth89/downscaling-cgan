@@ -5,16 +5,16 @@ import pickle
 import numpy as np
 from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
-import data
-import setupmodel
-from dsrnngan.benchmarks import nn_interp_model
-from dsrnngan.data import all_fcst_fields, get_dates
-from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
-from dsrnngan.evaluation import _init_VAEGAN
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan.pooling import pool
-from dsrnngan.read_config import read_config
-from dsrnngan.tfrecords_generator import create_fixed_dataset
+import dsrnngan.data.data as data
+import dsrnngan.model.setupmodel as setupmodel
+from dsrnngan.evaluation.benchmarks import nn_interp_model
+from dsrnngan.data.data import all_fcst_fields, get_dates
+from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation.evaluation import _init_VAEGAN
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.model.pooling import pool
+from dsrnngan.utils.read_config import read_config
+from dsrnngan.data.tfrecords_generator import create_fixed_dataset
 
 
 def calculate_roc(*,

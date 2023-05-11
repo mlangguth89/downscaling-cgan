@@ -1,8 +1,8 @@
 import os
 import yaml
 
-import fss
-import read_config
+import dsrnngan.evaluation.fss as fss
+import dsrnngan.utils.read_config as read_config
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 

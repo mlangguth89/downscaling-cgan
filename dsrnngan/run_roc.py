@@ -1,8 +1,8 @@
 import os
 import yaml
 
-from dsrnngan import read_config
-from dsrnngan import roc
+from dsrnngan.utils.utils import read_config
+from dsrnngan.evaluation.evaluation import roc
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 

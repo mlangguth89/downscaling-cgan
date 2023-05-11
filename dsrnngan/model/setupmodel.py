@@ -2,10 +2,10 @@ import gc
 
 from tensorflow.keras.optimizers import Adam
 
-from dsrnngan import deterministic
-from dsrnngan import gan
-from dsrnngan import models
-from dsrnngan.vaegantrain import VAE
+from dsrnngan.model import deterministic
+from dsrnngan.model import gan
+from dsrnngan.model import models
+from dsrnngan.model.vaegantrain import VAE
 
 
 def setup_model(*,

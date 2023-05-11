@@ -3,8 +3,8 @@ import yaml
 
 import matplotlib; matplotlib.use("Agg")  # noqa
 
-import evaluation
-import read_config
+import dsrnngan.evaluation.evaluation as evaluation
+import dsrnngan.utils.read_config as read_config
 
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 

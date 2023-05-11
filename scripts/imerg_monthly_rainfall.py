@@ -15,7 +15,7 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
-from dsrnngan.data import load_era5_month_raw, load_ifs, load_imerg, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+from dsrnngan.data.data import load_era5_month_raw, load_ifs, load_imerg, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 
 hours = range(24)
 

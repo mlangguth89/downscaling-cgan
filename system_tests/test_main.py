@@ -13,9 +13,8 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.main import main, parser
-from dsrnngan import utils
-from dsrnngan.tfrecords_generator import write_data
-from dsrnngan.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath
+from dsrnngan.data.tfrecords_generator import write_data
+from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath
 
 data_folder = HOME / 'system_tests' / 'data'
 ifs_path = str(data_folder / 'IFS')
@@ -28,7 +27,7 @@ tfrecords_folder = str(data_folder / 'tmp_model_test')
 # Create test config
 lat_range = np.arange(0, 1.1, 0.1) # deliberately asymettrical to test for non-square images
 lon_range = np.arange(33, 34, 0.1)
-config_path = str(HOME / 'dsrnngan' / 'local_config.yaml')
+config_path = str(HOME / 'config' /'local_config.yaml')
 with open(config_path, 'r') as f:
     test_config = yaml.safe_load(f)
 
@@ -146,8 +145,8 @@ class TestMain(unittest.TestCase):
         something that checks the evaluation (requires checkpoints created successfully)
         """
         with tempfile.TemporaryDirectory() as tempdir:
-            
-            create_example_model(tempdir, lat_range, lon_range)
+            test_data_paths['TFRecords']['tfrecords_path'] = tempdir
+            create_example_model(config=test_config, data_paths=test_data_paths, lat_range=lat_range, lon_range=lon_range)
 
 if __name__ == '__main__':
     unittest.main()

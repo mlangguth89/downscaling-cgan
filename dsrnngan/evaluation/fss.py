@@ -35,15 +35,15 @@ import pickle
 import numpy as np
 from scipy.ndimage.filters import uniform_filter
 
-from dsrnngan import data
-from dsrnngan import setupmodel
-from dsrnngan.benchmarks import nn_interp_model
-from dsrnngan.data import get_dates, input_field_lookup
-from dsrnngan.data_generator import DataGenerator as DataGeneratorFull
-from dsrnngan.evaluation import _init_VAEGAN
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan.read_config import read_config
-from dsrnngan.tfrecords_generator import create_fixed_dataset
+from dsrnngan.data import data
+from dsrnngan.model import setupmodel
+from dsrnngan.evaluation.benchmarks import nn_interp_model
+from dsrnngan.data.data import get_dates, input_field_lookup
+from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
+from dsrnngan.evaluation.evaluation import _init_VAEGAN
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.utils.read_config import read_config
+from dsrnngan.data.tfrecords_generator import create_fixed_dataset
 
 
 def plot_fss_curves(*,

@@ -20,7 +20,7 @@ from argparse import ArgumentParser
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 
-from dsrnngan import read_config
+from dsrnngan.utils import read_config
 
 DATA_PATHS = read_config.get_data_paths()
 
@@ -460,15 +460,15 @@ def load_observational_data(data_source: str, *args, **kwargs):
     Function to pick between various different sources of observational data
 
     Args:
-        data_source (str): one of nimrod, imerg
+        data_source (str): anme of data source
 
     Returns:
         np.ndarray: array of data
     """
-    if data_source.lower() == 'nimrod':
-        return load_nimrod(*args, **kwargs)
-    elif data_source.lower() == 'imerg':
+    if data_source.lower() == 'imerg':
         return load_imerg(*args, **kwargs)
+    else:
+        raise NotImplementedError(f'Data source {data_source} not implemented yet')
 
 
 def load_orography(oro_path: str=OROGRAPHY_PATH, 

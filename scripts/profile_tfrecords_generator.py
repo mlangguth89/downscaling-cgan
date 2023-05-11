@@ -9,7 +9,7 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
-from dsrnngan.tfrecords_generator import write_data
+from dsrnngan.data.tfrecords_generator import write_data
 
 if __name__ == '__main__':
     pr = cProfile.Profile()

@@ -15,7 +15,7 @@ data_folder = HOME / 'system_tests' / 'data'
 
 sys.path.append(str(HOME))
 
-from dsrnngan.data import infer_lat_lon_names, FIELD_TO_HEADER_LOOKUP_IFS, load_hires_constants, load_imerg_raw, load_era5_day_raw, \
+from dsrnngan.data.data import infer_lat_lon_names, FIELD_TO_HEADER_LOOKUP_IFS, load_hires_constants, load_imerg_raw, load_era5_day_raw, \
     VAR_LOOKUP_ERA5, interpolate_dataset_on_lat_lon, \
     get_era5_stats, load_fcst_stack, all_ifs_fields, all_era5_fields, load_era5, \
     load_ifs, get_imerg_filepaths, ERA5_PATH, get_ifs_filepath, \

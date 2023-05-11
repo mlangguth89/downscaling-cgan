@@ -12,14 +12,14 @@ from timezonefinder import TimezoneFinder
 from dateutil import tz
 from datetime import datetime
 
-from dsrnngan import data
-from dsrnngan import read_config
-from dsrnngan import setupdata
-from dsrnngan import setupmodel
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan.pooling import pool
-from dsrnngan.rapsd import rapsd
-from dsrnngan.scoring import rmse, mse, mae, calculate_pearsonr, fss
+from dsrnngan.data import data
+from dsrnngan.utils import read_config
+from dsrnngan.data import setupdata
+from dsrnngan.model import setupmodel
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.model.pooling import pool
+from dsrnngan.evaluation.rapsd import rapsd
+from dsrnngan.evaluation.scoring import rmse, mse, mae, calculate_pearsonr, fss
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 

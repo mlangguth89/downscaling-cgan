@@ -13,15 +13,13 @@ import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
 
-
-
-from dsrnngan import data
-from dsrnngan import evaluation
-from dsrnngan import read_config
-from dsrnngan import setupdata
-from dsrnngan import setupmodel
-from dsrnngan import train
-from dsrnngan import utils
+from dsrnngan.data import data
+from dsrnngan.evaluation import evaluation
+from dsrnngan.utils import read_config
+from dsrnngan.data import setupdata
+from dsrnngan.model import setupmodel
+from dsrnngan.model import train
+from dsrnngan.utils import utils
 
 logger = logging.getLogger(__name__)
 sh = logging.StreamHandler()

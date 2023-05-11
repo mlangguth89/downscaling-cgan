@@ -17,15 +17,17 @@ import matplotlib.pyplot as plt
 import unittest
 import yaml
 from glob import glob
+
+from dsrnngan.data import setupdata
         
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 
-from dsrnngan import data, read_config, setupdata
-from dsrnngan.noise import NoiseGenerator
-from dsrnngan.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
-from dsrnngan.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath
+from dsrnngan.utils import read_config
+from dsrnngan.model.noise import NoiseGenerator
+from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
+from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath, denormalise
 from system_tests.test_main import create_example_model, test_config, test_data_paths
 
 model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(test_config)
@@ -130,7 +132,7 @@ class TestEvaluation(unittest.TestCase):
         truth = np.expand_dims(np.array(truth), axis=-1)
 
         if denormalise_data:
-            truth = data.denormalise(truth)
+            truth = denormalise(truth)
 
         noise_shape = np.array(cond)[0, ..., 0].shape + (gen_config.noise_channels,)
         noise_gen = NoiseGenerator(noise_shape, batch_size=train_config.batch_size)

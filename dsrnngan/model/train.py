@@ -1,8 +1,8 @@
 import os
 import tensorflow as tf
 
-from dsrnngan import noise
-from dsrnngan import plots
+from dsrnngan.model import noise
+from dsrnngan.evaluation import plots
 
 
 def train_model(*,

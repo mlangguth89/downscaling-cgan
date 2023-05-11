@@ -9,9 +9,9 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 import git
 
-from dsrnngan import read_config
-from dsrnngan.data import file_exists, denormalise
-from dsrnngan.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
+from dsrnngan.utils import read_config
+from dsrnngan.data.data import file_exists, denormalise
+from dsrnngan.utils.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)

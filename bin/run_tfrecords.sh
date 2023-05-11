@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=tfrecords-creation
 #SBATCH --partition short
-#SBATCH --array=0-23
+#SBATCH --array=0-5
 #SBATCH --output=logs/slurm-%A_%a.out
 
 echo `which python`
@@ -23,7 +23,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.tfrecords_generator --records-folder /user/work/uz22147/tfrecords --fcst-hours ${SLURM_ARRAY_TASK_ID}
+srun python -m dsrnngan.data.tfrecords_generator --records-folder /user/work/uz22147/tfrecords --fcst-hours ${SLURM_ARRAY_TASK_ID}
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"

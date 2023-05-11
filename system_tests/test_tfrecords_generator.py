@@ -14,8 +14,8 @@ tf.compat.v1.enable_eager_execution()
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
-from dsrnngan.tfrecords_generator import write_data, create_dataset
-from dsrnngan.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
+from dsrnngan.data.tfrecords_generator import write_data, create_dataset
+from dsrnngan.data.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -61,7 +61,7 @@ class TestTfrecordsGenerator(unittest.TestCase):
             
     def test_write_ifs_data2(self):
         
-        from dsrnngan.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
+        from dsrnngan.data.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
         data_paths = copy.copy(DATA_PATHS)
         
         
