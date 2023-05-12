@@ -28,7 +28,7 @@ from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
 from dsrnngan.evaluation.scoring import fss, get_spread_error_data
 from dsrnngan.evaluation.evaluation import get_diurnal_cycle
-from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map
+from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map, quantile_map_grid
 
 def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     
@@ -158,15 +158,10 @@ for fp in fps:
 imerg_train_data = np.concatenate(imerg_train_data, axis=0)
 ifs_train_data = np.concatenate(ifs_train_data, axis=0)
 
-
-fcst_corrected = np.empty(fcst_array.shape)
-fcst_corrected[:,:,:] = np.nan
-        
-for w in tqdm(range(width)):
-    for h in range(height):
-        
-        fcst_corrected[:,w,h] = empirical_quantile_map(obs_train=imerg_train_data[:,w,h], model_train=ifs_train_data[:,w,h], s=fcst_array[:,w,h],
-                                                       quantiles=quantile_locs, extrapolate='constant')
+fcst_corrected = quantile_map_grid(array_to_correct=fcst_array, fcst_train_data=ifs_train_data, 
+                      obs_train_data=imerg_train_data, quantiles=quantile_locs, neighbourhood_size=10,
+                      extrapolate='constant')
+assert np.isnan(fcst_corrected).sum() == 0
 
 ################################################################################
 ### Quantile mapping of GAN data
@@ -190,12 +185,13 @@ cgan_corrected = np.empty(samples_gen_array.shape)
 cgan_corrected[:,:,:,:] = np.nan
 
 for n in range(ensemble_size):
-    for w in tqdm(range(width)):
-        for h in range(height):
-            
-            cgan_corrected[:,w,h,n] = empirical_quantile_map(obs_train=imerg_training_data[:,w,h], model_train=cgan_training_data[:,w,h], s=samples_gen_array[:,w,h,n],
-                                                             quantiles=quantile_locs, extrapolate='constant')
-            
+    
+    cgan_corrected[:,:,:,n] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,n], fcst_train_data=cgan_training_data, 
+                                                obs_train_data=imerg_training_data, quantiles=quantile_locs, 
+                                                neighbourhood_size=20, extrapolate='constant')
+
+assert np.isnan(cgan_corrected).sum() == 0
+          
 ################################################################################
 ## Climatological data for comparison.
 

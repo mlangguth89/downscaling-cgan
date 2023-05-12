@@ -8,7 +8,7 @@ from pathlib import Path
 HOME = Path(__file__).parents[1]
 data_folder = HOME / 'system_tests' / 'data'
 
-from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map
+from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map, quantile_map_grid
 
 sys.path.append(str(HOME))
 
@@ -45,7 +45,6 @@ class TestBenchmarks(unittest.TestCase):
         for w in range(test_width):
             for h in range(test_height):
                 
-                
                 result = empirical_quantile_map(obs_train=self.imerg_train_data[:,w,h], 
                                                                model_train=self.ifs_train_data[:,w,h], s=array_to_correct[:,w,h],
                                                                quantiles=quantile_locs, extrapolate='constant')
@@ -59,7 +58,18 @@ class TestBenchmarks(unittest.TestCase):
             self.assertLess(fcst_corrected.max(), array_to_correct.max())
         else:
             self.assertGreater(fcst_corrected.max(), array_to_correct.max())
-                
+    
+    def test_quantil_map_grid(self):
+        
+        qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
+                      obs_train_data=self.imerg_train_data, quantile_locations=np.linspace(0,1,10), neighbourhood_size=2)
+        self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
+
+        
+        qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
+                      obs_train_data=self.imerg_train_data, quantile_locations=np.linspace(0,1,10), neighbourhood_size=0)
+        self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
+
     def test_QuantileMapper(self):
                 
         (_, test_width, test_height) = self.fcst_array.shape

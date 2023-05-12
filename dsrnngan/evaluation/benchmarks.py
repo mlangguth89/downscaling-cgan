@@ -61,6 +61,40 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
         raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
     return model_corrected
 
+
+def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray, 
+                      obs_train_data: np.ndarray, quantiles: Union[int, ArrayLike], neighbourhood_size: int=0,
+                      extrapolate: str='constant') -> np.ndarray:
+    """Quantile map data that is on a grid
+
+    Args:
+        array_to_correct (np.ndarray): Data to be quantile mapped. Should have dimension (n_samples, width, height)
+        fcst_train_data (np.ndarray): Training data for the forecast, to calculate quantiles
+        obs_train_data (np.ndarray): Training data for the observations, to calculate quantiles
+        quantiles (Union[int, ArrayLike], optional): Either the number of quantiles to use, or the locations of quantiles. Defaults to 10.
+        neighbourhood_size (int, optional): Radius of pixels around the grid cell in which to calculate the quantiles. Defaults to 0.
+        extrapolate (str, optional): Type of extrapolation for values that lie outside the training range. Defaults to 'constant'.
+
+    Returns:
+        np.ndarray: quantile mapped array
+    """
+    (_, width, height) = array_to_correct.shape
+      
+    fcst_corrected = np.empty(array_to_correct.shape)
+    fcst_corrected[:,:,:] = np.nan
+    
+    for w in range(width):
+        for h in range(height):
+            w_range = np.arange(max(w - neighbourhood_size,0), min(w + neighbourhood_size + 1, width), 1)
+            h_range = np.arange(max(h - neighbourhood_size,0), min(h + neighbourhood_size + 1, height), 1)
+            result = empirical_quantile_map(obs_train=obs_train_data[:,w_range,:][:,:,h_range], 
+                                                        model_train=fcst_train_data[:,w_range,:][:,:,h_range], 
+                                                        s=array_to_correct[:,w,h],
+                                                        quantiles=quantiles, extrapolate=extrapolate)
+            fcst_corrected[:,w,h] = result
+            
+    return fcst_corrected
+
 class QuantileMapper():
     
     def __init__(self, month_ranges: list, 
