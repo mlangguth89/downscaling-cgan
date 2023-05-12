@@ -20,15 +20,15 @@ HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
 
-from dsrnngan.utils.utils import read_config
+from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
-from dsrnngan.evaluation.plots import plot_contourf
+from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
 from dsrnngan.evaluation.scoring import fss, get_spread_error_data
 from dsrnngan.evaluation.evaluation import get_diurnal_cycle
-from dsrnngan.evaluation.benchmarks import get_quantile_areas, get_quantiles_by_area, get_quantile_mapped_forecast
+from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map
 
 def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     
@@ -41,14 +41,14 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
 # This dict chooses which plots to create
 metric_dict = {'examples': False,
                'rank_hist': False,
-               'spread_error': True,
+               'spread_error': False,
                'rapsd': False,
-               'quantiles': False,
-               'hist': False,
+               'quantiles': True,
+               'hist': True,
                'crps': False,
                'fss': False,
                'diurnal': False,
-               'confusion_matrix': True
+               'confusion_matrix': False
                }
 
 plot_persistence = False
@@ -88,11 +88,11 @@ samples_gen_array = arrays['samples_gen']
 fcst_array = arrays['fcst_array']
 persisted_fcst_array = arrays['persisted_fcst']
 ensmean_array = np.mean(arrays['samples_gen'], axis=-1)
-training_dates = [d[0] for d in arrays['dates']]
-training_hours = [h[0] for h in arrays['hours']]
+dates = [d[0] for d in arrays['dates']]
+hours = [h[0] for h in arrays['hours']]
 
 
-assert len(set(list(zip(training_dates, training_hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
+assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
 
 # Find dry and rainy days in sampled dataset
@@ -134,24 +134,6 @@ for k, v in special_areas.items():
 ################################################################################
 ### Quantile mapping of IFS data
 
-
-# Quantiles
-step_size = 0.001
-range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 32},
-              1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 256},
-              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 512},
-              3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
-              4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 128},
-              5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
-              6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10},
-              7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 10},
-              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10}}
-                  
-percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
-percentiles=np.concatenate(percentiles_list)
-quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
-
-
 # month_ranges = [[1,2], [3,4,5], [6,7,8,9], [10,11,12]]
 month_ranges = [list(range(1, 13))]
 quantile_threshold = 0.999
@@ -176,20 +158,15 @@ for fp in fps:
 imerg_train_data = np.concatenate(imerg_train_data, axis=0)
 ifs_train_data = np.concatenate(ifs_train_data, axis=0)
 
-# identify best threshold and train on all the data
-quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude_range, 
-                                    longitude_range, 
-                                    hours=training_hours,
-                                    num_lat_lon_chunks=1)
-quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=ifs_train_data, obs_data=imerg_train_data, 
-                                          quantile_locs=quantile_locs)
 
-fcst_corrected = get_quantile_mapped_forecast(fcst=fcst_array, dates=training_dates, 
-                                              hours=training_hours, month_ranges=month_ranges, 
-                                              quantile_areas=quantile_areas, 
-                                              quantiles_by_area=quantiles_by_area)
-                                            #   quantile_threshold=0.99999)
-
+fcst_corrected = np.empty(fcst_array.shape)
+fcst_corrected[:,:,:] = np.nan
+        
+for w in tqdm(range(width)):
+    for h in range(height):
+        
+        fcst_corrected[:,w,h] = empirical_quantile_map(obs_train=imerg_train_data[:,w,h], model_train=ifs_train_data[:,w,h], s=fcst_array[:,w,h],
+                                                       quantiles=quantile_locs, extrapolate='constant')
 
 ################################################################################
 ### Quantile mapping of GAN data
@@ -202,30 +179,23 @@ cgan_training_sample_dict = {'cropped': '/user/work/uz22147/logs/cgan/ff62fde119
 # model_number = 288000
 model_number = get_best_model_number(log_folder=cgan_training_sample_dict[model_type])
 with open(os.path.join(cgan_training_sample_dict[model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
-    arrays = pickle.load(ifh)
+    training_arrays = pickle.load(ifh)
     
-imerg_training_data = arrays['truth']
-cgan_training_data = arrays['samples_gen'][:,:,:,0]
-training_dates = [d[0] for d in arrays['dates']]
-training_hours = [h[0] for h in arrays['hours']]
+imerg_training_data = training_arrays['truth']
+cgan_training_data = training_arrays['samples_gen'][:,:,:,0]
+training_dates = [d[0] for d in training_arrays['dates']]
+training_hours = [h[0] for h in training_arrays['hours']]
 
-# identify best threshold and train on all the data
-quantile_locs = [np.round(item / 100.0, 10) for item in percentiles] + [1.0]
+cgan_corrected = np.empty(samples_gen_array.shape)
+cgan_corrected[:,:,:,:] = np.nan
 
-# identify best threshold and train on all the data
-quantile_areas = get_quantile_areas(list(training_dates), month_ranges, latitude_range, longitude_range, 
-                                    hours=training_hours, 
-                                    num_lat_lon_chunks=1)
-quantiles_by_area = get_quantiles_by_area(quantile_areas, fcst_data=cgan_training_data, 
-                                          obs_data=imerg_training_data, 
-                                          quantile_locs=quantile_locs)
-cgan_corrected = samples_gen_array.copy()
-for n in range(cgan_corrected.shape[-1]):
-    cgan_corrected[:,:,:,n] = get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n].copy(), dates=training_dates, 
-                                                hours=training_hours, month_ranges=month_ranges, 
-                                                quantile_areas=quantile_areas, 
-                                                quantiles_by_area=quantiles_by_area)
-                                
+for n in range(ensemble_size):
+    for w in tqdm(range(width)):
+        for h in range(height):
+            
+            cgan_corrected[:,w,h,n] = empirical_quantile_map(obs_train=imerg_training_data[:,w,h], model_train=cgan_training_data[:,w,h], s=samples_gen_array[:,w,h,n],
+                                                             quantiles=quantile_locs, extrapolate='constant')
+            
 ################################################################################
 ## Climatological data for comparison.
 

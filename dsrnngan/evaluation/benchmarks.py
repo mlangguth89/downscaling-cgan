@@ -2,9 +2,9 @@ import logging
 import numpy as np
 from tqdm import tqdm
 from itertools import chain
-from typing import Iterable
+from typing import Iterable, Union
+from numpy.typing import ArrayLike
 from sklearn.linear_model import LinearRegression, HuberRegressor
-
 
 logger = logging.getLogger(__name__)
 sh = logging.StreamHandler()
@@ -18,6 +18,48 @@ def nn_interp_model(data, upsampling_factor):
 
 def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
+
+def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np.ndarray,
+                           quantiles: Union[int, ArrayLike]=10, extrapolate: str=None) -> np.ndarray:
+    """
+    Empirical quantile mapping for bias correction
+
+    Args:
+        obs_train (np.ndarray): Observational training data to construct the quantiles
+        model_train (np.ndarray): Model training data to construct the quantiles
+        s (np.ndarray): 1D series to correct
+        quantiles (Union[int, ArrayLike], optional): Either the number of quantiles to use, or the locations of quantiles. Defaults to 10.
+        extrapolate (str, optional): Type of extrapolation to use. Defaults to None.
+
+    Returns:
+        np.ndarray: quantile mapped data
+    """
+    if isinstance(quantiles, int):
+        quantiles = np.linspace(0, 1., quantiles)
+    else:
+        quantiles = np.array(quantiles)
+        if 1.0 not in quantiles:
+            # We need to have the maximum value in order to deal with extreme values
+            np.append(quantiles, 1.0)
+    
+    q_obs = np.quantile(obs_train[np.isfinite(obs_train)], quantiles)
+    q_model = np.quantile(model_train[np.isfinite(model_train)], quantiles)
+    
+    model_corrected = np.interp(s, q_model, q_obs, right=np.nan)
+    
+    if extrapolate is None:
+        model_corrected[s > np.max(q_model)] = q_obs[-1]
+        model_corrected[s < np.min(q_model)] = q_obs[0]
+        
+    elif extrapolate == 'constant':
+        extreme_inds = np.argwhere(s >= np.max(q_model))
+                        
+        if len(extreme_inds) > 0:
+            uplift = q_obs[-1] - q_model[-1]
+            model_corrected[extreme_inds] = s[extreme_inds] + uplift
+    else:
+        raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
+    return model_corrected
 
 class QuantileMapper():
     
