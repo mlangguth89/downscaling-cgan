@@ -1,6 +1,8 @@
 import os
 import pickle
+from tqdm import tqdm
 
+import copy
 import cartopy.crs as ccrs
 import matplotlib as mpl
 import numpy as np
@@ -10,6 +12,11 @@ from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
 from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
+
+# See https://matplotlib.org/stable/gallery/color/named_colors.html for edge colour options
+lake_feature = cfeature.NaturalEarthFeature(
+    'physical', 'lakes',
+    cfeature.auto_scaler, edgecolor='black', facecolor='never')
 
 from dsrnngan.utils import read_config
 from dsrnngan.data import data
@@ -47,22 +54,6 @@ percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for 
 percentiles=np.concatenate(percentiles_list)
 quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
 
-def plot_precip(np_array, ax, levels, linewidth=default_linewidth, extent=default_extent):
-    precip_cmap = ListedColormap(metpy_plots.ctables.colortables["precipitation"][:len(levels)-1], 'precipitation')
-    precip_norm = BoundaryNorm(levels, precip_cmap.N)
-    
-    ax.coastlines(resolution='10m', color='black', linewidth=linewidth)
-    im = ax.imshow(np_array,
-               interpolation='nearest',
-               norm=precip_norm,
-               cmap=precip_cmap,
-               origin='lower',
-               extent=extent,
-               transform=ccrs.PlateCarree(),
-               alpha=alpha)
-    ax.add_feature(cfeature.BORDERS)
-    return im
-
 def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
                   cmap='Reds'):
     
@@ -79,6 +70,7 @@ def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude
 
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
     ax.add_feature(cfeature.BORDERS)
+    ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     
     return im
@@ -87,6 +79,7 @@ def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude
 def plot_fss_scores(fss_results, output_folder, output_suffix):
     fig, axs = plt.subplots(len(fss_results['thresholds']), 1, figsize = (10, 20))
     fig.tight_layout(pad=4.0)
+
     linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (0, (1,10))]
 
     for n, thr in enumerate(fss_results['thresholds']):
@@ -107,6 +100,112 @@ def plot_fss_scores(fss_results, output_folder, output_suffix):
         
     plt.savefig(os.path.join(output_folder, f'fractional_skill_score_{output_suffix}.pdf'), format='pdf')
     
+    
+def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figure=None, 
+                   ax: plt.Axes=None, 
+                   obs_key: str='Obs (IMERG)',
+                   range_dict: dict=range_dict):
+    """
+    Produce qauntile-quantile plot
+
+    Args:
+        quantile_data_dict (dict): Dict containing entries for data sets to plot. One must have the key=obs_key. Structure:
+                    {
+                    data_name_1: 
+                        {'data': np.ndarray, 'color': str, 'marker': str, 'alpha': float},
+                    data_name_2: 
+                        {'data': np.ndarray, 'color': str, 'marker': str, 'alpha': float}
+                    }
+        save_path (str, optional): Path to save plots in. Defaults to None.
+        fig (plt.figure, optional): Existing figure to plot in. Defaults to None.
+        ax (plt.Axes, optional): Axis to plot on. Defaults to None.
+        obs_key (str, optional): Key that corresponds to observations. Defaults to 'Obs (IMERG)'.
+        range_dict (dict, optional): Dict containing ranges of quantiles. Defaults to range_dict.
+
+    Returns:
+        fig, ax: Figure and axis with plotted data.
+    """
+
+    quantile_results = {}
+    for data_name, d in quantile_data_dict.items():
+            quantile_results[data_name] = {}
+            
+            for k, v in tqdm(range_dict.items()):
+            
+                quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
+                
+                quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
+
+    if not ax:
+        fig, ax = plt.subplots(1,1, figsize=(8,8))
+    marker_handles = None
+
+    # Quantiles for annotating plot
+    (q_99pt9, q_99pt99, q_99pt999) = np.quantile(quantile_data_dict[obs_key]['data'], [0.999, 0.9999, 0.99999])
+
+    for k, v in tqdm(range_dict.items()):
+        
+        size=v['marker_size']
+        cmap = plt.colormaps["plasma"]
+        
+        max_truth_val = max(quantile_results[obs_key][k])
+
+        marker_hndl_list = []
+        for data_name, res in quantile_results.items():
+            if data_name != obs_key:
+                s = ax.scatter(quantile_results[obs_key][k], res[k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
+                            cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+                marker_hndl_list.append(s)
+        
+        if not marker_handles:
+            marker_handles = marker_hndl_list
+        
+    ax.legend(handles=marker_handles, loc='center left')
+    ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
+    ax.set_xlabel('Observations (mm/hr)')
+    ax.set_ylabel('Model (mm/hr)')
+    
+    # find largest value
+    max_val = 0
+    for v in quantile_results.values():
+        for sub_v in v.values():
+            if max(sub_v) > max_val:
+                max_val = max(sub_v)
+    
+    ax.vlines(q_99pt9, 0, max_val, linestyles='--')
+    ax.vlines(q_99pt99, 0, max_val, linestyles='--')
+    ax.vlines(q_99pt999, 0, max_val, linestyles='--')
+    ax.text(q_99pt9 , max_val - 20, '$99.9^{th}$')
+    ax.text(q_99pt99 , max_val - 20, '$99.99^{th}$')
+    ax.text(q_99pt999  , max_val - 20, '$99.999^{th}$')
+    
+    if save_path:
+        plt.savefig(save_path, format='pdf')
+        
+    return fig, ax
+
+
+def plot_precipitation(ax: plt.Axes, data: np.ndarray, title:str, longitude_range=default_longitude_range, latitude_range=default_latitude_range):
+    levels = [0, 0.1, 1, 2.5, 5, 10, 15, 20, 30, 40, 50, 70, 100, 150] # in units of log10
+    precip_cmap = ListedColormap(metpy_plots.ctables.colortables["precipitation"][:len(levels)-1], 'precipitation')
+    precip_norm = BoundaryNorm(levels, precip_cmap.N)
+
+    ax.coastlines(resolution='10m', color='black', linewidth=0.4)
+            
+    im = ax.imshow(data,
+            interpolation='nearest',
+            norm=precip_norm,
+            cmap=precip_cmap,
+            origin='lower',
+            extent=[min(longitude_range), max(longitude_range), 
+                    min(latitude_range), max(latitude_range)],
+            transform=ccrs.PlateCarree(),
+            alpha=0.8)
+    ax.add_feature(cfeature.BORDERS)
+    ax.add_feature(lake_feature, alpha=0.4)
+    ax.set_title(title)
+    
+    return im
 # def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
 #                        lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,
 #                        colorbar=False):

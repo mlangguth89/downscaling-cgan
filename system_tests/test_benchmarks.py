@@ -3,6 +3,7 @@ import unittest
 import pickle
 import numpy as np
 from pathlib import Path
+from scipy.stats import pearsonr
 
 
 HOME = Path(__file__).parents[1]
@@ -61,13 +62,14 @@ class TestBenchmarks(unittest.TestCase):
     
     def test_quantil_map_grid(self):
         
+        # try with neighbourhood
         qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
-                      obs_train_data=self.imerg_train_data, quantile_locations=np.linspace(0,1,10), neighbourhood_size=2)
+                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10), neighbourhood_size=2)
         self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
 
-        
+        # try without neighbourhood
         qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
-                      obs_train_data=self.imerg_train_data, quantile_locations=np.linspace(0,1,10), neighbourhood_size=0)
+                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10), neighbourhood_size=0)
         self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
 
     def test_QuantileMapper(self):
@@ -87,14 +89,13 @@ class TestBenchmarks(unittest.TestCase):
         self.assertIn(1.0, [item[0] for item in qmapper.quantiles_by_area[list(qmapper.quantiles_by_area.keys())[0]]['fcst_quantiles']])
         
         # Add data to test set that is larger than max of train set
-        fcst_array = np.append(fcst_array, (self.ifs_train_data.max() + 10)*np.ones((1, test_width, test_height)), axis=0)
+        fcst_array = np.append(self.fcst_array, (self.ifs_train_data.max() + 10)*np.ones((1, test_width, test_height)), axis=0)
                 
         # Just select some random dates for the test set
         dates = np.random.choice(self.training_dates, fcst_array.shape[0])
         hours = np.random.choice(self.training_hours, fcst_array.shape[0])
 
         fcst_corrected = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
-        
         # Check no nulls
         self.assertEqual(np.isnan(fcst_corrected).sum(), 0)
         
@@ -103,4 +104,7 @@ class TestBenchmarks(unittest.TestCase):
         else:
             self.assertGreater(fcst_corrected.max(), fcst_array.max())
                 
-            
+        # Check that quantile mapping is fitting well to the training data
+        fcst_corrected_train =  qmapper.get_quantile_mapped_forecast(fcst=self.ifs_train_data, dates=self.training_dates, hours=self.training_hours)
+
+        self.assertGreater(pearsonr(np.quantile(self.imerg_train_data, quantile_locs), np.quantile(fcst_corrected_train, quantile_locs)).statistic, 0.99)

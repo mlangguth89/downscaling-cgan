@@ -1,10 +1,12 @@
 import logging
+import sys
 import numpy as np
 from tqdm import tqdm
 from itertools import chain
 from typing import Iterable, Union
 from numpy.typing import ArrayLike
 from sklearn.linear_model import LinearRegression, HuberRegressor
+from numba import jit
 
 logger = logging.getLogger(__name__)
 sh = logging.StreamHandler()
@@ -19,8 +21,9 @@ def nn_interp_model(data, upsampling_factor):
 def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
 
+@jit(nopython=True)
 def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np.ndarray,
-                           quantiles: Union[int, ArrayLike]=10, extrapolate: str=None) -> np.ndarray:
+                           quantiles: Union[int, ArrayLike]=10) -> np.ndarray:
     """
     Empirical quantile mapping for bias correction
 
@@ -47,24 +50,24 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
     
     model_corrected = np.interp(s, q_model, q_obs, right=np.nan)
     
-    if extrapolate is None:
-        model_corrected[s > np.max(q_model)] = q_obs[-1]
-        model_corrected[s < np.min(q_model)] = q_obs[0]
+    # if extrapolate is None:
+    #     model_corrected[s > np.max(q_model)] = q_obs[-1]
+    #     model_corrected[s < np.min(q_model)] = q_obs[0]
         
-    elif extrapolate == 'constant':
-        extreme_inds = np.argwhere(s >= np.max(q_model))
-                        
-        if len(extreme_inds) > 0:
-            uplift = q_obs[-1] - q_model[-1]
-            model_corrected[extreme_inds] = s[extreme_inds] + uplift
-    else:
-        raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
-    return model_corrected
+    # elif extrapolate == 'constant':
+    extreme_inds = np.argwhere(s >= np.max(q_model))
+                    
+    if len(extreme_inds) > 0:
+        uplift = q_obs[-1] - q_model[-1]
+        model_corrected[extreme_inds] = s[extreme_inds] + uplift
+    # else:
+    #     raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
+    # return model_corrected
 
 
 def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray, 
                       obs_train_data: np.ndarray, quantiles: Union[int, ArrayLike], neighbourhood_size: int=0,
-                      extrapolate: str='constant') -> np.ndarray:
+                      ) -> np.ndarray:
     """Quantile map data that is on a grid
 
     Args:
@@ -83,14 +86,14 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
     fcst_corrected = np.empty(array_to_correct.shape)
     fcst_corrected[:,:,:] = np.nan
     
-    for w in range(width):
+    for w in tqdm(range(width), file=sys.stdout):
         for h in range(height):
             w_range = np.arange(max(w - neighbourhood_size,0), min(w + neighbourhood_size + 1, width), 1)
             h_range = np.arange(max(h - neighbourhood_size,0), min(h + neighbourhood_size + 1, height), 1)
             result = empirical_quantile_map(obs_train=obs_train_data[:,w_range,:][:,:,h_range], 
                                                         model_train=fcst_train_data[:,w_range,:][:,:,h_range], 
                                                         s=array_to_correct[:,w,h],
-                                                        quantiles=quantiles, extrapolate=extrapolate)
+                                                        quantiles=quantiles)
             fcst_corrected[:,w,h] = result
             
     return fcst_corrected
@@ -196,7 +199,7 @@ class QuantileMapper():
         fcst_corrected[:,:,:] = np.nan
 
         for date_index_name, d_ix in test_date_indexes.items():
-            for lat_index in range(lat_dim):
+            for lat_index in tqdm(range(lat_dim)):
                 for lon_index in range(lon_dim):
                     
                     area_name = [k for k, v in self.quantile_areas.items() if lat_index in range(v['lat_index_range'][0], v['lat_index_range'][1]+1) and lon_index in range(v['lon_index_range'][0], v['lon_index_range'][1]+1)]

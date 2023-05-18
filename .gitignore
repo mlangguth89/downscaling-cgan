@@ -18,6 +18,7 @@ system_tests/data/tfrecords/
 system_tests/data/tmp_model_test/
 */tmp
 */*/tmp
+*.o
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
