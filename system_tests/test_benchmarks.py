@@ -86,16 +86,19 @@ class TestBenchmarks(unittest.TestCase):
                       training_dates=self.training_dates, training_hours=self.training_hours)
         
         # Check that 1.0 quantile is inserted
-        self.assertIn(1.0, [item[0] for item in qmapper.quantiles_by_area[list(qmapper.quantiles_by_area.keys())[0]]['fcst_quantiles']])
+        self.assertIn(1.0, [item for item in qmapper.quantile_locs])
         
         # Add data to test set that is larger than max of train set
         fcst_array = np.append(self.fcst_array, (self.ifs_train_data.max() + 10)*np.ones((1, test_width, test_height)), axis=0)
                 
         # Just select some random dates for the test set
-        dates = np.random.choice(self.training_dates, fcst_array.shape[0])
-        hours = np.random.choice(self.training_hours, fcst_array.shape[0])
+        np.random.seed(seed=0)
+        dates = np.random.choice(self.training_dates, fcst_array.shape[0], replace=False)
+        np.random.seed(seed=0)
+        hours = np.random.choice(self.training_hours, fcst_array.shape[0], replace=False)
 
         fcst_corrected = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+        
         # Check no nulls
         self.assertEqual(np.isnan(fcst_corrected).sum(), 0)
         

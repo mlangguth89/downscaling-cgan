@@ -142,6 +142,8 @@ class QuantileMapper():
 
         self.quantile_areas = {}
         for t_name, d in date_indexes.items():
+            self.quantile_areas[f't{t_name}'] = {}
+            
             for n, lat_chunk in enumerate(lat_range_chunks):
                 for m, lon_chunk in enumerate(lon_range_chunks):
                     
@@ -151,10 +153,12 @@ class QuantileMapper():
                     lat_index_range = [self.latitude_range.index(lat_rng[0]), self.latitude_range.index(lat_rng[1])]
                     lon_index_range = [self.longitude_range.index(lon_rng[0]), self.longitude_range.index(lon_rng[1])]
                     
-                    self.quantile_areas[f't{t_name}_lat{n}_lon{m}'] = {'lat_range': lat_rng, 'lon_range': lon_rng,
+                    self.quantile_areas[f't{t_name}'][f'lat{n}_lon{m}'] = {'lat_range': lat_rng, 'lon_range': lon_rng,
                                                             'lat_index_range': lat_index_range,
                                                             'lon_index_range': lon_index_range,
-                                                            'date_indexes': d}
+                                                            'date_indexes': d,
+                                                            'lat_range_mean': np.mean(lat_index_range),
+                                                            'lon_range_mean': np.mean(lon_index_range)}
         return self.quantile_areas
 
 
@@ -163,22 +167,42 @@ class QuantileMapper():
         self.get_quantile_areas(training_dates=training_dates, training_hours=training_hours)
   
         self.quantiles_by_area = {}
-        for k, q in self.quantile_areas.items():
-            lat_index_range = q['lat_index_range']
-            lon_index_range = q['lon_index_range']
-            date_indexes = q['date_indexes']
-            
-            fcst = fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
-            obs = obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
-            
-            obs_quantiles = np.quantile(obs.flatten(), self.quantile_locs)
-            fcst_quantiles = np.quantile(fcst.flatten(), self.quantile_locs)
+        for time_period, area_quantiles in self.quantile_areas.items():
+            self.quantiles_by_area[time_period] = {}
+            for area_id, q in area_quantiles.items():
+                lat_index_range = q['lat_index_range']
+                lon_index_range = q['lon_index_range']
+                date_indexes = q['date_indexes']
+                
+                fcst = fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
+                obs = obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
+                
+                obs_quantiles = np.quantile(obs.flatten(), self.quantile_locs)
+                fcst_quantiles = np.quantile(fcst.flatten(), self.quantile_locs)
 
-            self.quantiles_by_area[k] = {'fcst_quantiles': list(zip(self.quantile_locs, fcst_quantiles)), 
-                                    'obs_quantiles': list(zip(self.quantile_locs, obs_quantiles))}
+                self.quantiles_by_area[time_period][area_id] = {'fcst_quantiles': fcst_quantiles, 
+                                                                'obs_quantiles': obs_quantiles}
 
         return self.quantiles_by_area
-
+    
+    @staticmethod
+    def get_weighted_quantiles(lat_index: int, lon_index: int, 
+                               area_centres: dict, quantiles_for_time_period: dict):
+        
+        coordinate_array = np.array([lat_index, lon_index])
+                    
+        # Calculate distance via exp(-|a-b|_1)
+        exp_weighting = {k: np.exp(- np.linalg.norm(v - coordinate_array, ord=1)) for k, v in area_centres.items()}
+        normalising_factor = np.sum(list(exp_weighting.values()))
+        area_weights = {k: v / normalising_factor for k, v in exp_weighting.items()}
+        
+        # Calculate weighted average of quantiles to use
+        obs_quantiles = np.sum(np.stack([v['obs_quantiles'] * area_weights[k] for k, v in quantiles_for_time_period.items()], axis=0), axis=0)
+        fcst_quantiles = np.sum(np.stack([v['fcst_quantiles'] * area_weights[k] for k, v in quantiles_for_time_period.items()], axis=0), axis=0)
+        
+        return obs_quantiles, fcst_quantiles
+        
+        
     def get_quantile_mapped_forecast(self, fcst: np.ndarray, dates: Iterable, hours: Iterable=None):
 
         # Find indexes of dates in test set relative to the date chunks
@@ -186,9 +210,9 @@ class QuantileMapper():
         fcst = fcst.copy()
 
         if hours is not None:
-            date_hour_list = list(zip(dates,hours))
+            date_hour_list = list(set(zip(dates,hours)))
         else:
-            date_hour_list = list(zip(dates,[0]*len(dates)))
+            date_hour_list = list(set(zip(dates,[0]*len(dates))))
 
         test_date_chunks =  {'_'.join([str(month_range[0]), str(month_range[-1])]): [item for item in date_hour_list if item[0].month in month_range] for month_range in self.month_ranges}
         test_date_indexes = {k : [date_hour_list.index(item) for item in chunk] for k, chunk in test_date_chunks.items()}
@@ -199,47 +223,39 @@ class QuantileMapper():
         fcst_corrected[:,:,:] = np.nan
 
         for date_index_name, d_ix in test_date_indexes.items():
+            
+            quantile_areas_for_time_period = self.quantile_areas[f't{date_index_name}']
+            quantiles_for_time_period = self.quantiles_by_area[f't{date_index_name}']
+            
+            area_centres = {k: np.array([v['lat_range_mean'], v['lon_range_mean']]) for k, v in quantile_areas_for_time_period.items()}
+            
             for lat_index in tqdm(range(lat_dim)):
                 for lon_index in range(lon_dim):
                     
-                    area_name = [k for k, v in self.quantile_areas.items() if lat_index in range(v['lat_index_range'][0], v['lat_index_range'][1]+1) and lon_index in range(v['lon_index_range'][0], v['lon_index_range'][1]+1)]
-                    area_name = [a for a in area_name if a.startswith(f't{date_index_name}')]
+                    obs_quantiles, fcst_quantiles = self.get_weighted_quantiles(lat_index, lon_index, area_centres, quantiles_for_time_period)
+             
+                    tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
+                    tmp_fcst_array = np.interp(tmp_fcst_array, fcst_quantiles, obs_quantiles)
+                                
+                    # Deal with zeros; assign random bin
+                    ifs_zero_quantiles = [n for n, q in enumerate(fcst_quantiles) if q == 0.0]
+                    if ifs_zero_quantiles:
+                        zero_inds = np.argwhere(tmp_fcst_array == 0.0)
+                        tmp_fcst_array[zero_inds] = np.array(obs_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
                     
-                    # If lat and lon ranges are mismatched, then it can't find the area name
-                    # For now just exclude these pixels until fixed properly
-                
-                    if area_name:
-                                    
-                        if len(area_name) > 1:
-                            raise ValueError('Too many quadrants, something is wrong')
-                        else:
-                            area_name = area_name[0]
-                            
-                        tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
-                        
-                        obs_quantiles = [item[1] for item in self.quantiles_by_area[area_name]['obs_quantiles']]
-                        fcst_quantiles = [item[1] for item in self.quantiles_by_area[area_name]['fcst_quantiles']]
-
-                        quantile_locs = [item[0] for item in self.quantiles_by_area[area_name]['obs_quantiles']]
-                        assert set(quantile_locs) == set([item[0] for item in self.quantiles_by_area[area_name]['fcst_quantiles']])
-
-                        fcst_corrected[d_ix,lat_index,lon_index] = np.interp(tmp_fcst_array, fcst_quantiles, obs_quantiles)
-                                    
-                        # Deal with zeros; assign random bin
-                        ifs_zero_quantiles = [n for n, q in enumerate(fcst_quantiles) if q == 0.0]
-                        if ifs_zero_quantiles:
-                            zero_inds = np.argwhere(tmp_fcst_array == 0.0)
-                            fcst_corrected[zero_inds, lat_index, lon_index ] = np.array(obs_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
-                        
-                        # Deal with values outside the training range
-                        max_training_forecast_val = np.max(fcst_quantiles)
-                        max_obs_forecast_val = np.max(obs_quantiles)
-                        extreme_inds = np.argwhere(tmp_fcst_array >= max_training_forecast_val)
-                        
-                        if len(extreme_inds) > 0:
-                            uplift = max_obs_forecast_val - max_training_forecast_val
-                            fcst_corrected[extreme_inds, lat_index, lon_index] = tmp_fcst_array[extreme_inds] + uplift
-                        
+                    # Deal with values outside the training range
+                    max_training_forecast_val = np.max(fcst_quantiles)
+                    max_obs_forecast_val = np.max(obs_quantiles)
+                    extreme_inds = np.argwhere(tmp_fcst_array >= max_training_forecast_val)
+                    
+                    if len(extreme_inds) > 0:
+                        uplift = max_obs_forecast_val - max_training_forecast_val
+                        tmp_fcst_array[extreme_inds] = tmp_fcst_array[extreme_inds] + uplift
+                    
+                    try:
+                        fcst_corrected[d_ix,lat_index,lon_index] = tmp_fcst_array
+                    except:
+                        t=1
         return fcst_corrected
 
 
