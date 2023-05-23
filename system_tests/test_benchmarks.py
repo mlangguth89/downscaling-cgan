@@ -110,4 +110,5 @@ class TestBenchmarks(unittest.TestCase):
         # Check that quantile mapping is fitting well to the training data
         fcst_corrected_train =  qmapper.get_quantile_mapped_forecast(fcst=self.ifs_train_data, dates=self.training_dates, hours=self.training_hours)
 
-        self.assertGreater(pearsonr(np.quantile(self.imerg_train_data, quantile_locs), np.quantile(fcst_corrected_train, quantile_locs)).statistic, 0.99)
+        self.assertGreater(pearsonr(np.quantile(self.imerg_train_data, quantile_locs), np.quantile(fcst_corrected_train, quantile_locs)).statistic, 0.999)
+        

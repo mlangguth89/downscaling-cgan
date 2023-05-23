@@ -114,7 +114,9 @@ class QuantileMapper():
             quantile_locs.append(1.0)
             
         self.quantile_locs = quantile_locs
-        self.quantile_areas = None
+        self.quantile_latitude_groupings = None
+        self.quantile_longitude_groupings = None
+        self.quantile_date_groupings = None
         self.quantiles_by_area = None
 
     def get_quantile_areas(self, training_dates, training_hours=None):
@@ -140,26 +142,32 @@ class QuantileMapper():
         lon_range_chunks = [self.longitude_range[n*lon_chunk_size:(n+1)*lon_chunk_size] for n in range(self.num_lat_lon_chunks)]
         lon_range_chunks[-1] = lon_range_chunks[-1] + self.longitude_range[self.num_lat_lon_chunks*lon_chunk_size:]
 
-        self.quantile_areas = {}
+        self.quantile_date_groupings = {}
         for t_name, d in date_indexes.items():
-            self.quantile_areas[f't{t_name}'] = {}
             
-            for n, lat_chunk in enumerate(lat_range_chunks):
-                for m, lon_chunk in enumerate(lon_range_chunks):
-                    
-                    lat_rng = [lat_chunk[0], lat_chunk[-1]]
-                    lon_rng = [lon_chunk[0], lon_chunk[-1]]
-                    
-                    lat_index_range = [self.latitude_range.index(lat_rng[0]), self.latitude_range.index(lat_rng[1])]
-                    lon_index_range = [self.longitude_range.index(lon_rng[0]), self.longitude_range.index(lon_rng[1])]
-                    
-                    self.quantile_areas[f't{t_name}'][f'lat{n}_lon{m}'] = {'lat_range': lat_rng, 'lon_range': lon_rng,
-                                                            'lat_index_range': lat_index_range,
-                                                            'lon_index_range': lon_index_range,
-                                                            'date_indexes': d,
-                                                            'lat_range_mean': np.mean(lat_index_range),
-                                                            'lon_range_mean': np.mean(lon_index_range)}
-        return self.quantile_areas
+            self.quantile_date_groupings[f't{t_name}'] = d
+            
+        self.quantile_latitude_groupings = {}
+        for n, lat_chunk in enumerate(lat_range_chunks):
+            
+            lat_rng = [lat_chunk[0], lat_chunk[-1]]
+                
+            lat_index_range = [self.latitude_range.index(lat_rng[0]), self.latitude_range.index(lat_rng[1])]
+            
+            self.quantile_latitude_groupings[n] = {'lat_index_range': lat_index_range,
+                                                   'lat_range_mean': np.mean(lat_index_range)}
+            
+        self.quantile_longitude_groupings = {}
+        for m, lon_chunk in enumerate(lon_range_chunks):
+                
+            lon_rng = [lon_chunk[0], lon_chunk[-1]]
+            
+            lon_index_range = [self.longitude_range.index(lon_rng[0]), self.longitude_range.index(lon_rng[1])]
+            
+            self.quantile_longitude_groupings[m] = {'lon_index_range': lon_index_range,
+                                                    'lon_range_mean': np.mean(lon_index_range)}
+            
+        return self.quantile_date_groupings, self.quantile_latitude_groupings, self.quantile_longitude_groupings
 
 
     def train(self, fcst_data, obs_data, training_dates, training_hours):
@@ -167,21 +175,25 @@ class QuantileMapper():
         self.get_quantile_areas(training_dates=training_dates, training_hours=training_hours)
   
         self.quantiles_by_area = {}
-        for time_period, area_quantiles in self.quantile_areas.items():
+        for time_period, date_indexes in self.quantile_date_groupings.items():
             self.quantiles_by_area[time_period] = {}
-            for area_id, q in area_quantiles.items():
-                lat_index_range = q['lat_index_range']
-                lon_index_range = q['lon_index_range']
-                date_indexes = q['date_indexes']
-                
-                fcst = fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
-                obs = obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
-                
-                obs_quantiles = np.quantile(obs.flatten(), self.quantile_locs)
-                fcst_quantiles = np.quantile(fcst.flatten(), self.quantile_locs)
+            
+            for n, lat_grouping in self.quantile_latitude_groupings.items():
+                for m, lon_grouping in self.quantile_longitude_groupings.items():
+                    
+                    area_id = f'lat{n}_lon{m}'
 
-                self.quantiles_by_area[time_period][area_id] = {'fcst_quantiles': fcst_quantiles, 
-                                                                'obs_quantiles': obs_quantiles}
+                    lat_index_range = lat_grouping['lat_index_range']
+                    lon_index_range = lon_grouping['lon_index_range']
+                    
+                    fcst = fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
+                    obs = obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
+                    
+                    obs_quantiles = np.quantile(obs.flatten(), self.quantile_locs)
+                    fcst_quantiles = np.quantile(fcst.flatten(), self.quantile_locs)
+
+                    self.quantiles_by_area[time_period][area_id] = {'fcst_quantiles': fcst_quantiles, 
+                                                                    'obs_quantiles': obs_quantiles}
 
         return self.quantiles_by_area
     
@@ -189,6 +201,7 @@ class QuantileMapper():
     def get_weighted_quantiles(lat_index: int, lon_index: int, 
                                area_centres: dict, quantiles_for_time_period: dict):
         
+        # TODO: make this work in time as well as space
         coordinate_array = np.array([lat_index, lon_index])
                     
         # Calculate distance via exp(-|a-b|_1)
@@ -221,14 +234,12 @@ class QuantileMapper():
         
         fcst_corrected = np.empty(fcst.shape)
         fcst_corrected[:,:,:] = np.nan
+        area_centres = {f'lat{n}_lon{m}': np.array([self.quantile_latitude_groupings[n]['lat_range_mean'], self.quantile_longitude_groupings[m]['lon_range_mean']]) for n in range(self.num_lat_lon_chunks) for m in range(self.num_lat_lon_chunks)}
 
         for date_index_name, d_ix in test_date_indexes.items():
             
-            quantile_areas_for_time_period = self.quantile_areas[f't{date_index_name}']
             quantiles_for_time_period = self.quantiles_by_area[f't{date_index_name}']
-            
-            area_centres = {k: np.array([v['lat_range_mean'], v['lon_range_mean']]) for k, v in quantile_areas_for_time_period.items()}
-            
+
             for lat_index in tqdm(range(lat_dim)):
                 for lon_index in range(lon_dim):
                     
@@ -241,21 +252,21 @@ class QuantileMapper():
                     ifs_zero_quantiles = [n for n, q in enumerate(fcst_quantiles) if q == 0.0]
                     if ifs_zero_quantiles:
                         zero_inds = np.argwhere(tmp_fcst_array == 0.0)
-                        tmp_fcst_array[zero_inds] = np.array(obs_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
+                        
+                        if len(zero_inds) > 0:
+                            tmp_fcst_array[zero_inds] = np.array(obs_quantiles)[np.random.choice(ifs_zero_quantiles, size=zero_inds.shape)]
                     
                     # Deal with values outside the training range
                     max_training_forecast_val = np.max(fcst_quantiles)
                     max_obs_forecast_val = np.max(obs_quantiles)
-                    extreme_inds = np.argwhere(tmp_fcst_array >= max_training_forecast_val)
+                    extreme_inds = np.argwhere(fcst[d_ix, lat_index, lon_index]  >= max_training_forecast_val)
                     
                     if len(extreme_inds) > 0:
                         uplift = max_obs_forecast_val - max_training_forecast_val
                         tmp_fcst_array[extreme_inds] = tmp_fcst_array[extreme_inds] + uplift
                     
-                    try:
-                        fcst_corrected[d_ix,lat_index,lon_index] = tmp_fcst_array
-                    except:
-                        t=1
+                    fcst_corrected[d_ix,lat_index,lon_index] = tmp_fcst_array
+
         return fcst_corrected
 
 

@@ -7,6 +7,7 @@ import cartopy.crs as ccrs
 import matplotlib as mpl
 import numpy as np
 import seaborn as sns
+
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
@@ -52,7 +53,7 @@ range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'mark
                   
 percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
 percentiles=np.concatenate(percentiles_list)
-quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
+quantile_locs = [item / 100.0 for item in percentiles]
 
 def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
                   cmap='Reds'):

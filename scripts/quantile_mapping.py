@@ -4,7 +4,9 @@ Script to quantile map the forecasts
 Note that this requires data to be prepared from the training set, and so is currently
 not in a fit state to be used without a proper pipeline being set up 
 
-lbatch -t 10 -m 100 --queue short --conda-env base -a ID --array-range 1 10 --cmd python -m scripts.quantile_mapping --num-lat-lon-chunks ARRAY_ID --model-type cropped_4000 --output-folder plots/quantile_map_plots
+lbatch -t 10 -m 100 --queue short --conda-env base -a ID --array-range 1 10 --cmd python -m scripts.quantile_mapping --num-lat-lon-chunks ARRAY_ID --model-type cropped_4000 --output-folder /user/work/uz22147/quantile_mapping
+
+
 """
 
 import pickle
@@ -43,7 +45,7 @@ args = parser.parse_args()
 # Load model data
 ###########################
 
-print('Lading model data', flush=True)
+print('Loading model data', flush=True)
 log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
                'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
                'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n2000_201806-201905_e20',
@@ -197,21 +199,20 @@ quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_
 # Evaluate on training set
 quantile_data_dicts['train_gan']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=cgan_training_data, dates=training_dates, hours=training_hours)
 
-###########################
-print('### Saving data ', flush=True)
-###########################
+
 
 if args.save_data:
-    with open(f'quantile_data_dicts_{args.num_lat_lon_chunks}.pkl', 'wb+') as ofh:
+    ###########################
+    print('### Saving data ', flush=True)
+    ###########################
+    with open(os.path.join(args.output_folder, f'quantile_data_dicts_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(quantile_data_dicts, ofh)
 
 
-###########################
-print('## Creating plots', flush=True)
-###########################
-
 if args.plot:
-
+    ###########################
+    print('## Creating plots', flush=True)
+    ###########################
     for data_type, quantile_data_dict in tqdm(quantile_data_dicts.items(), file=sys.stdout):
         # Overall q-q plot
         
