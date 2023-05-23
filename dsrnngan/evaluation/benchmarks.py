@@ -13,6 +13,7 @@ sh = logging.StreamHandler()
 sh.setLevel(logging.DEBUG)
 logger.addHandler(sh)
 
+from dsrnngan.utils.utils import get_valid_quantiles
 
 def nn_interp_model(data, upsampling_factor):
     return np.repeat(np.repeat(data, upsampling_factor, axis=-1), upsampling_factor, axis=-2)
@@ -21,9 +22,8 @@ def nn_interp_model(data, upsampling_factor):
 def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
 
-@jit(nopython=True)
 def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np.ndarray,
-                           quantiles: Union[int, ArrayLike]=10) -> np.ndarray:
+                           quantiles: Union[int, ArrayLike]=10, extrapolate: str=None) -> np.ndarray:
     """
     Empirical quantile mapping for bias correction
 
@@ -50,19 +50,19 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
     
     model_corrected = np.interp(s, q_model, q_obs, right=np.nan)
     
-    # if extrapolate is None:
-    #     model_corrected[s > np.max(q_model)] = q_obs[-1]
-    #     model_corrected[s < np.min(q_model)] = q_obs[0]
+    if extrapolate is None:
+        model_corrected[s > np.max(q_model)] = q_obs[-1]
+        model_corrected[s < np.min(q_model)] = q_obs[0]
         
-    # elif extrapolate == 'constant':
-    extreme_inds = np.argwhere(s >= np.max(q_model))
-                    
-    if len(extreme_inds) > 0:
-        uplift = q_obs[-1] - q_model[-1]
-        model_corrected[extreme_inds] = s[extreme_inds] + uplift
-    # else:
-    #     raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
-    # return model_corrected
+    elif extrapolate == 'constant':
+        extreme_inds = np.argwhere(s >= np.max(q_model))
+                        
+        if len(extreme_inds) > 0:
+            uplift = q_obs[-1] - q_model[-1]
+            model_corrected[extreme_inds] = s[extreme_inds] + uplift
+        else:
+            raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
+        return model_corrected
 
 
 def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray, 
@@ -102,23 +102,47 @@ class QuantileMapper():
     
     def __init__(self, month_ranges: list, 
                  latitude_range: Iterable, longitude_range: Iterable, quantile_locs: list,
-                 num_lat_lon_chunks: int=2) -> None:
+                 num_lat_lon_chunks: int=2, min_data_points_per_quantile: int=0) -> None:
         
         self.month_ranges = month_ranges
         self.latitude_range = [np.round(item, 2) for item in sorted(latitude_range)]
         self.longitude_range = [np.round(item, 2) for item in sorted(longitude_range)]
         self.num_lat_lon_chunks = num_lat_lon_chunks
         
+        self.min_data_points_per_quantile = int(min_data_points_per_quantile)
+        
+        if self.min_data_points_per_quantile < 0:
+            raise ValueError('min_data_points_per_quantile must be a positive integer')
+
+        
         if 1.0 not in quantile_locs:
             # We need to have the maximum value in order to deal with extreme values
             quantile_locs.append(1.0)
-            
-        self.quantile_locs = quantile_locs
+        
+        self.raw_quantile_locs = quantile_locs
+        
+        if self.min_data_points_per_quantile:
+            # If minimum data required per quantile, then this will be defined at training time
+            # based on the size of the training dataset    
+            self.quantile_locs = None
+        else:
+            self.quantile_locs = self.raw_quantile_locs
+        
         self.quantile_latitude_groupings = None
         self.quantile_longitude_groupings = None
         self.quantile_date_groupings = None
         self.quantiles_by_area = None
 
+    def update_quantile_locations(self, input_data: np.ndarray):
+        
+        data_size = input_data.size
+        
+        
+        self.quantile_locs = get_valid_quantiles(data_size=data_size, min_data_points_per_quantile=self.min_data_points_per_quantile, raw_quantile_locations=self.raw_quantile_locs)
+        
+        return self.quantile_locs
+        
+        
     def get_quantile_areas(self, training_dates, training_hours=None):
         
         if isinstance(training_dates, np.ndarray):
@@ -151,8 +175,9 @@ class QuantileMapper():
         for n, lat_chunk in enumerate(lat_range_chunks):
             
             lat_rng = [lat_chunk[0], lat_chunk[-1]]
-                
-            lat_index_range = [self.latitude_range.index(lat_rng[0]), self.latitude_range.index(lat_rng[1])]
+            
+            # Note the +1, to ensure that this range can be used to index like [:, lat_index_range[0]: lat_index_range[1]]
+            lat_index_range = [self.latitude_range.index(lat_rng[0]), self.latitude_range.index(lat_rng[1]) + 1]
             
             self.quantile_latitude_groupings[n] = {'lat_index_range': lat_index_range,
                                                    'lat_range_mean': np.mean(lat_index_range)}
@@ -162,7 +187,8 @@ class QuantileMapper():
                 
             lon_rng = [lon_chunk[0], lon_chunk[-1]]
             
-            lon_index_range = [self.longitude_range.index(lon_rng[0]), self.longitude_range.index(lon_rng[1])]
+            # See note above about +1
+            lon_index_range = [self.longitude_range.index(lon_rng[0]), self.longitude_range.index(lon_rng[1]) + 1]
             
             self.quantile_longitude_groupings[m] = {'lon_index_range': lon_index_range,
                                                     'lon_range_mean': np.mean(lon_index_range)}
@@ -173,6 +199,9 @@ class QuantileMapper():
     def train(self, fcst_data, obs_data, training_dates, training_hours):
         
         self.get_quantile_areas(training_dates=training_dates, training_hours=training_hours)
+        
+        if self.min_data_points_per_quantile:
+            self.update_quantile_locations(fcst_data)
   
         self.quantiles_by_area = {}
         for time_period, date_indexes in self.quantile_date_groupings.items():
@@ -242,12 +271,13 @@ class QuantileMapper():
 
             for lat_index in tqdm(range(lat_dim)):
                 for lon_index in range(lon_dim):
+                
                     
                     obs_quantiles, fcst_quantiles = self.get_weighted_quantiles(lat_index, lon_index, area_centres, quantiles_for_time_period)
-             
-                    tmp_fcst_array = fcst[d_ix, lat_index, lon_index] 
+
+                    tmp_fcst_array = fcst[d_ix, lat_index, lon_index].copy()
                     tmp_fcst_array = np.interp(tmp_fcst_array, fcst_quantiles, obs_quantiles)
-                                
+     
                     # Deal with zeros; assign random bin
                     ifs_zero_quantiles = [n for n, q in enumerate(fcst_quantiles) if q == 0.0]
                     if ifs_zero_quantiles:
@@ -259,7 +289,7 @@ class QuantileMapper():
                     # Deal with values outside the training range
                     max_training_forecast_val = np.max(fcst_quantiles)
                     max_obs_forecast_val = np.max(obs_quantiles)
-                    extreme_inds = np.argwhere(fcst[d_ix, lat_index, lon_index]  >= max_training_forecast_val)
+                    extreme_inds = np.argwhere(fcst[d_ix, lat_index, lon_index]  > max_training_forecast_val)
                     
                     if len(extreme_inds) > 0:
                         uplift = max_obs_forecast_val - max_training_forecast_val

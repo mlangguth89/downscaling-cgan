@@ -36,6 +36,7 @@ parser.add_argument('--num-lat-lon-chunks', type=int, help='Number of chunks to 
 parser.add_argument('--model-type', type=str, help='Choice of model type')
 parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
+parser.add_argument('--min-points-per-quantile', type=int, default=0, help='Minimum number of data points per quantile')
 parser.add_argument('--save-data', action='store_true', help='save data')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
@@ -157,7 +158,7 @@ quantile_data_dicts['train_fcst']['Obs (IMERG)']['data'] = imerg_train_data
 month_ranges = [[n for n in range(1,13)]]
 
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range, quantile_locs=quantile_locs,
-                         num_lat_lon_chunks=args.num_lat_lon_chunks)
+                         num_lat_lon_chunks=args.num_lat_lon_chunks, min_data_points_per_quantile=args.min_points_per_quantile)
 qmapper.train(fcst_data=ifs_train_data, obs_data=imerg_train_data, training_dates=training_dates, training_hours=training_hours)
 quantile_data_dicts['test']['Fcst + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
 
@@ -192,7 +193,7 @@ quantile_data_dicts['train_gan']['GAN']['data'] = cgan_training_data
 quantile_data_dicts['train_gan']['Obs (IMERG)']['data'] = imerg_training_data
 
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range, quantile_locs=quantile_locs,
-                         num_lat_lon_chunks=args.num_lat_lon_chunks)
+                         num_lat_lon_chunks=args.num_lat_lon_chunks, min_data_points_per_quantile=args.min_points_per_quantile)
 qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
 quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
 
@@ -218,8 +219,8 @@ if args.plot:
         
         fcst_key = 'GAN' if 'GAN' in quantile_data_dict else 'Fcst'
         
-        plot_quantiles(quantile_data_dict, 
-                    save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_total_n{args.num_lat_lon_chunks}_total.pdf'))
+        plot_quantiles(quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile,
+                       save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_total_n{args.num_lat_lon_chunks}_total.pdf'))
 
         # Q-Q plot for areas
         fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, len(special_areas)*10))
@@ -235,7 +236,7 @@ if args.plot:
                 local_quantile_data_dict[k] = copy.deepcopy(v)
                 local_quantile_data_dict[k]['data'] = local_quantile_data_dict[k]['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]]
             
-            plot_quantiles(local_quantile_data_dict, ax=ax[n])
+            plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile)
             ax[n].set_title(area)
         
         plt.savefig(os.path.join(args.output_folder, f'qq_plot_{data_type}_area_n{args.num_lat_lon_chunks}_total.pdf'), format='pdf')

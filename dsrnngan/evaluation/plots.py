@@ -19,7 +19,7 @@ lake_feature = cfeature.NaturalEarthFeature(
     'physical', 'lakes',
     cfeature.auto_scaler, edgecolor='black', facecolor='never')
 
-from dsrnngan.utils import read_config
+from dsrnngan.utils import read_config, utils
 from dsrnngan.data import data
 from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.evaluation.rapsd import plot_spectrum1d, rapsd
@@ -105,7 +105,8 @@ def plot_fss_scores(fss_results, output_folder, output_suffix):
 def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figure=None, 
                    ax: plt.Axes=None, 
                    obs_key: str='Obs (IMERG)',
-                   range_dict: dict=range_dict):
+                   range_dict: dict=range_dict,
+                   min_data_points_per_quantile: int=None):
     """
     Produce qauntile-quantile plot
 
@@ -128,6 +129,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     """
 
     quantile_results = {}
+    max_quantile = 0
     for data_name, d in quantile_data_dict.items():
             quantile_results[data_name] = {}
             
@@ -135,31 +137,42 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
             
                 quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
                 
-                quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
+                if min_data_points_per_quantile is not None:
+                    # check minimum number of points per quantile
+                    quantile_boundaries = utils.get_valid_quantiles(data_size=d['data'].size, raw_quantile_locations=quantile_boundaries, 
+                                                                    min_data_points_per_quantile=min_data_points_per_quantile)
+                    
+                if quantile_boundaries:
+                    quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
+                    
+                    if np.max(quantile_boundaries) > max_quantile:
+                        max_quantile = np.max(quantile_boundaries)
+
 
     if not ax:
         fig, ax = plt.subplots(1,1, figsize=(8,8))
     marker_handles = None
 
     # Quantiles for annotating plot
-    (q_99pt9, q_99pt99, q_99pt999) = np.quantile(quantile_data_dict[obs_key]['data'], [0.999, 0.9999, 0.99999])
-
+    quantile_annotation_dict = {str(q): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(1, 10)] if q <=max_quantile}
+        
     for k, v in tqdm(range_dict.items()):
         
         size=v['marker_size']
         cmap = plt.colormaps["plasma"]
         
-        max_truth_val = max(quantile_results[obs_key][k])
-
-        marker_hndl_list = []
-        for data_name, res in quantile_results.items():
-            if data_name != obs_key:
-                s = ax.scatter(quantile_results[obs_key][k], res[k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
-                            cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
-                marker_hndl_list.append(s)
-        
-        if not marker_handles:
-            marker_handles = marker_hndl_list
+        if k in quantile_results[obs_key]:
+            max_truth_val = max(quantile_results[obs_key][k])
+            
+            marker_hndl_list = []
+            for data_name, res in quantile_results.items():
+                if data_name != obs_key:
+                    s = ax.scatter(quantile_results[obs_key][k], res[k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
+                                cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+                    marker_hndl_list.append(s)
+            
+            if not marker_handles:
+                marker_handles = marker_hndl_list
         
     ax.legend(handles=marker_handles, loc='center left')
     ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
@@ -173,12 +186,9 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
             if max(sub_v) > max_val:
                 max_val = max(sub_v)
     
-    ax.vlines(q_99pt9, 0, max_val, linestyles='--')
-    ax.vlines(q_99pt99, 0, max_val, linestyles='--')
-    ax.vlines(q_99pt999, 0, max_val, linestyles='--')
-    ax.text(q_99pt9 , max_val - 20, '$99.9^{th}$')
-    ax.text(q_99pt99 , max_val - 20, '$99.99^{th}$')
-    ax.text(q_99pt999  , max_val - 20, '$99.999^{th}$')
+    for k, v in quantile_annotation_dict.items():
+        ax.vlines(v, 0, max_val, linestyles='--')
+        ax.text(1.01*v, 0.8* max_val, f'{float(k)*100}th')
     
     if save_path:
         plt.savefig(save_path, format='pdf')

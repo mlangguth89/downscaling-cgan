@@ -111,4 +111,44 @@ class TestBenchmarks(unittest.TestCase):
         fcst_corrected_train =  qmapper.get_quantile_mapped_forecast(fcst=self.ifs_train_data, dates=self.training_dates, hours=self.training_hours)
 
         self.assertGreater(pearsonr(np.quantile(self.imerg_train_data, quantile_locs), np.quantile(fcst_corrected_train, quantile_locs)).statistic, 0.999)
+
+    def test_max_val(self):
+        from dsrnngan.evaluation.plots import quantile_locs
+        # load test data
+        with open(str(data_folder / 'quantile_mapping' / 'quantile_mapping_test_data_2.pkl'), 'rb') as ifh:
+            train_data = pickle.load(ifh)
         
+        ifs_train_data = train_data['ifs_train_data']
+        imerg_train_data = train_data['imerg_train_data']
+        training_dates = train_data['training_dates']
+        training_hours = train_data['training_hours']
+        latitude_range = train_data['lat_range']
+        longitude_range= train_data['lon_range']
+        
+        month_ranges = [list(range(1,13))]
+
+        qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, 
+                                 longitude_range=longitude_range, quantile_locs=quantile_locs, num_lat_lon_chunks=1)
+        # identify best threshold and train on all the data
+        qmapper.train(fcst_data=ifs_train_data, obs_data=imerg_train_data, 
+                      training_dates=training_dates, training_hours=training_hours)
+        quantiles = qmapper.quantiles_by_area['t1_12']['lat0_lon0']
+        self.assertEqual(ifs_train_data.max(), np.max(quantiles['fcst_quantiles']))
+        fcst_corrected_train =  qmapper.get_quantile_mapped_forecast(ifs_train_data, 
+                                                                     dates=training_dates, 
+                                                                     hours=training_hours)
+        
+        self.assertLess(fcst_corrected_train.max(), 30)
+
+        
+    def test_minimum_samples_per_quantile(self):
+        quantile_locs = [0, 0.1, 0.2, 0.3, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999, 0.999999]
+        qmapper = QuantileMapper(month_ranges=[[1,2]], latitude_range=self.latitude_range, 
+                                 longitude_range=self.longitude_range, quantile_locs=quantile_locs, num_lat_lon_chunks=1,
+                                 min_data_points_per_quantile=1)
+        
+        # identify best threshold and train on all the data
+        qmapper.train(fcst_data=self.ifs_train_data, obs_data=self.imerg_train_data, 
+                      training_dates=self.training_dates, training_hours=self.training_hours)
+        
+        self.assertListEqual(qmapper.quantile_locs, [0, 0.1, 0.2, 0.3, 0.8, 0.9, 0.99, 0.999, 0.9999])

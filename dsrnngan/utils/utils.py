@@ -9,6 +9,7 @@ import datetime
 import pandas as pd
 import numpy as np
 from calendar import monthrange
+from typing import Iterable
 
 
 def hash_dict(params: dict):
@@ -58,3 +59,20 @@ def get_best_model_number(log_folder: str, metric_column_name: str='CRPS_no_pool
     model_number = df[df.CRPS_no_pooling == min_crps]['N'].values[0]
     
     return model_number
+
+
+def get_valid_quantiles(data_size: int, min_data_points_per_quantile: int, raw_quantile_locations: list) -> list:
+    """Returns a list of quantiles q such that (1-q)*input_data.size > min_data_points_per_quantile
+
+    Args:
+        data_size (int): Total number of data points
+        min_data_points_per_quantile (int): Minimum number of data points per quantile
+        raw_quantile_locations (list): The raw quantile locations, to be truncated
+
+    Returns:
+        list: quantile locations with necessary quantiles removed
+    """
+
+    quantile_locs = [val for val in raw_quantile_locations[:-1] if (1-val)*data_size > min_data_points_per_quantile]
+    
+    return quantile_locs
