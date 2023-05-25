@@ -101,7 +101,7 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
 class QuantileMapper():
     
     def __init__(self, month_ranges: list, 
-                 latitude_range: Iterable, longitude_range: Iterable, quantile_locs: list,
+                 latitude_range: Iterable, longitude_range: Iterable, quantile_locs: list=None,
                  num_lat_lon_chunks: int=2, min_data_points_per_quantile: int=0) -> None:
         
         self.month_ranges = month_ranges
