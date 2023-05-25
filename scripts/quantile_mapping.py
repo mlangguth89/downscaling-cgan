@@ -24,11 +24,11 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 sys.path.insert(1, str(HOME / 'dsrnngan'))
 
-from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
-from dsrnngan.evaluation.benchmarks import QuantileMapper
+from dsrnngan.data.data import denormalise
+from dsrnngan.evaluation.benchmarks import QuantileMapper, quantile_map_grid
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
 from dsrnngan.data.data import denormalise
-from dsrnngan.evaluation.plots import plot_quantiles, quantile_locs
+from dsrnngan.evaluation.plots import plot_quantiles
 
 parser = ArgumentParser(description='Script for quantile mapping.')
 
@@ -36,7 +36,7 @@ parser.add_argument('--num-lat-lon-chunks', type=int, help='Number of chunks to 
 parser.add_argument('--model-type', type=str, help='Choice of model type')
 parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
-parser.add_argument('--min-points-per-quantile', type=int, default=0, help='Minimum number of data points per quantile')
+parser.add_argument('--min-points-per-quantile', type=int, default=0, help='Minimum number of data points per quantile in the plots')
 parser.add_argument('--save-data', action='store_true', help='save data')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
@@ -53,6 +53,7 @@ log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201
                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
                'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10',
                'cropped_v2': '/user/work/uz22147/logs/cgan/f6998afe16c9f955/n4000_201806-201905_e10'}
+
 # Get best model
 log_folder = log_folders[args.model_type]
 
@@ -117,14 +118,18 @@ quantile_data_dicts = {'test': {
                     'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
                     'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
                     'Fcst + qmap': {'data': None, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
-                    'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7}
+                    'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7},
+                    'Fcst + qmap grid': {'data': None, 'color': 'r', 'marker': '^', 'alpha': 0.7},
+                    'GAN + qmap grid': {'data': None, 'color': 'b', 'marker': '^', 'alpha': 0.7}
                     },
                     'train_fcst': {'Fcst': {'data': None, 'color': 'r', 'marker': '+', 'alpha': 1},
                                    'Obs (IMERG)': {'data': None, 'color': 'k'},
-                                   'Fcst + qmap': {'data': None, 'color': 'r', 'marker': 'o', 'alpha': 0.7}},
+                                   'Fcst + qmap': {'data': None, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
+                                   'Fcst + qmap grid': {'data': None, 'color': 'r', 'marker': '^', 'alpha': 0.7}},
                     'train_gan': {'GAN': {'data': None, 'color': 'r', 'marker': '+', 'alpha': 1},
                                   'Obs (IMERG)': {'data': None, 'color': 'k'},
-                                  'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7}}}
+                                  'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7},
+                                  'GAN + qmap grid': {'data': None, 'color': 'b', 'marker': '^', 'alpha': 0.7}}}
 
 ###########################
 print('## Quantile mapping for IFS', flush=True)
@@ -157,13 +162,25 @@ quantile_data_dicts['train_fcst']['Obs (IMERG)']['data'] = imerg_train_data
 
 month_ranges = [[n for n in range(1,13)]]
 
-qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range, quantile_locs=quantile_locs,
-                         num_lat_lon_chunks=args.num_lat_lon_chunks, min_data_points_per_quantile=args.min_points_per_quantile)
+qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+                         num_lat_lon_chunks=args.num_lat_lon_chunks)
 qmapper.train(fcst_data=ifs_train_data, obs_data=imerg_train_data, training_dates=training_dates, training_hours=training_hours)
 quantile_data_dicts['test']['Fcst + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
 
 # Evaluate on training set
 quantile_data_dicts['train_fcst']['Fcst + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=ifs_train_data, dates=training_dates, hours=training_hours)
+
+# Do quantile mapping grid cell by grid cell
+quantile_data_dicts['test']['Fcst + qmap grid']['data'] = quantile_map_grid(array_to_correct=fcst_array, 
+                                                                            fcst_train_data=ifs_train_data, 
+                                                                            obs_train_data=imerg_train_data, 
+                                                                            quantiles=qmapper.quantile_locs)
+
+# Evaluate on training set
+quantile_data_dicts['train_fcst']['Fcst + qmap grid']['data'] = quantile_map_grid(array_to_correct=ifs_train_data, 
+                                                                            fcst_train_data=ifs_train_data, 
+                                                                            obs_train_data=imerg_train_data, 
+                                                                            quantiles=qmapper.quantile_locs)
 
 
 ###########################
@@ -192,14 +209,26 @@ training_hours = [h[0] for h in arrays['hours']][:n_samples]
 quantile_data_dicts['train_gan']['GAN']['data'] = cgan_training_data
 quantile_data_dicts['train_gan']['Obs (IMERG)']['data'] = imerg_training_data
 
-qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range, quantile_locs=quantile_locs,
-                         num_lat_lon_chunks=args.num_lat_lon_chunks, min_data_points_per_quantile=args.min_points_per_quantile)
+qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+                         num_lat_lon_chunks=args.num_lat_lon_chunks)
 qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
 quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
 
 # Evaluate on training set
-quantile_data_dicts['train_gan']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=cgan_training_data, dates=training_dates, hours=training_hours)
+quantile_data_dicts['train_gan']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=cgan_training_data, 
+                                                                                              dates=training_dates, hours=training_hours)
 
+# Do quantile mapping grid cell by grid cell
+quantile_data_dicts['test']['GAN + qmap grid']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
+                                                                            fcst_train_data=cgan_training_data, 
+                                                                            obs_train_data=imerg_training_data, 
+                                                                            quantiles=qmapper.quantile_locs)
+
+# Evaluate on training set
+quantile_data_dicts['train_fcst']['GAN + qmap grid']['data'] = quantile_map_grid(array_to_correct=ifs_train_data, 
+                                                                            fcst_train_data=cgan_training_data, 
+                                                                            obs_train_data=imerg_training_data, 
+                                                                            quantiles=qmapper.quantile_locs)
 
 
 if args.save_data:

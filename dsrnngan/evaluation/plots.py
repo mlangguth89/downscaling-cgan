@@ -43,7 +43,7 @@ cmap.set_under('white')
 step_size = 0.001
 range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'marker_size': 32},
               1: {'start': 1, 'stop': 10, 'interval': 1, 'marker': '+', 'marker_size': 256},
-              2: {'start': 10, 'stop': 80, 'interval':10, 'marker': '+', 'marker_size': 512},
+              2: {'start': 10, 'stop': 80, 'interval':1, 'marker': '+', 'marker_size': 256},
               3: {'start': 80, 'stop': 99.1, 'interval': 1, 'marker': '+', 'marker_size': 256},
               4: {'start': 99.1, 'stop': 99.91, 'interval': 0.1, 'marker': '+', 'marker_size': 128},
               5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
@@ -142,7 +142,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
                     quantile_boundaries = utils.get_valid_quantiles(data_size=d['data'].size, raw_quantile_locations=quantile_boundaries, 
                                                                     min_data_points_per_quantile=min_data_points_per_quantile)
                     
-                if quantile_boundaries:
+                if len(quantile_boundaries) > 0:
                     quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
                     
                     if np.max(quantile_boundaries) > max_quantile:
@@ -154,7 +154,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     marker_handles = None
 
     # Quantiles for annotating plot
-    quantile_annotation_dict = {str(q): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(1, 10)] if q <=max_quantile}
+    quantile_annotation_dict = {str(np.round(q, 11)): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(1, 10)] if q <=max_quantile}
         
     for k, v in tqdm(range_dict.items()):
         
@@ -188,7 +188,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     
     for k, v in quantile_annotation_dict.items():
         ax.vlines(v, 0, max_val, linestyles='--')
-        ax.text(1.01*v, 0.8* max_val, f'{float(k)*100}th')
+        ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 15)}th')
     
     if save_path:
         plt.savefig(save_path, format='pdf')

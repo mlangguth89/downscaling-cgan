@@ -112,6 +112,18 @@ class TestBenchmarks(unittest.TestCase):
 
         self.assertGreater(pearsonr(np.quantile(self.imerg_train_data, quantile_locs), np.quantile(fcst_corrected_train, quantile_locs)).statistic, 0.999)
 
+    def test_auto_quantiles(self):
+        # Check that, if no quantiles are specified, the quantile mapper creates sensible ones based on the training distribution
+        
+        month_ranges = [[1],[2]]
+
+        qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=self.latitude_range, 
+                                 longitude_range=self.longitude_range, quantile_locs=None, num_lat_lon_chunks=2)
+        # identify best threshold and train on all the data
+        qmapper.train(fcst_data=self.ifs_train_data, obs_data=self.imerg_train_data, 
+                      training_dates=self.training_dates, training_hours=self.training_hours)
+        self.assertGreaterEqual(1 - qmapper.quantile_locs[-2], 1 / self.ifs_train_data.size)
+        
     def test_max_val(self):
         from dsrnngan.evaluation.plots import quantile_locs
         # load test data

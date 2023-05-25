@@ -113,11 +113,6 @@ class QuantileMapper():
         
         if self.min_data_points_per_quantile < 0:
             raise ValueError('min_data_points_per_quantile must be a positive integer')
-
-        
-        if 1.0 not in quantile_locs:
-            # We need to have the maximum value in order to deal with extreme values
-            quantile_locs.append(1.0)
         
         self.raw_quantile_locs = quantile_locs
         
@@ -134,15 +129,61 @@ class QuantileMapper():
         self.quantiles_by_area = None
 
     def update_quantile_locations(self, input_data: np.ndarray):
-        
+        """Remove quantile locations that are too precise given the minimum data constraints
+
+        Args:
+            input_data (np.ndarray): Data array which quantiles are being calculated from
+
+        Returns:
+            list: valid quantile locations
+        """
         data_size = input_data.size
-        
-        
-        self.quantile_locs = get_valid_quantiles(data_size=data_size, min_data_points_per_quantile=self.min_data_points_per_quantile, raw_quantile_locations=self.raw_quantile_locs)
+        if self.raw_quantile_locs is None:
+            min_step_size = 1/data_size
+
+            self.raw_quantile_locations = list(np.arange(0, 0.9999, 0.001)) 
+            
+            # Stopped at 10^{-12} since expect precision will become an issue, could be modified to accept higher precision
+            valid_steps = [10**(-n) for n in range(4,12) if 10**(-n) >= min_step_size] 
+            
+            for valid_step in valid_steps:
+                self.raw_quantile_locations += [self.raw_quantile_locations[-1] + valid_step*m for m in range(1,10)]
+          
+        if self.min_data_points_per_quantile:
+            self.quantile_locs = get_valid_quantiles(data_size=data_size, min_data_points_per_quantile=self.min_data_points_per_quantile, raw_quantile_locations=self.raw_quantile_locs)
+        else:
+            self.quantile_locs = self.raw_quantile_locations
+            
+        if 1.0 not in self.quantile_locs:
+            # We need to have the maximum value in order to deal with extreme values
+            self.quantile_locs.append(1.0)
         
         return self.quantile_locs
+    
+    def get_group_names(self, date_index: int, lat_index: int, lon_index: int):
+        """Returns the date, latitude and longitude groupings for the given indexes
+
+        Args:
+            date_index (int): date index
+            lat_index (int): latitude index
+            lon_index (int): longitude index
+
+        Returns:
+            Tuple(str, int int): date group, latitude group number, longitude group number
+        """
         
+        lat_groups = [k for k, v in self.quantile_latitude_groupings.items() if v['lat_index_range'][0] <= lat_index <= v['lat_index_range'][1]]
+        lon_groups = [k for k, v in self.quantile_longitude_groupings.items() if v['lon_index_range'][0] <= lon_index <= v['lon_index_range'][1]]
+
+        date_groups = [k for k, v in self.quantile_date_groupings.items() if date_index in v]
+    
+        assert len(lat_groups) == 1, 'Something has gone wrong, index belongs to more than one latitude group'
+        assert len(lon_groups) == 1, 'Something has gone wrong, index belongs to more than one longitude group'
+        assert len(date_groups) == 1, 'Something has gone wrong, index belongs to more than one date group'
         
+        return date_groups[0], lat_groups[0], lon_groups[0]
+        
+    
     def get_quantile_areas(self, training_dates, training_hours=None):
         
         if isinstance(training_dates, np.ndarray):
@@ -199,9 +240,7 @@ class QuantileMapper():
     def train(self, fcst_data, obs_data, training_dates, training_hours):
         
         self.get_quantile_areas(training_dates=training_dates, training_hours=training_hours)
-        
-        if self.min_data_points_per_quantile:
-            self.update_quantile_locations(fcst_data)
+        self.update_quantile_locations(fcst_data)
   
         self.quantiles_by_area = {}
         for time_period, date_indexes in self.quantile_date_groupings.items():
