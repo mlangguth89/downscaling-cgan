@@ -1,11 +1,15 @@
 import gc
+import os
+from glob import glob
 
 from tensorflow.keras.optimizers import Adam
 
-from dsrnngan.model import deterministic
+from dsrnngan.model import deterministic, setupmodel
 from dsrnngan.model import gan
 from dsrnngan.model import models
 from dsrnngan.model.vaegantrain import VAE
+from dsrnngan.utils import read_config
+from dsrnngan.utils.utils import load_yaml_file
 
 
 def setup_model(*,
@@ -89,3 +93,37 @@ def setup_model(*,
 
     gc.collect()
     return model
+
+
+def load_model_from_folder(model_folder, model_number=None):
+
+    model_weights_root = os.path.join(model_folder, "models")
+    config_path = os.path.join(model_folder, 'setup_params.yaml')
+
+    if model_number is None:
+        model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
+    else:
+        model_fp = os.path.join(model_weights_root, f'gen_weights-{model_number:07d}.h5')
+
+    setup_params = load_yaml_file(config_path)
+    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(setup_params)
+
+    print('setting up inputs')
+    model = setupmodel.setup_model(mode=model_config.mode,
+                                   architecture=model_config.architecture,
+                                   downscaling_steps=ds_config.steps,
+                                   input_channels=data_config.input_channels,
+                                   filters_gen=gen_config.filters_gen,
+                                   filters_disc=dis_config.filters_disc,
+                                   noise_channels=gen_config.noise_channels,
+                                   latent_variables=gen_config.latent_variables,
+                                   padding=model_config.padding,
+                                   constant_fields=data_config.constant_fields)
+
+    gen = model.gen
+
+    print('loading weights')
+    gen.load_weights(model_fp)
+
+    return gen
+

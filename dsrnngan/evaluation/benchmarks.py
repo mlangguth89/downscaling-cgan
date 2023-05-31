@@ -23,7 +23,7 @@ def zeros_model(data, upsampling_factor):
     return nn_interp_model(np.zeros(data.shape), upsampling_factor)
 
 def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np.ndarray,
-                           quantiles: Union[int, ArrayLike]=10, extrapolate: str=None) -> np.ndarray:
+                           quantiles: Union[int, ArrayLike]=10, extrapolate: str='constant') -> np.ndarray:
     """
     Empirical quantile mapping for bias correction
 
@@ -32,7 +32,7 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
         model_train (np.ndarray): Model training data to construct the quantiles
         s (np.ndarray): 1D series to correct
         quantiles (Union[int, ArrayLike], optional): Either the number of quantiles to use, or the locations of quantiles. Defaults to 10.
-        extrapolate (str, optional): Type of extrapolation to use. Defaults to None.
+        extrapolate (str, optional): Type of extrapolation to use. Defaults to constant uplift.
 
     Returns:
         np.ndarray: quantile mapped data
@@ -60,14 +60,14 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
         if len(extreme_inds) > 0:
             uplift = q_obs[-1] - q_model[-1]
             model_corrected[extreme_inds] = s[extreme_inds] + uplift
-        else:
-            raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
-        return model_corrected
+    else:
+        raise ValueError(f'Unrecognised value for extrapolate: {extrapolate}')
+    return model_corrected
 
 
 def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray, 
-                      obs_train_data: np.ndarray, quantiles: Union[int, ArrayLike], neighbourhood_size: int=0,
-                      ) -> np.ndarray:
+                      obs_train_data: np.ndarray, quantiles: Union[int, ArrayLike],
+                      extrapolate: str='constant') -> np.ndarray:
     """Quantile map data that is on a grid
 
     Args:
@@ -75,7 +75,6 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
         fcst_train_data (np.ndarray): Training data for the forecast, to calculate quantiles
         obs_train_data (np.ndarray): Training data for the observations, to calculate quantiles
         quantiles (Union[int, ArrayLike], optional): Either the number of quantiles to use, or the locations of quantiles. Defaults to 10.
-        neighbourhood_size (int, optional): Radius of pixels around the grid cell in which to calculate the quantiles. Defaults to 0.
         extrapolate (str, optional): Type of extrapolation for values that lie outside the training range. Defaults to 'constant'.
 
     Returns:
@@ -88,12 +87,13 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
     
     for w in tqdm(range(width), file=sys.stdout):
         for h in range(height):
-            w_range = np.arange(max(w - neighbourhood_size,0), min(w + neighbourhood_size + 1, width), 1)
-            h_range = np.arange(max(h - neighbourhood_size,0), min(h + neighbourhood_size + 1, height), 1)
-            result = empirical_quantile_map(obs_train=obs_train_data[:,w_range,:][:,:,h_range], 
-                                                        model_train=fcst_train_data[:,w_range,:][:,:,h_range], 
+            # w_range = np.arange(max(w - neighbourhood_size,0), min(w + neighbourhood_size + 1, width), 1)
+            # h_range = np.arange(max(h - neighbourhood_size,0), min(h + neighbourhood_size + 1, height), 1)
+            result = empirical_quantile_map(obs_train=obs_train_data[:,w,h], 
+                                                        model_train=fcst_train_data[:,w,h], 
                                                         s=array_to_correct[:,w,h],
-                                                        quantiles=quantiles)
+                                                        quantiles=quantiles,
+                                                        extrapolate=extrapolate)
             fcst_corrected[:,w,h] = result
             
     return fcst_corrected

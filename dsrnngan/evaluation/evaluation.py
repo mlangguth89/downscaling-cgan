@@ -11,7 +11,9 @@ from tensorflow.python.keras.utils import generic_utils
 from timezonefinder import TimezoneFinder
 from dateutil import tz
 from datetime import datetime
+from typing import Iterable
 
+from dsrnngan.data.data_generator import DataGenerator
 from dsrnngan.data import data
 from dsrnngan.utils import read_config
 from dsrnngan.data import setupdata
@@ -20,6 +22,7 @@ from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.model.pooling import pool
 from dsrnngan.evaluation.rapsd import rapsd
 from dsrnngan.evaluation.scoring import rmse, mse, mae, calculate_pearsonr, fss
+from dsrnngan.model import gan
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -107,18 +110,20 @@ def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
     return
 
 def create_single_sample(*,
-                   data_idx,
-                   mode,
-                   batch_size,
-                   gen,
-                   fcst_data_source,
-                   data_gen,
-                   noise_channels,
-                   latent_variables,
-                   latitude_range,
-                   longitude_range,
-                   ensemble_size,
-                   denormalise_data=True):
+                   data_idx: int,
+                   mode: str,
+                   batch_size: int,
+                   gen: gan.WGANGP,
+                   fcst_data_source: str,
+                   data_gen: DataGenerator,
+                   noise_channels: int,
+                   latent_variables: int,
+                   latitude_range: Iterable,
+                   longitude_range: Iterable,
+                   ensemble_size: int,
+                   denormalise_data: bool=True,
+                   input_shuffle_config: dict=None,
+                   seed: int=None):
     
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
     
@@ -135,7 +140,7 @@ def create_single_sample(*,
     const = inputs['hi_res_inputs']
     obs = outputs['output'][0, :, :]
     date = inputs['dates']
-    hour = inputs['hours']
+    hour = inputs['hours']           
     
     # Get observations 24hrs before
     imerg_persisted_fcst = data.load_imerg(date[0] - timedelta(days=1), hour=hour[0], latitude_vals=latitude_range, 
@@ -154,7 +159,7 @@ def create_single_sample(*,
     if mode == "GAN":
         
         noise_shape = np.array(cond)[0, ..., 0].shape + (noise_channels,)
-        noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
+        noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size, random_seed=seed)
         for ii in range(ensemble_size):
             nn = noise_gen()
             sample_gen = gen.predict([cond, const, nn])
@@ -400,7 +405,7 @@ def eval_one_chkpt(*,
     arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 
               'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours, 'cond': cond_array, 'const': const_array}
 
-    return point_metrics, arrays
+    return rank_arrays, point_metrics, arrays
 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -482,7 +487,7 @@ def evaluate_multiple_checkpoints(*,
         if mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
         gen.load_weights(gen_weights_file)
-        agg_metrics, arrays = eval_one_chkpt(mode=mode,
+        rank_arrays, agg_metrics, arrays = eval_one_chkpt(mode=mode,
                                              gen=gen,
                                              data_gen=data_gen_valid,
                                              fcst_data_source=fcst_data_source,
@@ -493,7 +498,9 @@ def evaluate_multiple_checkpoints(*,
                                              noise_factor=noise_factor,
                                              latitude_range=latitude_range,
                                              longitude_range=longitude_range)
-                
+        ranks, lowress, hiress = rank_arrays
+        OP = rank_OP(ranks)
+        
         # save one directory up from model weights, in same dir as logfile
         output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(validation_range)}_e{ensemble_size}")
         

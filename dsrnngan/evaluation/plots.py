@@ -188,7 +188,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     
     for k, v in quantile_annotation_dict.items():
         ax.vlines(v, 0, max_val, linestyles='--')
-        ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 15)}th')
+        ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 12)}th')
     
     if save_path:
         plt.savefig(save_path, format='pdf')

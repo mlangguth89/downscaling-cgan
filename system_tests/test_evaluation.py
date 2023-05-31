@@ -19,6 +19,7 @@ import yaml
 from glob import glob
 
 from dsrnngan.data import setupdata
+import dsrnngan.data.load_model_from_folder
         
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
@@ -26,7 +27,7 @@ sys.path.append(str(HOME))
 
 from dsrnngan.utils import read_config
 from dsrnngan.model.noise import NoiseGenerator
-from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints
+from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints, create_single_sample
 from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath, denormalise
 from system_tests.test_main import create_example_model, test_config, test_data_paths
 
@@ -140,9 +141,50 @@ class TestEvaluation(unittest.TestCase):
         for ii in range(rank_samples):
             img_gen = gen.predict([cond, const, noise_gen()])
 
+    
+    def test_create_single_sample(self):
+        
+        gen = dsrnngan.data.load_model_from_folder.load_model_from_folder(model_folder=self.model_folder, model_number=2)
+        _, data_gen_valid = setupdata.load_data_from_config(self.config, data_paths=data_paths, hour=17)
+        
+        obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour = create_single_sample(mode=model_config.mode,
+                    data_idx=0,
+                    batch_size=1,
+                    gen=gen,
+                    fcst_data_source=data_config.fcst_data_source,
+                    data_gen=data_gen_valid,
+                    noise_channels=gen_config.noise_channels,
+                    latent_variables=gen_config.latent_variables,
+                    latitude_range=lat_range,
+                    longitude_range=lon_range,
+                    ensemble_size=2,
+                    denormalise_data=True,
+                    seed=1)
+        
+        
+        input_shuffle_config = {'type': 'lo_res_inputs', 'shuffle_index': 1}
+        obs_permuted, samples_gen_permuted, fcst_permuted, imerg_persisted_fcst_permuted, cond_permuted, const_permuted, date_permuted, hour_permuted = create_single_sample(mode=model_config.mode,
+                    data_idx=0,
+                    batch_size=1,
+                    gen=gen,
+                    fcst_data_source=data_config.fcst_data_source,
+                    data_gen=data_gen_valid,
+                    noise_channels=gen_config.noise_channels,
+                    latent_variables=gen_config.latent_variables,
+                    latitude_range=lat_range,
+                    longitude_range=lon_range,
+                    ensemble_size=2,
+                    denormalise_data=True,
+                    input_shuffle_config=input_shuffle_config,
+                    seed=1)
+        
+        self.assertEqual(date, date_permuted)
+        self.assertEqual(hour, hour_permuted)
+        
+
     def test_eval_one_chkpt(self):
         
-        gen = setupdata.load_model_from_folder(model_folder=self.model_folder, model_number=2)
+        gen = dsrnngan.data.load_model_from_folder.load_model_from_folder(model_folder=self.model_folder, model_number=2)
         _, data_gen_valid = setupdata.load_data_from_config(self.config, data_paths=data_paths, hour=17)
                 
         eval_one_chkpt(

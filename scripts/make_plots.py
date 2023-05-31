@@ -23,7 +23,7 @@ sys.path.insert(1, str(HOME))
 print('local imports', flush=True)
 from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
-from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles
+from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
@@ -40,16 +40,16 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': False,
-               'rank_hist': False,
-               'spread_error': False,
-               'rapsd': False,
-               'quantiles': True,
+metric_dict = {'examples': True,
+               'rank_hist': True,
+               'spread_error': True,
+               'rapsd': True,
+               'quantiles': False,
                'hist': True,
-               'crps': False,
-               'fss': False,
-               'diurnal': False,
-               'confusion_matrix': False
+               'crps': True,
+               'fss': True,
+               'diurnal': True,
+               'confusion_matrix': True
                }
 
 plot_persistence = False
@@ -156,13 +156,19 @@ for fp in tqdm(fps, file=sys.stdout):
     training_dates += [item[0] for item in training_data['dates']]
     training_hours += [item[0] for item in training_data['hours']]
 
-imerg_train_data = np.concatenate(imerg_train_data, axis=0)
-ifs_train_data = np.concatenate(ifs_train_data, axis=0)
+# Need to account for difference in lat/lon ranges; setupdata incorporates the final lat value whereas 
+# the generated data doesn't
+imerg_train_data = np.concatenate(imerg_train_data, axis=0)[:,:-1,:-1]
+ifs_train_data = np.concatenate(ifs_train_data, axis=0)[:,:-1,:-1]
 
 print('performing qmap for IFS', flush=True)
 
-fcst_corrected = quantile_map_grid(array_to_correct=fcst_array, fcst_train_data=ifs_train_data, 
-                      obs_train_data=imerg_train_data, quantiles=quantile_locs, neighbourhood_size=20)
+fcst_corrected = quantile_map_grid(array_to_correct=fcst_array, 
+                                   fcst_train_data=ifs_train_data, 
+                                   obs_train_data=imerg_train_data, 
+                                   quantiles=quantile_locs,
+                                   extrapolate='constant')
+
 assert np.isnan(fcst_corrected).sum() == 0
 
 ################################################################################
@@ -186,12 +192,19 @@ training_hours = [h[0] for h in training_arrays['hours']]
 
 cgan_corrected = np.empty(samples_gen_array.shape)
 cgan_corrected[:,:,:,:] = np.nan
+qmapper = QuantileMapper(month_ranges=month_ranges, 
+                         latitude_range=latitude_range, 
+                         longitude_range=longitude_range,
+                         num_lat_lon_chunks=30)
 
 for n in range(ensemble_size):
-    
-    cgan_corrected[:,:,:,n] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,n], fcst_train_data=cgan_training_data, 
-                                                obs_train_data=imerg_training_data, quantiles=quantile_locs, 
-                                                neighbourhood_size=10)
+    qmapper.train(fcst_data=cgan_training_data, 
+                  obs_data=imerg_training_data, 
+                  training_dates=training_dates, 
+                  training_hours=training_hours)
+
+    cgan_corrected[:,:,:,n] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n], 
+                                                                     dates=dates, hours=hours)
 
 assert np.isnan(cgan_corrected).sum() == 0
           
@@ -418,60 +431,9 @@ if metric_dict['quantiles']:
                     'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
                     'GAN + qmap': {'data': cgan_corrected[:, :, :, 0], 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
 
-    def plot_quantiles(quantile_data_dict: dict, save_dir: str=None, fig=None, ax=None):
-        quantile_results = {}
-        for data_name, d in quantile_data_dict.items():
-                quantile_results[data_name] = {}
-                
-                for k, v in tqdm(range_dict.items()):
-                
-                    quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
-                    
-                    quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
-
-        if not ax:
-            fig, ax = plt.subplots(1,1, figsize=(8,8))
-        marker_handles = None
-
-        # Quantiles for annotating plot
-        (q_99pt9, q_99pt99, q_99pt999) = np.quantile(truth_array, [0.999, 0.9999, 0.99999])
-
-        for k, v in tqdm(range_dict.items()):
-            
-            size=v['marker_size']
-            cmap = plt.colormaps["plasma"]
-            marker = v['marker']
-            
-            max_truth_val = max(quantile_results['Obs (IMERG)'][k])
-
-            marker_hndl_list = []
-            for data_name, res in quantile_results.items():
-                if data_name != 'Obs (IMERG)':
-                    s = ax.scatter(quantile_results['Obs (IMERG)'][k], quantile_results[data_name][k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
-                                cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
-                    marker_hndl_list.append(s)
-            
-            if not marker_handles:
-                marker_handles = marker_hndl_list
-            
-        ax.legend(handles=marker_handles, loc='center left')
-        ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
-        ax.set_xlabel('Observations (mm/hr)')
-        ax.set_ylabel('Model (mm/hr)')
-        
-        largest_key = max(quantile_results['GAN'])
-        ax.vlines(q_99pt9, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
-        ax.vlines(q_99pt99, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
-        ax.vlines(q_99pt999, 0, max(quantile_results['GAN'][largest_key]), linestyles='--')
-        ax.text(q_99pt9 , max(quantile_results['GAN'][largest_key]) - 20, '$99.9^{th}$')
-        ax.text(q_99pt99 , max(quantile_results['GAN'][largest_key]) - 20, '$99.99^{th}$')
-        ax.text(q_99pt999  , max(quantile_results['GAN'][largest_key]) - 20, '$99.999^{th}$')
-        
-        if save_dir:
-            plt.savefig(f'plots/quantiles_total_{model_type}_{model_number}.pdf', format='pdf')
-            
-        return fig, ax
-
+    fig, ax = plt.subplots(1,1)
+    plot_quantiles(quantile_data_dict, ax, min_data_points_per_quantile=1,
+                   save_path=f'plots/quantiles_total_{model_type}_{model_number}.pdf')
 
     # Quantiles for different areas
 
@@ -491,26 +453,28 @@ if metric_dict['quantiles']:
         
             quantile_results[data_name] = np.quantile(d['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], quantile_boundaries)
         
-        max_val = max(quantile_results['Obs (IMERG)'])
+        _, ax[n] = plot_quantiles(quantile_results, ax[n], min_data_points_per_quantile=1)
         
-        for data_name, res in quantile_results.items():
-            if data_name != 'Obs (IMERG)':
-                ax[n].scatter(quantile_results['Obs (IMERG)'], res, c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
-                                cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+        # max_val = max(quantile_results['Obs (IMERG)'])
+        
+        # for data_name, res in quantile_results.items():
+        #     if data_name != 'Obs (IMERG)':
+        #         ax[n].scatter(quantile_results['Obs (IMERG)'], res, c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
+        #                         cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
 
-        ax[n].plot(np.arange(0,max_val, 0.1), np.arange(0,max_val, 0.1), 'k--')
-        ax[n].set_xlabel('truth')
-        ax[n].set_ylabel('model')
-        ax[n].set_title(area)
+        # ax[n].plot(np.arange(0,max_val, 0.1), np.arange(0,max_val, 0.1), 'k--')
+        # ax[n].set_xlabel('truth')
+        # ax[n].set_ylabel('model')
+        # ax[n].set_title(area)
         
-        ax[n].legend(loc='center left')
+        # ax[n].legend(loc='center left')
         
-        max_line_val = max(max(quantile_results['GAN']), max(quantile_results['Fcst']))
-        (q_99pt9, q_99pt99) = np.quantile(truth_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], [0.999, 0.9999])
-        ax[n].vlines(q_99pt9, 0, max_line_val, linestyles='--')
-        ax[n].vlines(q_99pt99, 0, max_line_val, linestyles='--')
-        ax[n].text(q_99pt9 , max_line_val -2, '$99.9^{th}$')
-        ax[n].text(q_99pt99 , max_line_val -2, '$99.99^{th}$')
+        # max_line_val = max(max(quantile_results['GAN']), max(quantile_results['Fcst']))
+        # (q_99pt9, q_99pt99) = np.quantile(truth_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], [0.999, 0.9999])
+        # ax[n].vlines(q_99pt9, 0, max_line_val, linestyles='--')
+        # ax[n].vlines(q_99pt99, 0, max_line_val, linestyles='--')
+        # ax[n].text(q_99pt9 , max_line_val -2, '$99.9^{th}$')
+        # ax[n].text(q_99pt99 , max_line_val -2, '$99.99^{th}$')
         
     fig.tight_layout(pad=2.0)
     plt.savefig(f'plots/quantiles_area_{model_type}_{model_number}.pdf', format='pdf')

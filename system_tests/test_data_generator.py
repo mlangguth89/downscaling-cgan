@@ -37,13 +37,24 @@ class TestDataGenerator(unittest.TestCase):
     def test_basic_generator(self):
         
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]
-        data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], 1, forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
+        batch_size = 2
+        
+        data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
                                     shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
                                     latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None)
         
         
         data = [data_gen[n] for n in range(len(date_range))]
+        self.assertEqual(set(data[0][0].keys()), {'lo_res_inputs', 'hi_res_inputs', 'dates', 'hours'})
+        self.assertEqual(set(data[0][1].keys()), {'output'})
+        
+        self.assertEqual(data[0][0]['lo_res_inputs'].shape, (batch_size, 2, 2, 20))
+        self.assertEqual(data[0][0]['hi_res_inputs'].shape, (batch_size, 2, 2, 2))
+        self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
+        self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
+
+        self.assertEqual(data[0][1]['output'].shape, (batch_size, 2, 2))
         
     def test_permuted_generator(self):
         
@@ -63,13 +74,31 @@ class TestDataGenerator(unittest.TestCase):
         hours = np.stack([item[0]['hours'] for item in data], axis=0)
 
         outputs = np.stack([item[1]['output'][0,:,:] for item in data], axis=0)
-        
-        for permuted_index in [0,1,2]:
-            permuted_data_gen = PermutedDataGenerator(lo_res_inputs=lo_res_inputs, hi_res_inputs=hi_res_inputs,
-                                                    outputs=outputs, dates=dates, hours=hours, permute_fcst_index=permuted_index, seed=5)
-            
-            permuted_data = [permuted_data_gen[n] for n in range(len(date_range))]
-            
-            # Check data permuted correctly
-            np.testing.assert_allclose(permuted_data[0][0]['lo_res_inputs'][:,:,:,permuted_index], data[1][0]['lo_res_inputs'][:,:,:,permuted_index])
-            np.testing.assert_allclose(permuted_data[1][0]['lo_res_inputs'][:,:,:,permuted_index], data[0][0]['lo_res_inputs'][:,:,:,permuted_index])
+    
+        for permutation_type in ['lo_res_inputs', 'hi_res_inputs']:
+            for permuted_index in [0,1]:
+                
+                input_permutation_config = {'type': permutation_type, 'permute_index': permuted_index}
+                permuted_data_gen = PermutedDataGenerator(lo_res_inputs=lo_res_inputs, hi_res_inputs=hi_res_inputs,
+                                                        outputs=outputs, dates=dates, hours=hours, 
+                                                        input_permutation_config=input_permutation_config, seed=5)
+                
+                permuted_data = [permuted_data_gen[n] for n in range(len(date_range))]
+                
+                self.assertEqual(set(data[0][0].keys()), {'lo_res_inputs', 'hi_res_inputs', 'dates', 'hours'})
+                self.assertEqual(set(data[0][1].keys()), {'output'})
+                
+                self.assertEqual(data[0][0]['lo_res_inputs'].shape, (1, 2, 2, 20))
+                self.assertEqual(data[0][0]['hi_res_inputs'].shape, (1, 2, 2, 2))
+                self.assertEqual(data[0][0]['dates'].shape, (1,))
+                self.assertEqual(data[0][0]['dates'].shape, (1,))
+
+                self.assertEqual(data[0][1]['output'].shape, (1, 2, 2))
+                
+                # Check data permuted correctly
+                if permutation_type == 'lo_res_inputs':
+                    np.testing.assert_allclose(permuted_data[0][0]['lo_res_inputs'][:,:,:, permuted_index], data[1][0]['lo_res_inputs'][:,:,:,permuted_index])
+                    np.testing.assert_allclose(permuted_data[1][0]['lo_res_inputs'][:,:,:,permuted_index], data[0][0]['lo_res_inputs'][:,:,:,permuted_index])
+                elif permutation_type == 'hi_res_inputs':
+                    np.testing.assert_allclose(permuted_data[0][0]['hi_res_inputs'][:,:,:, permuted_index], data[1][0]['hi_res_inputs'][:,:,:,permuted_index])
+                    np.testing.assert_allclose(permuted_data[1][0]['hi_res_inputs'][:,:,:,permuted_index], data[0][0]['hi_res_inputs'][:,:,:,permuted_index])

@@ -364,6 +364,7 @@ if __name__ == "__main__":
         eval_model_numbers = [int(mn) for mn in eval_model_numbers]
     else:
         eval_model_numbers = None
+    print(args, flush=True)
 
     main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,

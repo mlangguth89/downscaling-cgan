@@ -118,7 +118,7 @@ class TestBenchmarks(unittest.TestCase):
         month_ranges = [[1],[2]]
 
         qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=self.latitude_range, 
-                                 longitude_range=self.longitude_range, quantile_locs=None, num_lat_lon_chunks=2)
+                                 longitude_range=self.longitude_range, num_lat_lon_chunks=2)
         # identify best threshold and train on all the data
         qmapper.train(fcst_data=self.ifs_train_data, obs_data=self.imerg_train_data, 
                       training_dates=self.training_dates, training_hours=self.training_hours)
