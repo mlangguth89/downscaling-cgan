@@ -89,9 +89,9 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
         for h in range(height):
             # w_range = np.arange(max(w - neighbourhood_size,0), min(w + neighbourhood_size + 1, width), 1)
             # h_range = np.arange(max(h - neighbourhood_size,0), min(h + neighbourhood_size + 1, height), 1)
-            result = empirical_quantile_map(obs_train=obs_train_data[:,w,h], 
-                                                        model_train=fcst_train_data[:,w,h], 
-                                                        s=array_to_correct[:,w,h],
+            result = empirical_quantile_map(obs_train=obs_train_data[:,w,h, ...], 
+                                                        model_train=fcst_train_data[:,w,h, ...], 
+                                                        s=array_to_correct[:,w,h, ...],
                                                         quantiles=quantiles,
                                                         extrapolate=extrapolate)
             fcst_corrected[:,w,h] = result

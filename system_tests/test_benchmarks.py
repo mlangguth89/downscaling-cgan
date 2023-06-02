@@ -59,18 +59,30 @@ class TestBenchmarks(unittest.TestCase):
             self.assertLess(fcst_corrected.max(), array_to_correct.max())
         else:
             self.assertGreater(fcst_corrected.max(), array_to_correct.max())
+            
+        # Test that it works with an ensemble for either the obs or forecast
+        w = 2
+        h = 3
+        ensemble_train_data = np.stack([self.ifs_train_data]*5, axis=-1)
+        empirical_quantile_map(obs_train=self.imerg_train_data[:,w,h], 
+                               model_train=ensemble_train_data, s=array_to_correct[:,w,h],
+                               quantiles=quantile_locs, extrapolate='constant')
     
-    def test_quantil_map_grid(self):
+    def test_quantile_map_grid(self):
         
         # try with neighbourhood
         qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
-                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10), neighbourhood_size=2)
+                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10))
         self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
 
-        # try without neighbourhood
-        qmapped_fcst = quantile_map_grid(self.fcst_array, fcst_train_data=self.ifs_train_data, 
-                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10), neighbourhood_size=0)
+        # Try with ensemble
+        ensemble_train_data = np.stack([self.ifs_train_data]*5, axis=-1)
+
+        qmapped_fcst_ens = quantile_map_grid(self.fcst_array, fcst_train_data=ensemble_train_data, 
+                      obs_train_data=self.imerg_train_data, quantiles=np.linspace(0,1,10))
         self.assertEqual(np.isnan(qmapped_fcst).sum(), 0)
+        
+        self.assertEqual(qmapped_fcst_ens.shape, qmapped_fcst.shape)
 
     def test_QuantileMapper(self):
                 
