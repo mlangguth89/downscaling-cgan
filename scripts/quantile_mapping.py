@@ -205,27 +205,28 @@ training_hours = [h[0] for h in arrays['hours']][:n_samples]
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
-
-    
-    qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
-    quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
+    # Do quantile mapping grid cell by grid cell
+    quantile_data_dicts['test']['GAN + qmap']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
+                                                                            fcst_train_data=cgan_training_data, 
+                                                                            obs_train_data=imerg_training_data, 
+                                                                            quantiles=quantile_locs,
+                                                                            extrapolate='constant')
 
 else:
     
-    # Do quantile mapping grid cell by grid cell
-    quantile_data_dicts['test']['GAN + qmap']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
-                                                                                fcst_train_data=cgan_training_data, 
-                                                                                obs_train_data=imerg_training_data, 
-                                                                                quantiles=quantile_locs,
-                                                                                extrapolate='constant')
+    qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
+    quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
 
 
 if args.save_data:
     ###########################
     print('### Saving data ', flush=True)
     ###########################
-    with open(os.path.join(args.output_folder, f'quantile_data_dicts_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
-        pickle.dump(quantile_data_dicts, ofh)
+    with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+        pickle.dump(quantile_data_dicts['test']['Fcst + qmap']['data'], ofh)
+
+    with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+        pickle.dump(quantile_data_dicts['test']['GAN + qmap']['data'], ofh)
 
 
 if args.plot:

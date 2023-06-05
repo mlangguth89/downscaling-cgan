@@ -15,9 +15,8 @@ sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils.utils import load_yaml_file
 from dsrnngan.data.data import DEFAULT_LATITUDE_RANGE as latitude_range, DEFAULT_LONGITUDE_RANGE as longitude_range, denormalise
-from dsrnngan.evaluation.benchmarks import get_quantile_areas, get_quantile_mapped_forecast, get_quantiles_by_area
+from dsrnngan.evaluation.benchmarks import QuantileMapper, quantile_map_grid
 from dsrnngan.evaluation.scoring import mae_above_threshold
-
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
 parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME))
@@ -41,7 +40,6 @@ quantile_locs = [np.round(item / 100.0, 6) for item in percentiles]
 
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
-
 
 fps = glob('/user/work/uz22147/quantile_training_data/*_744.pkl')
 
@@ -72,8 +70,6 @@ months = [d.month for d in training_dates]
 skf = StratifiedKFold(n_splits=10, shuffle=True)
 skf.get_n_splits(X, months)
 
-# quantile_thresholds = [0.7, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997, 0.998, 0.999]
-quantile_threshold = 0.9999
 mae_vals = []
 mae_95_vals = []
 
@@ -108,55 +104,43 @@ for i, (train_index, val_index) in enumerate(skf.split(X, months)):
 
     quantiles_by_month_range = {}
 
-    fcst_corrected_single_pixel = np.empty(ifs_quantile_val_data.shape)
-    fcst_corrected_single_pixel[:,:,:] = np.nan
+    fcst_corrected_single_pixel = quantile_map_grid(array_to_correct=ifs_quantile_val_data, 
+                      fcst_train_data=ifs_quantile_training_data, 
+                      obs_train_data=imerg_quantile_training_data, 
+                      quantiles=quantile_locs,
+                      extrapolate='constant')
 
-    for t_name, d in tqdm(date_indexes.items(), total=len(month_ranges)):
-        fcst = ifs_quantile_training_data[d, :, :]
-        obs = imerg_quantile_training_data[d, :, :]
+    # fcst_corrected_single_pixel = np.empty(ifs_quantile_val_data.shape)
+    # fcst_corrected_single_pixel[:,:,:] = np.nan
+
+    # for t_name, d in tqdm(date_indexes.items(), total=len(month_ranges)):
+    #     fcst_train = ifs_quantile_training_data[d, :, :]
+    #     obs_train = imerg_quantile_training_data[d, :, :]
+                
+    #     # Correct the forecast in the validation set using these quantiles
+    #     d_val = date_indexes_val[t_name]
+    #     fcst_val = ifs_quantile_val_data[d_val, :, :]
+    #     obs_val = imerg_quantile_val_data[d_val, :, :]
         
-        quantiles_by_month_range[t_name] = {'fcst': np.quantile(fcst, quantile_locs, axis=0), 'obs': np.quantile(obs,  quantile_locs, axis=0)}
+    #     fcst_corrected_single_pixel[d_val, :, :] = quantile_map_grid(array_to_correct=fcst_val, 
+    #                   fcst_train_data=fcst_train, 
+    #                   obs_train_data=obs_train, 
+    #                   quantiles=quantile_locs,
+    #                   extrapolate='constant')
         
-        # Correct the forecast in the validation set using these quantiles
-        d_val = date_indexes_val[t_name]
-        fcst_val = ifs_quantile_val_data[d_val, :, :]
-        obs_val = imerg_quantile_val_data[d_val, :, :]
-        
-        (n_val_samples, x_vals, y_vals) = fcst_val.shape
-        
-        for x in range(x_vals):
-            for y in range(y_vals):
-                fcst_corrected_single_pixel[d_val, x, y] = np.interp(fcst_val[:, x, y], 
-                                                                    quantiles_by_month_range[t_name]['fcst'][:, x, y], 
-                                                                    quantiles_by_month_range[t_name]['obs'][:, x, y])
-    
     # quantile mapping by dividing into chunks
     quantiles_by_area_dict = {}
     corrected_fcst_dict = {'single_pixel': fcst_corrected_single_pixel}
-    for n_chunks in tqdm(range(1,13)):
-        quantile_areas = get_quantile_areas(dates=list(quantile_training_dates), month_ranges=month_ranges, latitude_range=latitude_range, 
-                                            longitude_range=longitude_range, num_lat_lon_chunks=n_chunks, hours=quantile_training_hours)
-        quantiles_by_area_dict[n_chunks] = get_quantiles_by_area(quantile_areas, fcst_data=ifs_quantile_training_data, obs_data=imerg_quantile_training_data, 
-                                                quantile_locs=quantile_locs)
+    for n_chunks in tqdm(np.arange(1,31,5)):
         
-        corrected_fcst_dict[n_chunks] = get_quantile_mapped_forecast(fcst=ifs_quantile_val_data, dates=quantile_val_dates, 
-                                                hours=quantile_val_hours, month_ranges=month_ranges, 
-                                                quantile_areas=quantile_areas, 
-                                                quantiles_by_area=quantiles_by_area_dict[n_chunks])
+        qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+                         num_lat_lon_chunks=n_chunks)
+        qmapper.train(fcst_data=ifs_quantile_training_data, obs_data=imerg_quantile_training_data, 
+                      training_dates=quantile_training_dates, training_hours=quantile_training_hours)
+        corrected_fcst_dict[n_chunks] = qmapper.get_quantile_mapped_forecast(fcst=ifs_quantile_val_data, 
+                                                                             dates=quantile_val_dates, 
+                                                                             hours=quantile_val_hours)
 
-            
-    # Quantile mapping for n_chunks = 1, with different month grouping
-    individual_month_ranges = [[item] for item in range(1,13)]
-    quantile_areas = get_quantile_areas(dates=list(quantile_training_dates), month_ranges=individual_month_ranges, latitude_range=latitude_range, 
-                                            longitude_range=longitude_range, num_lat_lon_chunks=n_chunks, hours=quantile_training_hours)
-    quantiles_by_area_dict['separate_months'] = get_quantiles_by_area(quantile_areas, fcst_data=ifs_quantile_training_data, obs_data=imerg_quantile_training_data, 
-                                            quantile_locs=quantile_locs)
-    
-    corrected_fcst_dict['separate_months'] = get_quantile_mapped_forecast(fcst=ifs_quantile_val_data, dates=quantile_val_dates, 
-                                            hours=quantile_val_hours, month_ranges=individual_month_ranges, 
-                                            quantile_areas=quantile_areas, 
-                                            quantiles_by_area=quantiles_by_area_dict['separate_months'])
-    
     corrected_fcst_abs_err = {k: [] for k in corrected_fcst_dict.keys()}
 
     for k, v in tqdm(corrected_fcst_dict.items()):

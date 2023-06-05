@@ -44,7 +44,7 @@ metric_dict = {'examples': True,
                'rank_hist': True,
                'spread_error': True,
                'rapsd': True,
-               'quantiles': False,
+               'quantiles': True,
                'hist': True,
                'crps': True,
                'fss': True,
@@ -70,9 +70,7 @@ log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201
                'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
                'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n2000_201806-201905_e20',
                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
-               'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10',
-               'cropped_v2': '/user/work/uz22147/logs/cgan/f6998afe16c9f955/n4000_201806-201905_e10'}
-
+               'cropped_v2': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
 
 model_number = get_best_model_number(log_folder=log_folders[model_type])
 
@@ -174,39 +172,44 @@ assert np.isnan(fcst_corrected).sum() == 0
 ################################################################################
 ### Quantile mapping of GAN data
 
-print('cGAN quantile mapping',flush=True)
-
-# NOTE:This requires data collection for the model 
-
 cgan_training_sample_dict = {'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1',
-                             'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1'}
-# model_number = 288000
-model_number = get_best_model_number(log_folder=cgan_training_sample_dict[model_type])
-with open(os.path.join(cgan_training_sample_dict[model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
-    training_arrays = pickle.load(ifh)
+                                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1'}
+
+if model_type not in cgan_training_sample_dict:
+    cgan_corrected = samples_gen_array.copy()
+else:
+    print('cGAN quantile mapping',flush=True)
+
+    # NOTE:This requires data collection for the model 
+
     
-imerg_training_data = training_arrays['truth']
-cgan_training_data = training_arrays['samples_gen'][:,:,:,0]
-training_dates = [d[0] for d in training_arrays['dates']]
-training_hours = [h[0] for h in training_arrays['hours']]
+    # model_number = 288000
+    model_number = get_best_model_number(log_folder=cgan_training_sample_dict[model_type])
+    with open(os.path.join(cgan_training_sample_dict[model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
+        training_arrays = pickle.load(ifh)
+        
+    imerg_training_data = training_arrays['truth']
+    cgan_training_data = training_arrays['samples_gen'][:,:,:,0]
+    training_dates = [d[0] for d in training_arrays['dates']]
+    training_hours = [h[0] for h in training_arrays['hours']]
 
-cgan_corrected = np.empty(samples_gen_array.shape)
-cgan_corrected[:,:,:,:] = np.nan
-qmapper = QuantileMapper(month_ranges=month_ranges, 
-                         latitude_range=latitude_range, 
-                         longitude_range=longitude_range,
-                         num_lat_lon_chunks=30)
+    cgan_corrected = np.empty(samples_gen_array.shape)
+    cgan_corrected[:,:,:,:] = np.nan
+    qmapper = QuantileMapper(month_ranges=month_ranges, 
+                            latitude_range=latitude_range, 
+                            longitude_range=longitude_range,
+                            num_lat_lon_chunks=30)
 
-for n in range(ensemble_size):
-    qmapper.train(fcst_data=cgan_training_data, 
-                  obs_data=imerg_training_data, 
-                  training_dates=training_dates, 
-                  training_hours=training_hours)
+    for n in range(ensemble_size):
+        qmapper.train(fcst_data=cgan_training_data, 
+                    obs_data=imerg_training_data, 
+                    training_dates=training_dates, 
+                    training_hours=training_hours)
 
-    cgan_corrected[:,:,:,n] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n], 
-                                                                     dates=dates, hours=hours)
+        cgan_corrected[:,:,:,n] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n], 
+                                                                        dates=dates, hours=hours)
 
-assert np.isnan(cgan_corrected).sum() == 0
+    assert np.isnan(cgan_corrected).sum() == 0
           
 ################################################################################
 ## Climatological data for comparison.
@@ -239,8 +242,6 @@ hourly_historical_std = daily_historical_std / 24
 #################################################################################################
 ## Plot examples
 #################################################################################################
-
-
 
 
 if metric_dict['examples']:
@@ -354,7 +355,7 @@ if metric_dict['spread_error']:
     print('*********** Plotting spread error **********************')
     plt.rcParams.update({'font.size': 20})
     
-    upper_percentile = 99.99
+    upper_percentile = 99.9
     quantile_step_size = (100-upper_percentile) / 100
     
     data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
