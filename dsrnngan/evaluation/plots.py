@@ -158,7 +158,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
         
     for k, v in tqdm(range_dict.items()):
         
-        size=v['marker_size']
+        size=v.get('marker_size', 32)
         cmap = plt.colormaps["plasma"]
         
         if k in quantile_results[obs_key]:
@@ -168,7 +168,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
             for data_name, res in quantile_results.items():
                 if data_name != obs_key:
                     s = ax.scatter(quantile_results[obs_key][k], res[k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
-                                cmap=cmap, alpha=quantile_data_dict[data_name]['alpha'])
+                                cmap=cmap, alpha=quantile_data_dict[data_name].get('alpha', 1))
                     marker_hndl_list.append(s)
             
             if not marker_handles:

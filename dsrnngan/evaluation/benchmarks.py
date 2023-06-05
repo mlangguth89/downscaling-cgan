@@ -141,18 +141,18 @@ class QuantileMapper():
         if self.raw_quantile_locs is None:
             min_step_size = 1/data_size
 
-            self.raw_quantile_locations = list(np.arange(0, 0.9999, 0.001)) 
+            self.raw_quantile_locs = list(np.arange(0, 0.9999, 0.001)) 
             
             # Stopped at 10^{-12} since expect precision will become an issue, could be modified to accept higher precision
             valid_steps = [10**(-n) for n in range(4,12) if 10**(-n) >= min_step_size] 
             
             for valid_step in valid_steps:
-                self.raw_quantile_locations += [self.raw_quantile_locations[-1] + valid_step*m for m in range(1,10)]
+                self.raw_quantile_locs += [self.raw_quantile_locs[-1] + valid_step*m for m in range(1,10)]
           
         if self.min_data_points_per_quantile:
             self.quantile_locs = get_valid_quantiles(data_size=data_size, min_data_points_per_quantile=self.min_data_points_per_quantile, raw_quantile_locations=self.raw_quantile_locs)
         else:
-            self.quantile_locs = self.raw_quantile_locations
+            self.quantile_locs = self.raw_quantile_locs
             
         if 1.0 not in self.quantile_locs:
             # We need to have the maximum value in order to deal with extreme values

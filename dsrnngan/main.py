@@ -338,7 +338,8 @@ def main(restart: bool, do_training: bool, num_images: int,
                                                  constant_fields=data_config.constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
-                                                 save_generated_samples=save_generated_samples)
+                                                 save_generated_samples=save_generated_samples,
+                                                 batch_size=10)
     
     return log_folder
 
