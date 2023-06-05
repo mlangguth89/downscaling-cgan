@@ -14,7 +14,7 @@ class DataGenerator(Sequence):
     def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, data_paths: dict=DATA_PATHS,
                  shuffle: bool=True, constants: bool=True, hour: Union[int, str]='random', longitude_range: Iterable[float]=None,
                  latitude_range: Iterable[float]=None, normalise: bool=True,
-                 downsample: bool=False, seed: int=None):
+                 downsample: bool=False, repeat_data: bool=False, seed: int=None):
         
         if seed is not None:
             random.seed(seed)
@@ -50,6 +50,7 @@ class DataGenerator(Sequence):
         self.observational_data_source = observational_data_source
         self.data_paths = data_paths
         self.batch_size = batch_size
+        self.repeat_data = repeat_data
 
         self.fcst_fields = fields_lookup[self.forecast_data_source.lower()]
         self.shuffle = shuffle
@@ -85,10 +86,15 @@ class DataGenerator(Sequence):
         return image
 
     def __getitem__(self, idx):
+        
+        if self.repeat_data:
+            # Repeat data indexes when it gets past the maximum
+            idx = idx % len(self.dates)
+            
         # Get batch at index idx
         dates_batch = self.dates[idx*self.batch_size:(idx+1)*self.batch_size]
         hours_batch = self.hours[idx*self.batch_size:(idx+1)*self.batch_size]
-
+        
         # Load and return this batch of images
         data_x_batch, data_y_batch = load_fcst_radar_batch(
             dates_batch,

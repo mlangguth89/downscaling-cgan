@@ -39,7 +39,8 @@ class TestDataGenerator(unittest.TestCase):
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]
         batch_size = 2
         
-        data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
+        data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, 
+                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
                                     shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
                                     latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None)
@@ -55,6 +56,28 @@ class TestDataGenerator(unittest.TestCase):
         self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
 
         self.assertEqual(data[0][1]['output'].shape, (batch_size, 2, 2))
+    
+    def test_repeat_data(self):
+        # Test that generator keeps producing if repeat_data is True
+        date_range = [datetime(2017,7,4), datetime(2017,7,5)]
+        batch_size = 1
+        
+        data_gen = DataGenerator(date_range, batch_size=batch_size, 
+                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
+                                 shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                 latitude_range=latitude_vals, normalise=True,
+                                    downsample=False, seed=None, repeat_data=False)
+        
+        self.assertEqual(data_gen[2][0]['lo_res_inputs'].size, 0)
+        
+        repeat_data_gen = DataGenerator(date_range, batch_size=batch_size, 
+                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
+                                 shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                 latitude_range=latitude_vals, normalise=True,
+                                    downsample=False, seed=None, repeat_data=True)
+        
+        self.assertGreater(repeat_data_gen[2][0]['lo_res_inputs'].size, 0)
+        np.testing.assert_allclose(repeat_data_gen[2][0]['lo_res_inputs'], repeat_data_gen[0][0]['lo_res_inputs'])
         
     def test_permuted_generator(self):
         
