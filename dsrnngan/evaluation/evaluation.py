@@ -210,7 +210,8 @@ def eval_one_chkpt(*,
                    noise_factor,
                    denormalise_data=True,
                    normalize_ranks=True,
-                   show_progress=True):
+                   show_progress=True,
+                   batch_size: int=1):
     
     if num_images < 5:
         Warning('These scores are best performed with more images')
@@ -267,6 +268,10 @@ def eval_one_chkpt(*,
                     longitude_range=longitude_range,
                     ensemble_size=ensemble_size,
                     denormalise_data=denormalise_data)
+        except IndexError:
+            # Run out of samples
+            return
+        
         except FileNotFoundError:
             print('Could not load file, attempting retries')
             success = False
@@ -447,7 +452,8 @@ def evaluate_multiple_checkpoints(*,
                                   constant_fields,
                                   data_paths,
                                   shuffle,
-                                  save_generated_samples=False
+                                  save_generated_samples=False,
+                                  batch_size: int=1
                                   ):
 
     df_dict = read_config.read_config()['DOWNSCALING']
@@ -497,7 +503,8 @@ def evaluate_multiple_checkpoints(*,
                                              ensemble_size=ensemble_size,
                                              noise_factor=noise_factor,
                                              latitude_range=latitude_range,
-                                             longitude_range=longitude_range)
+                                             longitude_range=longitude_range,
+                                             batch_size=batch_size)
         ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)
         
@@ -583,7 +590,7 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array,
         utc_datetime = datetime(d.year, d.month, d.day, h)
         utc_datetime.replace(tzinfo=from_zone)
 
-        for long in longitude_range:
+        for l_ix, long in enumerate(longitude_range):
             
             timezone = tz_finder.timezone_at(lng=long, lat=np.mean(latitude_range))
             to_zone = tz.gettz(timezone)
@@ -591,14 +598,14 @@ def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array,
             local_hour = utc_datetime.astimezone(to_zone).hour
             
             if local_hour not in hourly_data_obs:
-                hourly_data_obs[local_hour] = obs.mean()
-                hourly_data_sample[local_hour] = sample.mean()
-                hourly_data_fcst[local_hour] = fcst.mean()
+                hourly_data_obs[local_hour] = obs[:,l_ix].mean()
+                hourly_data_sample[local_hour] = sample[:,l_ix].mean()
+                hourly_data_fcst[local_hour] = fcst[:,l_ix].mean()
                 hourly_counts[local_hour] = 1
             else:
-                hourly_data_obs[local_hour] += obs.mean()
-                hourly_data_sample[local_hour] += sample.mean()
-                hourly_data_fcst[local_hour] += fcst.mean()
+                hourly_data_obs[local_hour] += obs[:,l_ix].mean()
+                hourly_data_sample[local_hour] += sample[:,l_ix].mean()
+                hourly_data_fcst[local_hour] += fcst[:,l_ix].mean()
                 hourly_counts[local_hour] += 1
         
     return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts
