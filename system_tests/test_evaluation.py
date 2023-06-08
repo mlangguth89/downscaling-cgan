@@ -1,33 +1,27 @@
 import os
-import pandas as pd
 import numpy as np
 import xarray as xr
-import xesmf as xe
 import os
 import sys
 import tempfile
 import pickle
 import copy
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tqdm import tqdm
-from glob import glob
 import matplotlib.pyplot as plt
 import unittest
-import yaml
 from glob import glob
 
-from dsrnngan.data import setupdata
-import dsrnngan.data.load_model_from_folder
-        
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
-
+from dsrnngan.data import setupdata
+from dsrnngan.model.setupmodel import load_model_from_folder
 from dsrnngan.utils import read_config
 from dsrnngan.model.noise import NoiseGenerator
-from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints, create_single_sample
+from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints, create_single_sample, get_diurnal_cycle
 from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath, denormalise
 from system_tests.test_main import create_example_model, test_config, test_data_paths
 
@@ -240,4 +234,25 @@ class TestEvaluation(unittest.TestCase):
                                     constant_fields=data_config.constant_fields,
                                     data_paths=DATA_PATHS)
             
+            
+    def test_diurnal_cycle(self):
+        
+        
+        with open(os.path.join(data_folder, 'plot_test_data.pkl'), 'rb') as ifh:
+            data = pickle.load(ifh)
+        
+        gridded_data = np.stack([data['data']]*24, axis=0)
+        latitude_range = data['latitude_range']
+        longitude_range = data['longitude_range']
+        
+        start_date = datetime(2018,12,1)
+        dates = [start_date + timedelta(days=n) for n in range(gridded_data.shape[0])]
+        hours = range(0,24)
+        hourly_sum, hourly_counts = get_diurnal_cycle(gridded_data,
+                                                       dates, hours, 
+                                                       longitude_range=longitude_range,
+                                                       latitude_range=latitude_range)
+        self.assertIsInstance(hourly_sum, dict)
+        self.assertIsInstance(hourly_counts, dict)
+        self.assertEqual(set(hourly_counts.keys()), set(hours))
         

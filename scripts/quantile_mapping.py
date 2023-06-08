@@ -166,6 +166,7 @@ qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_rang
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
     # Do quantile mapping grid cell by grid cell
+    print('Quantile mapping Fcst at grid level')
     quantile_data_dicts['test']['Fcst + qmap']['data'] = quantile_map_grid(array_to_correct=fcst_array, 
                                                                                 fcst_train_data=ifs_train_data, 
                                                                                 obs_train_data=imerg_train_data, 
@@ -223,6 +224,7 @@ if args.save_data:
     print('### Saving data ', flush=True)
     ###########################
     with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+        print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap']['data'].shape)
         pickle.dump(quantile_data_dicts['test']['Fcst + qmap']['data'], ofh)
 
     with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:

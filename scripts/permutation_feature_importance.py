@@ -14,6 +14,7 @@ sys.path.insert(1, str(HOME))
 from dsrnngan.model import setupmodel
 from dsrnngan.utils import utils
 from dsrnngan.data.data_generator import PermutedDataGenerator
+from dsrnngan.evaluation.evaluation import generate_gan_sample
 
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
@@ -64,6 +65,8 @@ gen = setupmodel.load_model_from_folder(str(Path(log_folder).parents[0]), model_
 # Create permuted data generator
 ##############################################################
 
-t=1
-# data_gen = PermutedDataGenerator(lo_res_inputs=, hi_res_inputs: np.ndarray, outputs: np.ndarray, dates: np.ndarray, hours: np.ndarray,
-#                  input_permutation_config: dict)
+data_gen = PermutedDataGenerator(lo_res_inputs=cond, hi_res_inputs=const, outputs=truth_array, dates=dates, hours=hours,
+                                 input_permutation_config={'type': 'lo_res_inputs', 'permute_index': 1})
+
+# TODO: decide on a metric!
+generate_gan_sample

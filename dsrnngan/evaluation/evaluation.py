@@ -8,14 +8,12 @@ import pandas as pd
 from tqdm import tqdm
 from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
-from timezonefinder import TimezoneFinder
-from dateutil import tz
 from datetime import datetime
 from typing import Iterable
 
 from dsrnngan.data.data_generator import DataGenerator
 from dsrnngan.data import data
-from dsrnngan.utils import read_config
+from dsrnngan.utils import read_config, utils
 from dsrnngan.data import setupdata
 from dsrnngan.model import setupmodel
 from dsrnngan.model.noise import NoiseGenerator
@@ -26,8 +24,6 @@ from dsrnngan.model import gan
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-tz_finder = TimezoneFinder()
-from_zone = tz.gettz('UTC')
 
 path = os.path.dirname(os.path.abspath(__file__))
 ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
@@ -109,6 +105,24 @@ def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
     gen.built = True
     return
 
+def generate_gan_sample(gen: gan.WGANGP, 
+                        cond: np.ndarray, 
+                        const: np.ndarray, 
+                        noise_channels: int, 
+                        ensemble_size: int=1, 
+                        batch_size: int=1, 
+                        seed: int=None):
+    
+    samples_gen = []
+    noise_shape = np.array(cond)[0, ..., 0].shape + (noise_channels,)
+    noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size, random_seed=seed)
+    for ii in range(ensemble_size):
+        nn = noise_gen()
+        sample_gen = gen.predict([cond, const, nn])
+        samples_gen.append(sample_gen.astype("float32"))
+        
+    return samples_gen
+
 def create_single_sample(*,
                    data_idx: int,
                    mode: str,
@@ -122,7 +136,6 @@ def create_single_sample(*,
                    longitude_range: Iterable,
                    ensemble_size: int,
                    denormalise_data: bool=True,
-                   input_shuffle_config: dict=None,
                    seed: int=None):
     
     tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
@@ -153,25 +166,18 @@ def create_single_sample(*,
     if denormalise_data:
         obs = data.denormalise(obs)
         fcst = data.denormalise(fcst)
-        
-    samples_gen = []
-    
+            
     if mode == "GAN":
         
-        noise_shape = np.array(cond)[0, ..., 0].shape + (noise_channels,)
-        noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size, random_seed=seed)
-        for ii in range(ensemble_size):
-            nn = noise_gen()
-            sample_gen = gen.predict([cond, const, nn])
-            samples_gen.append(sample_gen.astype("float32"))
+        samples_gen = generate_gan_sample(gen, cond, const, noise_channels, ensemble_size, batch_size, seed)
             
     elif mode == "det":
-        
+        samples_gen = []
         sample_gen = gen.predict([cond, const])
         samples_gen.append(sample_gen.astype("float32"))
         
     elif mode == 'VAEGAN':
-        
+        samples_gen = []
         # call encoder once
         mean, logvar = gen.encoder([cond, const])
         noise_shape = np.array(cond)[0, ..., 0].shape + (latent_variables,)
@@ -270,8 +276,8 @@ def eval_one_chkpt(*,
                     denormalise_data=denormalise_data)
         except IndexError:
             # Run out of samples
-            return
-        
+            break 
+               
         except FileNotFoundError:
             print('Could not load file, attempting retries')
             success = False
@@ -567,48 +573,34 @@ def calculate_ralsd_rmse(truth, samples):
     return np.array(ralsd_all)
 
 
-def get_diurnal_cycle(truth_array, samples_gen_array, fcst_array, 
-                      dates, hours, longitude_range, latitude_range):
+def get_diurnal_cycle(array: np.ndarray, 
+                      dates: list, 
+                      hours: list, 
+                      longitude_range: Iterable, 
+                      latitude_range: Iterable):
     
-    hourly_data_obs = {}
-    hourly_data_sample = {}
-    hourly_data_fcst = {}
+    hourly_sums = {}
     hourly_counts = {}
 
-    from_zone = tz.gettz('UTC')
+    n_samples = array.shape[0]
 
-    (n_samples, _, _) = truth_array.shape
-
-    for n in tqdm(range(n_samples)):
-        obs = truth_array[n,:,:].copy()
-        sample = samples_gen_array[n,:,:,0].copy()
-        fcst = fcst_array[n, :, :].copy()
+    for n in range(n_samples):
         
         h = hours[n]
         d = dates[n]
-        
-        utc_datetime = datetime(d.year, d.month, d.day, h)
-        utc_datetime.replace(tzinfo=from_zone)
 
         for l_ix, long in enumerate(longitude_range):
             
-            timezone = tz_finder.timezone_at(lng=long, lat=np.mean(latitude_range))
-            to_zone = tz.gettz(timezone)
+            local_hour = utils.get_local_datetime(utc_datetime=datetime(d.year, d.month, d.day, h),
+                                                  longitude=long, latitude=np.mean(latitude_range)).hour
 
-            local_hour = utc_datetime.astimezone(to_zone).hour
-            
-            if local_hour not in hourly_data_obs:
-                hourly_data_obs[local_hour] = obs[:,l_ix].mean()
-                hourly_data_sample[local_hour] = sample[:,l_ix].mean()
-                hourly_data_fcst[local_hour] = fcst[:,l_ix].mean()
+            if local_hour not in hourly_counts:
                 hourly_counts[local_hour] = 1
+                hourly_sums[local_hour] = array[n,:,l_ix].mean()
             else:
-                hourly_data_obs[local_hour] += obs[:,l_ix].mean()
-                hourly_data_sample[local_hour] += sample[:,l_ix].mean()
-                hourly_data_fcst[local_hour] += fcst[:,l_ix].mean()
                 hourly_counts[local_hour] += 1
-        
-    return hourly_data_obs, hourly_data_sample, hourly_data_fcst, hourly_counts
+                hourly_sums[local_hour] += array[n,:,l_ix].mean()
+    return hourly_sums, hourly_counts
 
 def get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples):
 

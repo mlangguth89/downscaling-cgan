@@ -12,7 +12,11 @@ import numpy as np
 from tqdm import tqdm
 from calendar import monthrange
 from typing import Iterable, Tuple, Callable
+from timezonefinder import TimezoneFinder
+from dateutil import tz
 
+tz_finder = TimezoneFinder()
+from_zone = tz.gettz('UTC')
 
 def hash_dict(params: dict):
     h = hashlib.shake_256()
@@ -197,3 +201,47 @@ def bootstrap_metric_function(metric_func: Callable[..., float],
     output_dict = {'mean': np.mean(tmp_results), 'std': np.std(tmp_results)}
     
     return output_dict
+
+
+def get_local_datetime(utc_datetime: datetime.datetime, longitude: float, latitude: float) -> datetime.datetime:
+    """Get datetime at locality defined by lat,long, from UTC datetime
+
+    Args:
+        utc_datetime (datetime.datetime): UTC datetime
+        longitude (float): longitude
+        latitude (float): latitude
+
+    Returns:
+        datetime.datetime: Datetime in local time
+    """
+    utc_datetime.replace(tzinfo=from_zone)
+    
+    timezone = tz_finder.timezone_at(lng=longitude, lat=latitude)
+    to_zone = tz.gettz(timezone)
+
+    local_datetime = utc_datetime.astimezone(to_zone)
+    
+    return local_datetime
+
+def get_local_hour(hour: int, longitude: float, latitude: float):
+    """Convert hour to hour in locality.
+    
+    This is not as precise as get_local_datetime, as it won't contain information about e.g. BST. 
+    But it is useful when the date is not known but the hour is
+
+    Args:
+        hour (int): UTC hour
+        longitude (float): longitude
+        latitude (float): latitude
+    Returns:
+        int: approximate hour in local time
+    """
+    utc_datetime = datetime.datetime(year=2000, month=1, day=1, hour=hour)
+    utc_datetime.replace(tzinfo=from_zone)
+    
+    timezone = tz_finder.timezone_at(lng=longitude, lat=latitude)
+    to_zone = tz.gettz(timezone)
+
+    local_hour = utc_datetime.astimezone(to_zone).hour
+    
+    return local_hour
