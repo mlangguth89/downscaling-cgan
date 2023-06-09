@@ -906,7 +906,7 @@ if metric_dict['diurnal']:
         if name != 'Obs (IMERG)':
             
             im = plot_contourf(ax[n], max_hour_array - max_hour_arrays['Obs (IMERG)'], name, lat_range=latitude_range, lon_range=longitude_range, value_range=np.linspace(-24, 24, 10))
-        n+=1
+            n+=1
     plt.savefig(f'plots/diurnal_maximum_map_{model_type}_{model_number}.pdf')
 
 
