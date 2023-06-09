@@ -42,8 +42,11 @@ def get_data_paths(config_folder=CONFIG_FOLDER):
     return data_paths
 
 
-def set_gpu_mode():
-    lc = read_config()['LOCAL']
+def set_gpu_mode(lc: dict=None):
+    
+    if lc is None:
+        lc = read_config()['LOCAL']
+        
     if lc['use_gpu']:
         print('Setting up GPU')
         os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # remove environment variable (if it doesn't exist, nothing happens)

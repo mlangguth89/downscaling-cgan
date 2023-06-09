@@ -50,7 +50,7 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 # 'cin', Left out for the moment as contains a lot of nulls
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
-                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700']
+                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
 
 all_fcst_hours = np.array(range(24))
 
@@ -748,7 +748,7 @@ def load_ifs_raw(field: str,
 
     if latitude_vals is not None and longitude_vals is not None:
         if interpolate:
-            if var_name in ['tp', 'tclw', 'cape', 'tisr', 'tcwv', 'cp']:
+            if var_name in ['tp', 'tclw', 'cape', 'tisr', 'tcwv', 'cp', 'cin']:
                 interpolation_method = 'conservative'
             else:
                 interpolation_method = 'bilinear'
@@ -804,6 +804,10 @@ def load_ifs(field: str,
     if field in ['tp', 'cp', 'pr', 'prl', 'prc']:
         # precipitation is measured in metres, so multiply up
         ds[var_name] = 1000 * ds[var_name]
+        
+    if field == 'cin':
+        # Replace null values with 0
+        ds[var_name] = ds[var_name].fillna(0)
         
     if norm:
         stats_dict = get_ifs_stats(field, latitude_vals=latitude_vals, longitude_vals=longitude_vals,

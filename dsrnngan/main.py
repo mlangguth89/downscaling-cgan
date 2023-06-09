@@ -61,7 +61,7 @@ parser.add_argument('--save-generated-samples', action='store_true',
 parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting of classes',
                     type=float
                     )
-parser.add_argument('--output-suffix', default=None, 
+parser.add_argument('--output-suffix', default=None, type=str,
                     help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
 
 def main(restart: bool, do_training: bool, num_images: int,

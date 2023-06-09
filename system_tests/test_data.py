@@ -34,9 +34,9 @@ constants_path = str(data_folder / 'constants')
 era5_path = str(data_folder / 'ERA5')
 imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 
-def create_dummy_stats_data(year=2017):
+def create_dummy_stats_data(year=2017, fields=all_ifs_fields):
     
-    for field in all_ifs_fields:
+    for field in fields:
         fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, ifs_path)
         ds = xr.load_dataset(fp)
         
@@ -67,7 +67,7 @@ class TestLoad(unittest.TestCase):
         self.temp_stats_dir_name = self.temp_stats_dir.name
                       
         if not os.path.isdir(os.path.join(constants_path, 'tp')):
-            
+        
             create_dummy_stats_data()
             
             for field in all_ifs_fields:
@@ -115,6 +115,7 @@ class TestLoad(unittest.TestCase):
         lat_coords = []
         lon_coords = []
         
+        # for field in all_ifs_fields:
         for field in all_ifs_fields:
             
             ds = load_ifs_raw(field, year, month, day, hour, ifs_data_dir=str(ifs_path),
@@ -313,32 +314,35 @@ class TestLoad(unittest.TestCase):
         for v in var_name_lookup:
             if v == 'tp':
                 # check log precipitation is working
-                ds_tp_no_log = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour,  norm=False,
+                tp_no_log = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour,  norm=False,
                                          fcst_dir=str(ifs_path),
                                          latitude_vals=lat_vals, longitude_vals=lon_vals, 
                                          constants_path=constants_path)
-                ds_tp_log_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
+                tp_log_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
                                       fcst_dir=str(ifs_path),
                                       latitude_vals=lat_vals, longitude_vals=lon_vals, 
                                       constants_path=constants_path)
 
-                testing.assert_array_equal(ds_tp_log_norm, log_plus_1(ds_tp_no_log))
-
+                testing.assert_array_equal(tp_log_norm, log_plus_1(tp_no_log))
+            
             # Try loading with normalisation
-            ds_tp_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
+            arr_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=True,
                                    fcst_dir=str(ifs_path),
                                    latitude_vals=lat_vals, longitude_vals=lon_vals, constants_path=constants_path)
-            ds_tp_no_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=False,
+            arr_no_norm = load_ifs(v, f'{year}{month:02d}{day:02d}', hour=hour, norm=False,
                                       fcst_dir=str(ifs_path),
                                       latitude_vals=lat_vals, longitude_vals=lon_vals, constants_path=constants_path)
+
+            self.assertEquals(np.isnan(arr_norm).sum(), 0)
+            self.assertEquals(np.isnan(arr_no_norm).sum(), 0)
 
             normalisation = var_name_lookup.get('normalisation')
             stats_dict = get_ifs_stats(v, output_dir=constants_path, ifs_data_dir=ifs_path,
                                         latitude_vals=lat_vals, longitude_vals=lon_vals)
 
             if normalisation == 'minmax':
-                testing.assert_array_equal(ds_tp_norm,
-                                 (ds_tp_no_norm - stats_dict['min']) / (stats_dict['max'] - stats_dict['min']))
+                testing.assert_array_equal(arr_norm,
+                                 (arr_no_norm - stats_dict['min']) / (stats_dict['max'] - stats_dict['min']))
 
 
     def test_filter_on_lat_lon(self):
