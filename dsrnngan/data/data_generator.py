@@ -12,7 +12,7 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
     def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, data_paths: dict=DATA_PATHS,
-                 shuffle: bool=True, constants: bool=True, hour: Union[int, str]='random', longitude_range: Iterable[float]=None,
+                 shuffle: bool=True, constants: bool=True, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
                  latitude_range: Iterable[float]=None, normalise: bool=True,
                  downsample: bool=False, repeat_data: bool=False, seed: int=None):
         
@@ -178,8 +178,8 @@ class PermutedDataGenerator(Sequence):
         
         return {"lo_res_inputs": lo_res_inputs[idx:idx+1, :, :, :],
                 "hi_res_inputs": hi_res_inputs[idx:idx+1, :, :, :],
-                "dates": self.dates[idx,:], "hours": self.hours[idx, :]},\
-                {"output": self.outputs}
+                "dates": self.dates[idx:idx+1], "hours": self.hours[idx:idx+1]},\
+                {"output": self.outputs[idx:idx+1,:,:]}
                 
 if __name__ == "__main__":
     pass
