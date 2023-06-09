@@ -38,7 +38,7 @@ from scipy.ndimage.filters import uniform_filter
 from dsrnngan.data import data
 from dsrnngan.model import setupmodel
 from dsrnngan.evaluation.benchmarks import nn_interp_model
-from dsrnngan.data.data import get_dates, input_field_lookup
+from dsrnngan.data.data import get_dates, input_fields
 from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
 from dsrnngan.evaluation.evaluation import _init_VAEGAN
 from dsrnngan.model.noise import NoiseGenerator
@@ -127,7 +127,7 @@ def plot_fss_curves(*,
                                             shuffle=True,
                                             constants=True,
                                             hour="random")
-        tpidx = input_field_lookup[fcst_data_source].index('tp')
+        tpidx = input_fields.index('tp')
 
     # tidier to iterate over GAN checkpoints and NN-interp using joint code
     model_numbers_ec = model_numbers.copy()

@@ -112,7 +112,8 @@ def get_config_objects(config):
     val_config.val_range = config['VAL'].get('val_range')
     val_config.val_size = config.get("VAL", {}).get("val_size")
     
-    data_config.load_constants = config['DATA'].get('load_constants', True) 
+    data_config.load_constants = config['DATA'].get('load_constants', True)
+    data_config.input_fields = config['DATA'].get('input_fields')
     
     model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
     model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 

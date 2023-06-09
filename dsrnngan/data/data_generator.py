@@ -5,13 +5,13 @@ import tensorflow as tf
 from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
-from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields
+from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, input_fields
 from dsrnngan.utils import read_config
 
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
-    def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, data_paths: dict=DATA_PATHS,
+    def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, fields: list=None, data_paths: dict=DATA_PATHS,
                  shuffle: bool=True, constants: bool=True, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
                  latitude_range: Iterable[float]=None, normalise: bool=True,
                  downsample: bool=False, repeat_data: bool=False, seed: int=None):
@@ -52,7 +52,7 @@ class DataGenerator(Sequence):
         self.batch_size = batch_size
         self.repeat_data = repeat_data
 
-        self.fcst_fields = fields_lookup[self.forecast_data_source.lower()]
+        self.fcst_fields = input_fields if fields is None else fields
         self.shuffle = shuffle
         self.hour = hour
         self.normalise = normalise

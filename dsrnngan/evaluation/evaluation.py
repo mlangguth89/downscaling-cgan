@@ -50,7 +50,8 @@ def setup_inputs(*,
                  padding,
                  constant_fields,
                  data_paths,
-                 shuffle):
+                 shuffle,
+                 fcst_fields=None):
 
     # initialise model
     model = setupmodel.setup_model(mode=mode,
@@ -71,6 +72,7 @@ def setup_inputs(*,
     _, data_gen_valid = setupdata.setup_data(
         fcst_data_source,
         obs_data_source,
+        fcst_fields=fcst_fields,
         records_folder=records_folder,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
@@ -138,7 +140,7 @@ def create_single_sample(*,
                    denormalise_data: bool=True,
                    seed: int=None):
     
-    tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
+    tpidx = data.input_fields.index('tp')
     
     batch_size = 1  # do one full-size image at a time
 
@@ -242,7 +244,7 @@ def eval_one_chkpt(*,
     corr_all = []
     correlation_fcst_all = []
 
-    tpidx = data.input_field_lookup[fcst_data_source.lower()].index('tp')
+    tpidx = data.input_fields.index('tp')
     
     batch_size = 1  # do one full-size image at a time
 
@@ -414,7 +416,7 @@ def eval_one_chkpt(*,
     rank_arrays = (ranks, lowress, hiress)
     
     arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 
-              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours, 'cond': cond_array, 'const': const_array}
+              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours}
 
     return rank_arrays, point_metrics, arrays
 
@@ -458,6 +460,7 @@ def evaluate_multiple_checkpoints(*,
                                   constant_fields,
                                   data_paths,
                                   shuffle,
+                                  fcst_fields=None,
                                   save_generated_samples=False,
                                   batch_size: int=1
                                   ):
@@ -469,6 +472,7 @@ def evaluate_multiple_checkpoints(*,
                                        records_folder=records_folder,
                                        fcst_data_source=fcst_data_source,
                                        obs_data_source=obs_data_source,
+                                       fcst_fields=fcst_fields,
                                        latitude_range=latitude_range,
                                        longitude_range=longitude_range,
                                        downscaling_steps=df_dict["steps"],

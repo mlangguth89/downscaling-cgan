@@ -60,6 +60,7 @@ def setup_batch_gen(records_folder: str,
 def setup_full_image_dataset(year_month_range,
                              fcst_data_source,
                              obs_data_source,
+                             fcst_fields,
                              load_constants,
                              data_paths,
                              latitude_range,
@@ -79,6 +80,7 @@ def setup_full_image_dataset(year_month_range,
     data_full = DataGeneratorFull(dates=dates,
                                   forecast_data_source=fcst_data_source, 
                                   observational_data_source=obs_data_source,
+                                  fields=fcst_fields,
                                   latitude_range=latitude_range,
                                   longitude_range=longitude_range,
                                   batch_size=batch_size,
@@ -97,6 +99,7 @@ def setup_data(fcst_data_source: str,
                longitude_range: list[float],
                training_range: list[float]=None,
                validation_range: list[float]=None,
+               fcst_fields: list=None,
                records_folder: str=None,
                hour: str='random',
                downsample: bool=False,
@@ -121,6 +124,7 @@ def setup_data(fcst_data_source: str,
         longitude_range (list[float]): Longitude range
         training_range (list[float], optional): Range of training dates, list of YYYYMM format (just the start and end required). Defaults to None.
         validation_range (list[float], optional): Range of validation dates, list of YYYYMM format (just the start and end required). Defaults to None.
+        fcst_fields (list, optional): List of fcst fields, for creating full image dataset. Defaults to None for which case the default local config is used
         records_folder (str, optional): Folder with tfrecords in it (required if load_full_image=False). Defaults to None.
         hour (str, optional): Hour to load. Defaults to 'random'.
         downsample (bool, optional): _description_. Defaults to False.
@@ -146,6 +150,7 @@ def setup_data(fcst_data_source: str,
             batch_gen_train = setup_full_image_dataset(training_range,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
+                                          fcst_fields=fcst_fields,
                                           latitude_range=latitude_range,
                                           longitude_range=longitude_range,
                                           batch_size=batch_size,
@@ -157,10 +162,10 @@ def setup_data(fcst_data_source: str,
         if validation_range is None:
             batch_gen_valid = None
         else:
-            
             batch_gen_valid = setup_full_image_dataset(validation_range,
                                           fcst_data_source=fcst_data_source,
                                           obs_data_source=obs_data_source,
+                                          fcst_fields=fcst_fields,
                                           latitude_range=latitude_range,
                                           longitude_range=longitude_range,
                                           batch_size=batch_size,
@@ -192,7 +197,8 @@ def setup_data(fcst_data_source: str,
 
 def load_data_from_config(config: dict, records_folder: str=None,
                           batch_size: int=1, load_full_image: bool=True, 
-                          data_paths: dict=DATA_PATHS, hour: int='random'):
+                          data_paths: dict=DATA_PATHS, hour: int='random',
+                          fcst_fields: list=None):
     """Load data based on config file
 
     Args:
@@ -216,6 +222,7 @@ def load_data_from_config(config: dict, records_folder: str=None,
         records_folder=records_folder,
         fcst_data_source=data_config.fcst_data_source,
         obs_data_source=data_config.obs_data_source,
+        fcst_fields=fcst_fields,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
         load_full_image=load_full_image,
@@ -279,7 +286,8 @@ def generate_prediction(data_iterator, generator,
 
 if __name__=='__main__':
     
-    from dsrnngan.data.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_field_lookup
+    from dsrnngan.data.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_fields
+
     from dsrnngan.data.data import get_obs_dates
     
     fcst_data_source = 'ifs'
@@ -314,7 +322,7 @@ if __name__=='__main__':
                                 shuffle=False
                                 )
         
-        tpidx = input_field_lookup[fcst_data_source.lower()].index('tp')
+        tpidx = input_fields.index('tp')
         
         obs_vals, fcst_vals, dates, hours = [], [], [], []
         

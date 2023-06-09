@@ -23,6 +23,7 @@ logger.setLevel(logging.INFO)
 from dsrnngan.utils import read_config
 
 DATA_PATHS = read_config.get_data_paths()
+config = read_config.read_config()
 
 # Raw paths for data that has not been regridded or cut down to correct lat/lon range
 
@@ -51,7 +52,7 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
                   'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
-
+input_fields = config['DATA']['input_fields']
 all_fcst_hours = np.array(range(24))
 
 # TODO: change this to behave like the IFS data load (to allow other vals of v, u etc)
@@ -92,7 +93,7 @@ all_era5_fields = list(VAR_LOOKUP_ERA5.keys())
 
 input_field_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
-config = read_config.read_config()
+
 
 NORMALISATION_YEAR = config['TRAIN']['normalisation_year']
 
