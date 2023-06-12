@@ -308,7 +308,7 @@ class QuantileMapper():
             
             quantiles_for_time_period = self.quantiles_by_area[f't{date_index_name}']
 
-            for lat_index in tqdm(range(lat_dim)):
+            for lat_index in range(lat_dim):
                 for lon_index in range(lon_dim):
                 
                     

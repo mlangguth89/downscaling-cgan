@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import json
 import yaml
+import re
 import random
 from glob import glob
 import datetime
@@ -11,7 +12,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from calendar import monthrange
-from typing import Iterable, Tuple, Callable
+from typing import Iterable, Tuple, Callable, List
 from timezonefinder import TimezoneFinder
 from dateutil import tz
 
@@ -46,6 +47,27 @@ def date_range_from_year_month_range(year_month_range):
                                  day=monthrange(end_year, end_month)[1])
     
     return [item.date() for item in pd.date_range(start=start_date, end=end_date)]
+
+def get_checkpoint_model_numbers(log_folder: str) -> List[int]:
+    """Get list of iteration points that have been saved as checkpoints
+
+    Args:
+        log_folder (str): Base folder; must contain a 'models' directory
+        
+    Returns:
+        list[int]: list of interger model numbers
+    """
+    models_glob = str(Path(log_folder).parents[0] / 'models/*.h5')
+
+    fps = glob(models_glob)
+    
+    if fps:
+        model_numbers = [int(re.search(r'([0-9]+).h5', fp).groups()[0]) for fp in fps]
+    else:
+        return []
+    
+    return model_numbers
+    
 
 def get_best_model_number(log_folder: str, metric_column_name: str='CRPS_no_pooling'):
     """

@@ -5,13 +5,14 @@ import numpy as np
 
 from datetime import datetime
 from numpy import testing
+from unittest.mock import patch
 
 from pathlib import Path
 HOME = Path(__file__).parents[1]
 data_folder = HOME / 'system_tests' / 'data'
 
 from dsrnngan.data.data_generator import DataGenerator, PermutedDataGenerator
-from dsrnngan.data.data import DATA_PATHS
+from dsrnngan.data import data
 from system_tests.test_data import create_dummy_stats_data
 
 ifs_path = str(data_folder / 'IFS')
@@ -23,7 +24,7 @@ imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 longitude_vals = [33, 34]
 latitude_vals = [0, 1]
 
-data_paths = copy.deepcopy(DATA_PATHS)
+data_paths = copy.deepcopy(data.DATA_PATHS)
 data_paths['GENERAL']['CONSTANTS'] = constants_path
         
 class TestDataGenerator(unittest.TestCase):
@@ -78,6 +79,22 @@ class TestDataGenerator(unittest.TestCase):
         
         self.assertGreater(repeat_data_gen[2][0]['lo_res_inputs'].size, 0)
         np.testing.assert_allclose(repeat_data_gen[2][0]['lo_res_inputs'], repeat_data_gen[0][0]['lo_res_inputs'])
+    
+    def test_input_all_hours(self):
+        # Test that generator keeps producing if repeat_data is True
+        date_range = [datetime(2017,7,4), datetime(2017,7,5)]
+        hours = [2,3]
+        batch_size = 1
+        
+        data_gen = DataGenerator(date_range, batch_size=batch_size, 
+                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
+                                 shuffle=False, constants=True, hour=hours, longitude_range=longitude_vals,
+                                 latitude_range=latitude_vals, normalise=True,
+                                    downsample=False, seed=None, repeat_data=False)
+        
+        data = [data_gen[n] for n in range(len(date_range)+1)]
+        self.assertEqual(data[2][0]['lo_res_inputs'].size, 0)
+        self.assertListEqual(list(data_gen.hours), hours)
         
     def test_permuted_generator(self):
         

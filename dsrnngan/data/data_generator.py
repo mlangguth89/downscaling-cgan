@@ -32,8 +32,12 @@ class DataGenerator(Sequence):
             self.dates = np.tile(self.dates, 1)  # lol
 
         elif isinstance(hour, (list, np.ndarray)):
-            self.hours = np.repeat(hour, len(self.dates))
-            self.dates = np.tile(self.dates, len(hour))
+            if len(hour) == len(self.dates):
+                # In this case we assume that the user is passing in pairs of (date,hour) combinations
+                self.hours = np.array(hour)
+            else:
+                self.hours = np.repeat(hour, len(self.dates))
+                self.dates = np.tile(self.dates, len(hour))
 
             if forecast_data_source == 'era5':
                 raise ValueError('ERA5 data only supports daily')

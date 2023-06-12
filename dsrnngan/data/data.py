@@ -319,11 +319,14 @@ def filter_by_lat_lon(ds: xr.Dataset,
     """
     lat_var_name, lon_var_name = infer_lat_lon_names(ds)
     
-    all_lat_vals = [val for val in ds[lat_var_name].values if min(lat_range) <= val <= max(lat_range)]
-    all_lon_vals = [val for val in ds[lon_var_name].values if min(lon_range) <= val <= max(lon_range)]
+    all_lat_vals = ds[lat_var_name].values
+    all_lon_vals = ds[lon_var_name].values
     
-    ds = ds.sel({lat_var_name: all_lat_vals})
-    ds = ds.sel({lon_var_name: all_lon_vals})
+    overlapping_lat_vals = all_lat_vals[all_lat_vals >= min(lat_range)][all_lat_vals <= max(lat_range)]
+    overlapping_lon_vals = all_lon_vals[all_lon_vals >= min(lon_range)][all_lon_vals <= max(lon_range)]
+        
+    ds = ds.sel({lat_var_name: overlapping_lat_vals})
+    ds = ds.sel({lon_var_name: overlapping_lon_vals})
    
     return ds
 
@@ -688,7 +691,8 @@ def load_ifs_raw(field: str,
                  month: int,
                  day: int, hour: int, ifs_data_dir: str=IFS_PATH,
                  latitude_vals: list=None, longitude_vals: list=None, 
-                 interpolate: bool=True):
+                 interpolate: bool=True,
+                 convert_to_float_64: bool=False):
     """
     Load raw IFS data (i.e without any normalisation or conversion to mm/hr)
 
@@ -702,7 +706,7 @@ def load_ifs_raw(field: str,
         latitude_vals (list, optional): latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): longitude values to filter/interpolate to. Defaults to None.
         interpolate (bool, optional): whether or not to interpolate. Defaults to True.
-    
+        convert_to_float_64 (bool, optional): Whether or not to convert to float 64,
     Returns:
         xr.Dataset: dataset
     """
@@ -737,8 +741,10 @@ def load_ifs_raw(field: str,
     assert len(var_names) == 1, ValueError('More than one variable found; cannot automatically infer variable name')
     var_name = list(ds.data_vars)[0]
     
-    # Multiplication with float32 leads to some discrepancies
-    ds[var_name] = ds[var_name].astype(np.float64)
+    if convert_to_float_64:
+        # Multiplication with float32 leads to some discrepancies
+        # But in some cases this is outweighed by speed 
+        ds[var_name] = ds[var_name].astype(np.float64)
        
     # Account for cumulative fields
     if var_name in ['tp', 'cp', 'cdir', 'tisr']:
