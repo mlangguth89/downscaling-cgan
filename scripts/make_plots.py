@@ -68,10 +68,8 @@ args = parser.parse_args()
 
 model_type = args.model_type
 
-log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
-               'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
-               'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
-               'cropped_v2': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
+log_folders = {'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
+               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
 
 # If in debug mode, then don't overwrite existing plots
 if args.debug:
@@ -140,88 +138,15 @@ for k, v in special_areas.items():
     special_areas[k]['lon_index_range'] = [lon_range_list.index(v['lon_range'][0]), lon_range_list.index(v['lon_range'][1])]
 
 
+####################################
+### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
+####################################
 
-################################################################################
-### Quantile mapping of IFS data
-print('IFS quantile mapping',flush=True)
-# month_ranges = [[1,2], [3,4,5], [6,7,8,9], [10,11,12]]
-month_ranges = [list(range(1, 13))]
-quantile_threshold = 0.999
+with open(os.path.join(log_folder, f'fcst_qmap_270.pkl'), 'rb') as ifh:
+    fcst_corrected = pickle.load(ifh)
 
-fps = glob('/user/work/uz22147/quantile_training_data/*_744.pkl')
-
-imerg_train_data = []
-ifs_train_data = []
-training_dates = []
-training_hours = []
-
-if args.debug:
-    fcst_corrected = fcst_array.copy()
-else:
-    for fp in tqdm(fps, file=sys.stdout):
-        with open(fp, 'rb') as ifh:
-            training_data = pickle.load(ifh)
-            
-        imerg_train_data.append(denormalise(training_data['obs']))
-        ifs_train_data.append(denormalise(training_data['fcst_array']))
-
-        training_dates += [item[0] for item in training_data['dates']]
-        training_hours += [item[0] for item in training_data['hours']]
-
-    # Need to account for difference in lat/lon ranges; setupdata incorporates the final lat value whereas 
-    # the generated data doesn't
-    imerg_train_data = np.concatenate(imerg_train_data, axis=0)[:,:-1,:-1]
-    ifs_train_data = np.concatenate(ifs_train_data, axis=0)[:,:-1,:-1]
-
-    print('performing qmap for IFS', flush=True)
-
-    fcst_corrected = quantile_map_grid(array_to_correct=fcst_array, 
-                                    fcst_train_data=ifs_train_data, 
-                                    obs_train_data=imerg_train_data, 
-                                    quantiles=quantile_locs,
-                                    extrapolate='constant')
-
-    assert np.isnan(fcst_corrected).sum() == 0
-
-################################################################################
-### Quantile mapping of GAN data
-
-cgan_training_sample_dict = {'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1',
-                                'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1'}
-
-if model_type not in cgan_training_sample_dict or args.debug:
-    cgan_corrected = samples_gen_array.copy()
-else:
-    print('cGAN quantile mapping',flush=True)
-
-    # NOTE:This requires data collection for the model 
-    
-    model_number = get_best_model_number(log_folder=cgan_training_sample_dict[model_type])
-    with open(os.path.join(cgan_training_sample_dict[model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
-        training_arrays = pickle.load(ifh)
-        
-    imerg_training_data = arrays['truth']
-    cgan_training_data = arrays['samples_gen']
-    training_dates = [d[0] for d in arrays['dates']]
-    training_hours = [h[0] for h in arrays['hours']]
-    
-    cgan_corrected = np.empty(samples_gen_array.shape)
-    cgan_corrected[:,:,:,:] = np.nan
-    qmapper = QuantileMapper(month_ranges=month_ranges, 
-                            latitude_range=latitude_range, 
-                            longitude_range=longitude_range,
-                            num_lat_lon_chunks=15)
-
-    for n in range(ensemble_size):
-        qmapper.train(fcst_data=cgan_training_data, 
-                    obs_data=imerg_training_data, 
-                    training_dates=training_dates, 
-                    training_hours=training_hours)
-
-        cgan_corrected[:,:,:,n] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,n], 
-                                                                        dates=dates, hours=hours)
-
-    assert np.isnan(cgan_corrected).sum() == 0
+with open(os.path.join(log_folder, f'cgan_qmap_15.pkl'), 'rb') as ifh:
+    cgan_corrected = pickle.load(ifh)
           
 ################################################################################
 ## Climatological data for comparison.

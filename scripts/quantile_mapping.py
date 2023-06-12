@@ -47,12 +47,8 @@ args = parser.parse_args()
 ###########################
 
 print('Loading model data', flush=True)
-log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
-               'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
-               'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n2000_201806-201905_e20',
-               'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n4000_201806-201905_e10',
-               'reweighted': '/user/work/uz22147/logs/cgan/de5750a9ef3bed6d/n3000_201806-201905_e10',
-               'cropped_v2': '/user/work/uz22147/logs/cgan/f6998afe16c9f955/n4000_201806-201905_e10'}
+log_folders = {
+               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
 
 # Get best model
 log_folder = log_folders[args.model_type]
@@ -100,18 +96,19 @@ longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
 
-special_areas = {'lake_victoria': {'lat_range': [-3.05,1.05], 'lon_range': [31.05, 35.05]},
-                 'nairobi': {'lat_range': [-1.55,-1.05], 'lon_range': [36.55, 37.05]},
-                 'mombasa (coastal)': {'lat_range': [-4.15,-3.95], 'lon_range': [39.55, 39.85]},
-                #  'addis ababa': {'lat_range': [8.8, 9.1], 'lon_range': [38.5, 38.9]},
-                 'bale_mountains': {'lat_range': [6.65, 7.05], 'lon_range': [39.35, 40.25]},
-                #  'Butembo / virunga (DRC)': {'lat_range': [-15.05, 0.55], 'lon_range': [29.05, 29.85]},
-                 'Kampala': {'lat_range': [.05, 0.65], 'lon_range': [32.15, 32.95]},
-                 'Nzoia basin': {'lat_range': [-0.35, 1.55], 'lon_range': [34.55, 36.55]}}
+special_areas = {'Lake Victoria': {'lat_range': [-3.05,0.95], 'lon_range': [31.55, 34.55], 'color': 'red'},
+                 'Coastal Kenya/Somalia': {'lat_range': [-4.65, 5.45], 'lon_range': [38.85, 48.3], 'color': 'black'},
+                 'West EA Rift': {'lat_range': [-4.70,0.30], 'lon_range': [28.25,31.3], 'color': 'green'},
+                 'East EA Rift': {'lat_range': [-3.15, 1.55], 'lon_range': [33.85,36.55], 'color': 'purple'},
+                 'NW Ethiopian Highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30], 'color': 'blue'}}
 
 for k, v in special_areas.items():
-    special_areas[k]['lat_index_range'] = [lat_range_list.index(v['lat_range'][0]), lat_range_list.index(v['lat_range'][1])]
-    special_areas[k]['lon_index_range'] = [lon_range_list.index(v['lon_range'][0]), lon_range_list.index(v['lon_range'][1])]
+    lat_vals = [lt for lt in lat_range_list if v['lat_range'][0] <= lt <= v['lat_range'][1]]
+    lon_vals = [ln for ln in lon_range_list if v['lon_range'][0] <= ln <= v['lon_range'][1]]
+    
+    if lat_vals and lon_vals:
+        special_areas[k]['lat_index_range'] = [lat_range_list.index(lt) for lt in lat_vals]
+        special_areas[k]['lon_index_range'] = [lon_range_list.index(ln) for ln in lon_vals]
 
 quantile_data_dicts = {'test': {
                     'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
@@ -185,23 +182,30 @@ print('## Quantile mapping for GAN', flush=True)
 
 # NOTE:This requires data collection for the model 
 
-cgan_training_sample_dict = {'cropped': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1',
-                             'cropped_4000': '/user/work/uz22147/logs/cgan/ff62fde11969a16f/n10000_201603-201802_e1'}
-# model_number = 288000
-model_number = get_best_model_number(log_folder=cgan_training_sample_dict[args.model_type])
-with open(os.path.join(cgan_training_sample_dict[args.model_type], f'arrays-{model_number}.pkl'), 'rb') as ifh:
-    arrays = pickle.load(ifh)
-    
-if args.debug:
-    n_samples = 100
-else:
-    n_samples = arrays['truth'].shape[0]
-    
-imerg_training_data = arrays['truth'][:n_samples,:,:]
-cgan_training_data = arrays['samples_gen'][:n_samples,:,:,0]
-training_dates = [d[0] for d in arrays['dates']][:n_samples]
-training_hours = [h[0] for h in arrays['hours']][:n_samples]
+fps = ['/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n9000_201603-201702_e1', '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n9000_201703-201802_e1']
 
+imerg_training_data = []
+cgan_training_data = []
+training_dates = []
+training_hours = []
+
+
+for fp in fps:
+    with open(os.path.join(fp, f'arrays-288000.pkl'), 'rb') as ifh:
+        arrays = pickle.load(ifh)
+    
+    if args.debug:
+        n_samples = 100
+    else:
+        n_samples = arrays['truth'].shape[0]
+        
+    imerg_training_data.append(arrays['truth'][:n_samples,:,:])
+    cgan_training_data.append(arrays['samples_gen'][:n_samples,:,:,0])
+    training_dates += [d[0] for d in arrays['dates']][:n_samples]
+    training_hours += [h[0] for h in arrays['hours']][:n_samples]
+    
+imerg_training_data = np.concatenate(imerg_training_data, axis=0)
+cgan_training_data = np.concatenate(cgan_training_data, axis=0)
 
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
