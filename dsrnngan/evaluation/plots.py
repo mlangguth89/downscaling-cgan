@@ -7,12 +7,14 @@ import cartopy.crs as ccrs
 import matplotlib as mpl
 import numpy as np
 import seaborn as sns
+from typing import Iterable, List
 
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
 from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
+
 
 # See https://matplotlib.org/stable/gallery/color/named_colors.html for edge colour options
 lake_feature = cfeature.NaturalEarthFeature(
@@ -56,18 +58,18 @@ percentiles=np.concatenate(percentiles_list)
 quantile_locs = [item / 100.0 for item in percentiles]
 
 def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
-                  cmap='Reds'):
+                  cmap='Reds', extend: str='both'):
     
     if value_range is not None:
         im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
                             cmap=cmap, 
                             levels=value_range, norm=colors.Normalize(min(value_range), max(value_range)),
-                            extend='both')
+                            extend=extend)
     else:
 
         im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
                     cmap=cmap, 
-                    extend='both')
+                    extend=extend)
 
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
     ax.add_feature(cfeature.BORDERS)
@@ -196,8 +198,15 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     return fig, ax
 
 
-def plot_precipitation(ax: plt.Axes, data: np.ndarray, title:str, longitude_range=default_longitude_range, latitude_range=default_latitude_range):
-    levels = [0, 0.1, 1, 2.5, 5, 10, 15, 20, 30, 40, 50, 70, 100, 150] # in units of log10
+def plot_precipitation(ax: plt.Axes, 
+                       data: np.ndarray, 
+                       title:str, 
+                       longitude_range: Iterable[float]=default_longitude_range, 
+                       latitude_range: Iterable[float]=default_latitude_range,
+                       levels: List[int]=None):
+    if levels is None:
+        levels = [0, 0.1, 1, 2.5, 5, 10, 15, 20, 30, 40, 50, 70, 100, 150]
+        
     precip_cmap = ListedColormap(metpy_plots.ctables.colortables["precipitation"][:len(levels)-1], 'precipitation')
     precip_norm = BoundaryNorm(levels, precip_cmap.N)
 
