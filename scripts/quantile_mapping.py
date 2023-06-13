@@ -107,8 +107,9 @@ for k, v in special_areas.items():
     lon_vals = [ln for ln in lon_range_list if v['lon_range'][0] <= ln <= v['lon_range'][1]]
     
     if lat_vals and lon_vals:
-        special_areas[k]['lat_index_range'] = [lat_range_list.index(lt) for lt in lat_vals]
-        special_areas[k]['lon_index_range'] = [lon_range_list.index(ln) for ln in lon_vals]
+ 
+        special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
+        special_areas[k]['lon_index_range'] = [lat_range_list.index(lon_vals[0]), lat_range_list.index(lon_vals[-1])]
 
 quantile_data_dicts = {'test': {
                     'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
@@ -218,10 +219,18 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
                                                                             extrapolate='constant')
 
 else:
-    
+     
     qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
-    quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
-
+    if args.save_data:
+        # Only correct all ensemble members if we are saving data; not needed if just plotting
+        cgan_corrected = np.empty(samples_gen_array.shape)
+        
+        for en in range(ensemble_size):
+            cgan_corrected[:,:,:,en] = quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+            quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected[...,0]
+    else:
+        cgan_corrected = quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
+        quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected
 
 if args.save_data:
     ###########################
@@ -230,9 +239,9 @@ if args.save_data:
     with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap']['data'].shape)
         pickle.dump(quantile_data_dicts['test']['Fcst + qmap']['data'], ofh)
-
+   
     with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
-        pickle.dump(quantile_data_dicts['test']['GAN + qmap']['data'], ofh)
+        pickle.dump(cgan_corrected, ofh)
 
 
 if args.plot:
