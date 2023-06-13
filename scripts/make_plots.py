@@ -139,9 +139,8 @@ for k, v in special_areas.items():
     if lat_vals and lon_vals:
  
         special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
-        special_areas[k]['lon_index_range'] = [lat_range_list.index(lon_vals[0]), lat_range_list.index(lon_vals[-1])]
-
-
+        special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
+        
 ####################################
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
@@ -276,7 +275,7 @@ if metric_dict['scatter']:
 
     mean_data = {}
     data_dict = {'IFS': fcst_corrected,
-                'cgan': cgan_corrected}
+                'cgan': cgan_corrected[:,:,:,0]}
 
     for name, d in data_dict.items():
         
@@ -859,6 +858,7 @@ if metric_dict.get('confusion_matrix'):
         y_dict = {
                 'ifs': (fcst_array > threshold).astype(np.int0).flatten(),
                 'cgan' : (samples_gen_array[:,:,:,0]> threshold).astype(np.int0).flatten(),
+                'cgan_qmap' : (cgan_corrected[:,:,:,0]> threshold).astype(np.int0).flatten(),
                 'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten(),
                 'persistence': (persisted_fcst_array > threshold).astype(np.int0).flatten()}
 

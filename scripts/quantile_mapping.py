@@ -109,8 +109,8 @@ for k, v in special_areas.items():
     if lat_vals and lon_vals:
  
         special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
-        special_areas[k]['lon_index_range'] = [lat_range_list.index(lon_vals[0]), lat_range_list.index(lon_vals[-1])]
-
+        special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
+        
 quantile_data_dicts = {'test': {
                     'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
                     'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
