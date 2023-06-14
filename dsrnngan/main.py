@@ -63,7 +63,9 @@ parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting 
                     )
 parser.add_argument('--output-suffix', default=None, type=str,
                     help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
-
+parser.add_argument('--log-folder', type=str, default=None)
+                    
+                    
 def main(restart: bool, do_training: bool, num_images: int,
          noise_factor: float, ensemble_size: int, shuffle_eval: bool=True, records_folder: str=None, evalnum: str=None, eval_model_numbers: list=None, 
          seed: int=None, num_samples_override: int=None,
@@ -96,66 +98,58 @@ def main(restart: bool, do_training: bool, num_images: int,
     print('Reading config')
     if records_folder is None:
         
-        config = read_config.read_config()
+        data_config = read_config.read_data_config()
         data_paths = read_config.get_data_paths()
         
-        records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(config))
+        records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(data_config.__dict__))
         if not os.path.isdir(records_folder):
             raise ValueError('Data has not been prepared that matches this config')
     else:
-        config = utils.load_yaml_file(os.path.join(records_folder, 'local_config.yaml'))
-        data_paths = utils.load_yaml_file(os.path.join(records_folder, 'data_paths.yaml'))
+        data_config = read_config.read_data_config(config_folder=records_folder)
+        data_paths = read_config.get_data_paths(config_folder=records_folder)
+    
+    model_config = read_config.read_model_config()
 
-    log_folder = log_folder or config.get('SETUP', {}).get('log_folder', False) or config["MODEL"]["log_folder"] 
+    log_folder = log_folder or model_config.log_folder 
     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
-    
-    if output_suffix:
+    if not output_suffix:
+        # Attach model_config as suffix
+        output_suffix = '_' + utils.hash_dict()
+    else:
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
-        log_folder = log_folder + output_suffix
-    
-    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
+        
+    log_folder = log_folder + output_suffix
     
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
-    output_image_shape = (ds_config.downscaling_factor * input_image_shape[0], ds_config.downscaling_factor * input_image_shape[1], 1)
+    output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
     constants_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.constant_fields)
     
     if training_weights is None:
-        training_weights = train_config.training_weights
+        training_weights = model_config.train.training_weights
 
-    ensemble_size = ensemble_size or train_config.ensemble_size  
+    ensemble_size = ensemble_size or model_config.train.ensemble_size  
 
     if val_start:
-        val_config.val_range[0] = val_start
+        model_config.val.val_range[0] = val_start
     if val_end:
-        val_config.val_range[1] = val_end
+        model_config.val.val_range[1] = val_end
     
-    latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
-
+    latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
     noise_factor = float(noise_factor)
-
-    if model_config.mode not in ['GAN', 'VAEGAN', 'det']:
-        raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
-
-    if ensemble_size is not None:
-        if train_config.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
-            raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
-
     evaluate = (eval_model_numbers or evalnum)
     
-    if evaluate and val_config.val_range is None:
+    if evaluate and model_config.val.val_range is None:
         raise ValueError('Must specify validation range when using --evaluate flag')
     
     # Calculate number of samples from epochs:
     if num_samples_override is not None:
-        train_config.num_samples = num_samples_override
+        model_config.train.num_samples = num_samples_override
     else:
-        if train_config.num_samples is None:
-            if train_config.num_epochs is None:
-                raise ValueError('Must specify either num_epochs or num_samples')
-            num_data_points = len(utils.date_range_from_year_month_range(train_config.training_range)) * len(data.all_fcst_hours)
-            train_config.num_samples = num_data_points * train_config.num_epochs
+        if model_config.train.num_samples is None:
+            num_data_points = len(utils.date_range_from_year_month_range(model_config.train.training_range)) * len(data.all_fcst_hours)
+            model_config.train.num_samples = num_data_points * model_config.train.num_epochs
         
-    num_checkpoints = int(train_config.num_samples/(train_config.steps_per_checkpoint * train_config.batch_size))
+    num_checkpoints = int(model_config.train.num_samples/(model_config.train.steps_per_checkpoint * model_config.train.batch_size))
     checkpoint = 1
     
     # Get Git commit hash
@@ -167,10 +161,11 @@ def main(restart: bool, do_training: bool, num_images: int,
     # log_folder = os.path.join(root_log_folder, sha[:8])
     
     model_weights_root = os.path.join(log_folder, "models")
-    Path(model_weights_root).mkdir(parents=True, exist_ok=True)
+    os.makedirs(model_weights_root, exist_ok=True)
 
     # save setup parameters
-    utils.write_to_yaml(os.path.join(log_folder, 'setup_params.yaml'), config)
+    utils.write_to_yaml(os.path.join(log_folder, 'data_config.yaml'), data_config.__dict__)
+    utils.write_to_yaml(os.path.join(log_folder, 'model_config.yaml'), model_config.__dict__)
         
     with open(os.path.join(log_folder, 'git_commit.txt'), 'w+') as ofh:
         ofh.write(sha)
@@ -181,24 +176,24 @@ def main(restart: bool, do_training: bool, num_images: int,
         model = setupmodel.setup_model(
             mode=model_config.mode,
             architecture=model_config.architecture,
-            downscaling_steps=ds_config.steps,
+            downscaling_steps=model_config.downscaling_steps,
             input_channels=data_config.input_channels,
             constant_fields=data_config.constant_fields,
-            latent_variables=gen_config.latent_variables,
-            filters_gen=gen_config.filters_gen,
-            filters_disc=dis_config.filters_disc,
-            noise_channels=gen_config.noise_channels,
+            latent_variables=model_config.generator.latent_variables,
+            filters_gen=model_config.generator.filters_gen,
+            filters_disc=model_config.discriminator.filters_disc,
+            noise_channels=model_config.generator.noise_channels,
             padding=model_config.padding,
-            lr_disc=dis_config.learning_rate_disc,
-            lr_gen=gen_config.learning_rate_gen,
-            kl_weight=train_config.kl_weight,
+            lr_disc=model_config.discriminator.learning_rate_disc,
+            lr_gen=model_config.generator.learning_rate_gen,
+            kl_weight=model_config.train.kl_weight,
             ensemble_size=ensemble_size,
-            CLtype=train_config.CL_type,
-            content_loss_weight=train_config.content_loss_weight)
+            CLtype=model_config.train.CL_type,
+            content_loss_weight=model_config.train.content_loss_weight)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
-            training_range=train_config.training_range,
-            validation_range=val_config.val_range,
+            training_range=model_config.train.training_range,
+            validation_range=model_config.val.val_range,
             fcst_data_source=data_config.fcst_data_source,
             obs_data_source=data_config.obs_data_source,
             fcst_fields=data_config.input_fields,
@@ -210,8 +205,8 @@ def main(restart: bool, do_training: bool, num_images: int,
             con_shape=constants_image_shape,
             out_shape=output_image_shape,
             weights=training_weights,
-            crop_size=train_config.crop_size,
-            batch_size=train_config.batch_size,
+            crop_size=model_config.train.crop_size,
+            batch_size=model_config.train.batch_size,
             load_full_image=False,
             seed=seed)
 
@@ -221,7 +216,7 @@ def main(restart: bool, do_training: bool, num_images: int,
                 with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
                     run_status = json.load(f)
                 training_samples = run_status["training_samples"]
-                checkpoint = int(training_samples / (train_config.steps_per_checkpoint * train_config.batch_size)) + 1
+                checkpoint = int(training_samples / (model_config.train.steps_per_checkpoint * model_config.train.batch_size)) + 1
 
                 log_file = "{}/log.txt".format(log_folder)
                 log = pd.read_csv(log_file)
@@ -241,7 +236,7 @@ def main(restart: bool, do_training: bool, num_images: int,
 
         plot_fname = os.path.join(log_folder, "progress.pdf")
 
-        while (training_samples < train_config.num_samples):  # main training loop
+        while (training_samples < model_config.train.num_samples):  # main training loop
 
             logger.debug("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
 
@@ -250,14 +245,14 @@ def main(restart: bool, do_training: bool, num_images: int,
                                          mode=model_config.mode,
                                          batch_gen_train=batch_gen_train,
                                          batch_gen_valid=batch_gen_valid,
-                                         noise_channels=gen_config.noise_channels,
-                                         latent_variables=gen_config.latent_variables,
+                                         noise_channels=model_config.generator.noise_channels,
+                                         latent_variables=model_config.generator.latent_variables,
                                          checkpoint=checkpoint,
-                                         steps_per_checkpoint=train_config.steps_per_checkpoint,
-                                         plot_samples=val_config.val_size,
+                                         steps_per_checkpoint=model_config.train.steps_per_checkpoint,
+                                         plot_samples=model_config.val.val_size,
                                          plot_fn=plot_fname)
 
-            training_samples += train_config.steps_per_checkpoint * train_config.batch_size
+            training_samples += model_config.train.steps_per_checkpoint * model_config.train.batch_size
             checkpoint += 1
 
 
@@ -290,7 +285,7 @@ def main(restart: bool, do_training: bool, num_images: int,
     # model iterations to save full rank data to disk for during evaluations;
     # necessary for plot rank histograms. these are large files, so small
     # selection used to avoid storing gigabytes of data
-    interval = train_config.steps_per_checkpoint * train_config.batch_size
+    interval = model_config.train.steps_per_checkpoint * model_config.train.batch_size
     
     # Get latest model number
     latest_model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
@@ -309,7 +304,7 @@ def main(restart: bool, do_training: bool, num_images: int,
         Neval = max(finalchkpt // 3, 1)
         eval_model_numbers = [(finalchkpt - ii)*interval for ii in range((Neval-1), -1, -1)]
     elif evalnum == "full":
-        eval_model_numbers = np.arange(0, train_config.num_samples + 1, interval)[1:].tolist()
+        eval_model_numbers = np.arange(0, model_config.train.num_samples + 1, interval)[1:].tolist()
 
     # evaluate model performance
     if evaluate:
@@ -319,7 +314,7 @@ def main(restart: bool, do_training: bool, num_images: int,
                                                  fcst_data_source=data_config.fcst_data_source,
                                                  obs_data_source=data_config.obs_data_source,
                                                  fcst_fields=data_config.input_fields,
-                                                 validation_range=val_config.val_range,
+                                                 validation_range=model_config.val.val_range,
                                                  latitude_range=latitude_range,
                                                  longitude_range=longitude_range,
                                                  log_folder=log_folder,
@@ -330,11 +325,11 @@ def main(restart: bool, do_training: bool, num_images: int,
                                                  model_numbers=eval_model_numbers,
                                                  ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
-                                                 filters_gen=gen_config.filters_gen,
-                                                 filters_disc=dis_config.filters_disc,
+                                                 filters_gen=model_config.generator.filters_gen,
+                                                 filters_disc=model_config.discriminator.filters_disc,
                                                  input_channels=data_config.input_channels,
-                                                 latent_variables=gen_config.latent_variables,
-                                                 noise_channels=gen_config.noise_channels,
+                                                 latent_variables=model_config.generator.latent_variables,
+                                                 noise_channels=model_config.generator.noise_channels,
                                                  padding=model_config.padding,
                                                  ensemble_size=ensemble_size,
                                                  constant_fields=data_config.constant_fields,
@@ -381,4 +376,5 @@ if __name__ == "__main__":
         shuffle_eval=not args.no_shuffle_eval,
         save_generated_samples=args.save_generated_samples,
         training_weights=args.training_weights,
-        output_suffix=args.output_suffix)
+        output_suffix=args.output_suffix,
+        log_folder=args.log_folder)

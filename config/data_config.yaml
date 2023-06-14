@@ -1,0 +1,48 @@
+data_paths: "BLUE_PEBBLE"  # Choose which paths version to use in PATHS
+fcst_data_source: "ifs"
+obs_data_source: "imerg"
+normalisation_year: 2017
+constant_fields: 2
+input_image_width: 264 # Assumes a square image
+num_samples: 320000
+num_samples_per_image: 1
+normalise: True
+num_classes: 4 # Number of bins to split data into
+min_latitude: -11.95
+max_latitude: 15.05
+latitude_step_size: 0.1
+min_longitude: 25.05
+max_longitude: 51.45
+longitude_step_size: 0.1
+input_fields: 
+    - 2t
+    - cape
+    - cp
+    - r200
+    - r700
+    - r950
+    - sp
+    - t200
+    - t700
+    - tclw
+    - tcwv
+    - tisr
+    - tp
+    - u200
+    - u700
+    - v200
+    - v700
+    - w200
+    - w500
+    - w700
+paths:
+  BLUE_PEBBLE:
+      GENERAL:
+          IMERG: '/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final/'
+          ERA5: '/bp1/geog-tropical/data/ERA-5/day'
+          IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
+          OROGRAPHY: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/h_HRES_EAfrica.nc'
+          LSM: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lsm_HRES_EAfrica.nc'
+          CONSTANTS: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants'
+      TFRecords:
+          tfrecords_path: '/user/work/uz22147/tfrecords/'

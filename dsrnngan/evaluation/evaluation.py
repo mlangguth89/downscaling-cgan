@@ -26,7 +26,8 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 path = os.path.dirname(os.path.abspath(__file__))
-ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
+model_config = read_config.read_model_config()
+ds_fac = model_config.downscaling_factor
 
 metrics = {'correlation': calculate_pearsonr, 'mae': mae, 'mse': mse,
            }

@@ -22,8 +22,8 @@ logger.setLevel(logging.INFO)
 
 from dsrnngan.utils import read_config
 
+data_config = read_config.read_data_config()
 DATA_PATHS = read_config.get_data_paths()
-config = read_config.read_config()
 
 # Raw paths for data that has not been regridded or cut down to correct lat/lon range
 
@@ -52,7 +52,7 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
                   'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
-input_fields = config['DATA']['input_fields']
+input_fields = data_config.input_fields
 all_fcst_hours = np.array(range(24))
 
 # TODO: change this to behave like the IFS data load (to allow other vals of v, u etc)
@@ -93,18 +93,10 @@ all_era5_fields = list(VAR_LOOKUP_ERA5.keys())
 
 input_field_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
+NORMALISATION_YEAR = data_config.normalisation_year
 
-
-NORMALISATION_YEAR = config['TRAIN']['normalisation_year']
-
-min_latitude = config['DATA']['min_latitude']
-max_latitude = config['DATA']['max_latitude']
-latitude_step_size = config['DATA']['latitude_step_size']
-min_longitude = config['DATA']['min_longitude']
-max_longitude = config['DATA']['max_longitude']
-longitude_step_size = config['DATA']['longitude_step_size']
-DEFAULT_LATITUDE_RANGE=np.arange(min_latitude, max_latitude + latitude_step_size, latitude_step_size)
-DEFAULT_LONGITUDE_RANGE=np.arange(min_longitude, max_longitude + longitude_step_size, longitude_step_size)
+DEFAULT_LATITUDE_RANGE=np.arange(data_config.min_latitude, data_config.max_latitude + data_config.latitude_step_size, data_config.latitude_step_size)
+DEFAULT_LONGITUDE_RANGE=np.arange(data_config.min_longitude, data_config.max_longitude + data_config.longitude_step_size, data_config.longitude_step_size)
 
 char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 

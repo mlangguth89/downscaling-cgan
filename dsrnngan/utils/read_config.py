@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import tensorflow as tf
 import numpy as np
 import types
@@ -11,49 +12,87 @@ CONFIG_FOLDER = HOME / 'config'
 
 from dsrnngan.utils.utils import load_yaml_file
 
-def read_config(config_filename=None, config_folder=CONFIG_FOLDER):
+def read_config(config_filename: str=None, config_folder: str=CONFIG_FOLDER) -> dict:
     
     if config_filename is None:
         config_filename = 'local_config.yaml'
         
     config_path = os.path.join(config_folder, config_filename)
     try:
-        localconfig = load_yaml_file(config_path)
+        config_dict = load_yaml_file(config_path)
     except FileNotFoundError as e:
         print(e)
-        print(f"You must set {config_filename} in the main folder. Copy local_config-example.yaml and adjust appropriately.")
+        print(f"You must set {config_filename} in the config folder.")
         sys.exit(1)       
     
-    return localconfig
+    return config_dict
 
+def read_model_config(config_filename: str='model_config.yaml', config_folder: str=CONFIG_FOLDER) -> dict:
+        
+    model_config_dict = read_config(config_filename=config_filename, config_folder=config_folder)
+    
+    model_config = copy.deepcopy(model_config_dict)
+    for k, v in model_config.items():
+        if isinstance(v, dict):
+            model_config[k] = types.SimpleNamespace(**v)
+    model_config = types.SimpleNamespace(**model_config)
+    
+        
+    model_config.train.num_epochs = model_config_dict["train"].get("num_epochs")
+    model_config.train.num_samples = model_config_dict['train'].get('num_samples') # leaving this in while we transition to using epochs    
+    model_config.train.crop_size = model_config_dict['train'].get('img_chunk_width')
+    model_config.train.kl_weight = float(model_config.train.kl_weight)
+    model_config.train.content_loss_weight = float(model_config.train.content_loss_weight)
+    
+    model_config.val.val_range = model_config_dict['val'].get('val_range')
+    model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")
+    
+    model_config.generator.learning_rate_gen = float(model_config.generator.learning_rate_gen)
+    model_config.discriminator.learning_rate_disc = float(model_config.discriminator.learning_rate_disc)
+    
+    
+    if model_config.mode not in ['GAN', 'VAEGAN', 'det']:
+        raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
+    
+    if model_config.train.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
+        raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
+    
+    if model_config.train.num_samples is None:
+        if model_config.train.num_epochs is None:
+            raise ValueError('Must specify either num_epochs or num_samples')
+        
+    assert math.prod(model_config.downscaling_steps) == model_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
 
-def get_data_paths(config_folder=CONFIG_FOLDER):
-    data_config_paths = os.path.join(config_folder, 'data_paths.yaml')
+    return model_config
 
-    try:
-        all_data_paths = load_yaml_file(data_config_paths)
-    except FileNotFoundError as e:
-        print(e)
-        print("data_paths.yaml not found. Should exist in main folder")
-        sys.exit(1)
+def read_data_config(config_filename: str='data_config.yaml', config_folder: str=CONFIG_FOLDER) -> dict:
+    
+    data_config = read_config(config_filename=config_filename, config_folder=config_folder)
+    
+    data_config_ns = types.SimpleNamespace(**data_config)
+    data_config_ns.load_constants = data_config.get('load_constants', True)
+    data_config_ns.input_channels = len(data_config_ns.input_fields)
+    
+    return data_config_ns
 
-    lc = read_config()['LOCAL']
-    data_paths = all_data_paths[lc['data_paths']]
+def get_data_paths(config_folder: str=CONFIG_FOLDER):
+    data_config = read_data_config(config_folder=config_folder)
+    data_paths = data_config.paths[data_config.data_paths]
     return data_paths
 
 
-def set_gpu_mode(lc: dict=None):
+def set_gpu_mode(model_config: dict=None):
     
-    if lc is None:
-        lc = read_config()['LOCAL']
+    if model_config is None:
+        model_config = read_model_config()
         
-    if lc['use_gpu']:
-        print('Setting up GPU')
+    if model_config.use_gpu:
+        print('Setting up GPU', flush=True)
         os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # remove environment variable (if it doesn't exist, nothing happens)
         
         # set memory allocation to incremental if desired
         # I think this is to ensure the GPU doesn't run out of memory
-        if lc['gpu_mem_incr']:
+        if model_config.gpu_mem_incr:
             gpus = tf.config.list_physical_devices('GPU')
             if gpus:
                 try:
@@ -66,63 +105,25 @@ def set_gpu_mode(lc: dict=None):
         else:
             # if gpu_mem_incr False, do nothing
             pass
-        if lc['disable_tf32']:
+        if model_config.disable_tf32:
             tf.config.experimental.enable_tensor_float_32_execution(False)
     else:
         # if use_gpu False
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
         
-def get_lat_lon_range_from_config(config=None):
+def get_lat_lon_range_from_config(data_config=None):
     
-    if config is None:
-        config = read_config()
+    if data_config is None:
+        data_config = read_data_config()
     
-    if isinstance(config, str):
-        config = load_yaml_file(config)
-    
-    min_latitude = config['DATA']['min_latitude']
-    max_latitude = config['DATA']['max_latitude']
-    latitude_step_size = config['DATA']['latitude_step_size']
-    min_longitude = config['DATA']['min_longitude']
-    max_longitude = config['DATA']['max_longitude']
-    longitude_step_size = config['DATA']['longitude_step_size']
+    min_latitude = data_config.min_latitude
+    max_latitude = data_config.max_latitude
+    latitude_step_size = data_config.latitude_step_size
+    min_longitude = data_config.min_longitude
+    max_longitude = data_config.max_longitude
+    longitude_step_size = data_config.longitude_step_size
     
     latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
     longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
     
     return latitude_range, longitude_range
-
-
-
-def get_config_objects(config):
-    
-    local_config = types.SimpleNamespace(**config['LOCAL'])
-    model_config = types.SimpleNamespace(**config['MODEL'])
-    ds_config =  types.SimpleNamespace(**config['DOWNSCALING'])    
-    data_config = types.SimpleNamespace(**config['DATA'])
-    gen_config = types.SimpleNamespace(**config['GENERATOR'])
-    dis_config = types.SimpleNamespace(**config['DISCRIMINATOR'])
-    train_config = types.SimpleNamespace(**config['TRAIN'])
-    val_config = types.SimpleNamespace(**config['VAL'])
-    
-    train_config.num_epochs = config["TRAIN"].get("num_epochs")
-    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
-    train_config.crop_size = config['TRAIN'].get('img_chunk_width')
-    
-    val_config.val_range = config['VAL'].get('val_range')
-    val_config.val_size = config.get("VAL", {}).get("val_size")
-    
-    data_config.load_constants = config['DATA'].get('load_constants', True)
-    data_config.input_fields = config['DATA'].get('input_fields')
-    
-    model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
-    model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 
-    
-    gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
-    dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
-    train_config.kl_weight = float(train_config.kl_weight)
-    train_config.content_loss_weight = float(train_config.content_loss_weight)
-    
-    assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
-    
-    return model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config

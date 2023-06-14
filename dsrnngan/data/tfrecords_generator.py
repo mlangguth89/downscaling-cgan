@@ -20,7 +20,10 @@ return_dic = True
 
 DATA_PATHS = read_config.get_data_paths()
 records_folder = DATA_PATHS["TFRecords"]["tfrecords_path"]
-ds_fac = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
+
+#TODO: pass this as function argument instead
+model_config = read_config.read_model_config()
+ds_fac = model_config.downscaling_factor
 
 # Use autotune to tune the prefetching of records in parrallel to processing to improve performance
 AUTOTUNE = tf.data.AUTOTUNE
@@ -304,7 +307,7 @@ def write_data(year_month_range: list,
                latitude_range: list=None,
                longitude_range: list=None,
                debug: bool=False,
-               config: dict=None,
+               data_config: dict=None,
                num_shards: int=1) -> str:
     """
     Function to write training data to TF records
@@ -345,22 +348,22 @@ def write_data(year_month_range: list,
             
         records_folder = data_paths["TFRecords"]["tfrecords_path"]
         
-        if not config:
-            config = read_config.read_config()
+        if not data_config:
+            data_config = read_config.read_config(config_filename='data_config.yaml')
         
-        class_bin_boundaries = config['DATA'].get('class_bin_boundaries')
+        class_bin_boundaries = data_config.get('class_bin_boundaries')
         if class_bin_boundaries is not None:
             print(f'Data will be bundled according to class bin boundaries provided: {class_bin_boundaries}')
             num_class = len(class_bin_boundaries) + 1
 
-        input_image_width = config['DATA']['input_image_width']
-        num_samples_per_image = config['DATA']['num_samples_per_image']
+        input_image_width = data_config['input_image_width']
+        num_samples_per_image = data_config['num_samples_per_image']
 
         if not os.path.isdir(records_folder):
-            os.mkdir(records_folder)
+            os.mkdirs(records_folder, exist_ok=True)
         
         #  Create directory that is hash of setup params, so that we know it's the right data later on
-        hash_dir = os.path.join(records_folder, hash_dict(config))
+        hash_dir = os.path.join(records_folder, hash_dict(data_config))
         
         if not os.path.isdir(hash_dir):
             os.mkdir(hash_dir)
@@ -368,8 +371,7 @@ def write_data(year_month_range: list,
         print(f'Output folder will be {hash_dir}')
             
         # Write params in directory
-        write_to_yaml(os.path.join(hash_dir, 'local_config.yaml'), config)
-        write_to_yaml(os.path.join(hash_dir, 'data_paths.yaml'), data_paths)
+        write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config)
         
         with open(os.path.join(hash_dir, 'git_commit.txt'), 'w+') as ofh:
             repo = git.Repo(search_parent_directories=True)
@@ -440,7 +442,7 @@ def write_data(year_month_range: list,
                             
                             if sample[0]['hi_res_inputs'][k, 
                                                                idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, config['DATA']['constant_fields']):
+                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, data_config['constant_fields']):
                                 raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
        
                             # Check no Null values
@@ -544,29 +546,35 @@ if __name__ == '__main__':
     parser.add_argument('--fcst-hours', nargs='+', default=np.arange(24), type=int, 
                     help='Hour(s) to process (space separated)')
     parser.add_argument('--records-folder', type=str, default=None)
+    parser.add_argument('--debug',action='store_true')
+    args = parser.parse_args()
     
     # Load relevant parameters from local config
-    config = read_config.read_config()
-    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
-      
-    val_range = config['VAL'].get('val_range')
-    test_range = config.get('EVAL', {}).get('test_range')
+    data_config = read_config.read_data_config()
+    model_config = read_config.read_model_config()
     
-    training_range = [str(item) for item in train_config.training_range]
-    if val_range:
-        val_range = [str(item) for item in val_range]
-    if test_range:
-        test_range = [str(item) for item in test_range]
-       
-    args = parser.parse_args()
+    val_range = None
+    eval_range = None
+     
+    if args.debug:
+        training_range = ['201701']
+    else:
+        training_range = [str(item) for item in model_config.train.training_range]
+        
+        if hasattr(model_config.val, 'val_range'):
+            val_range = [str(item) for item in model_config.val.val_range]
+        
+        if hasattr(model_config, 'eval'):
+            if hasattr(model_config.eval, 'eval_range'):
+                eval_range =  [str(item) for item in model_config.eval.eval_range]
     
     data_paths = DATA_PATHS
     if args.records_folder:
         data_paths['TFRecords']['tfrecords_path'] = args.records_folder
     
-    write_train_test_data(training_range=train_config.training_range,
+    write_train_test_data(training_range=training_range,
                           validation_range=val_range,
-                          test_range=test_range,
+                          test_range=eval_range,
                             forecast_data_source=data_config.fcst_data_source, 
                             observational_data_source=data_config.obs_data_source,
                             hours=args.fcst_hours,
