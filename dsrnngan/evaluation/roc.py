@@ -13,7 +13,7 @@ from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
 from dsrnngan.evaluation.evaluation import _init_VAEGAN
 from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.model.pooling import pool
-from dsrnngan.utils.read_config import read_config
+from dsrnngan.utils.read_config import read_model_config
 from dsrnngan.data.tfrecords_generator import create_fixed_dataset
 
 
@@ -34,9 +34,9 @@ def calculate_roc(*,
                   ensemble_members,
                   calc_upsample):
 
-    df_dict = read_config()['DOWNSCALING']
-    ds_fac = df_dict["downscaling_factor"]
-    downscaling_steps = df_dict["steps"]
+    model_config = read_model_config()
+    ds_fac = model_config.downscaling_factor
+    downscaling_steps = model_config.downscaling_steps
 
     if problem_type == "normal":
         downsample = False

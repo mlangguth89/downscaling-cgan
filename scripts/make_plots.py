@@ -16,6 +16,8 @@ from matplotlib import gridspec
 from metpy import plots as metpy_plots
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from properscoring import crps_ensemble
+from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 HOME = Path(os.getcwd()).parents[0]
 
@@ -40,17 +42,17 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': False,
+metric_dict = {'examples': True,
                'scatter': True,
-               'rank_hist': False,
-               'spread_error': False,
-               'rapsd': False,
-               'quantiles': False,
-               'hist': False,
-               'crps': False,
-               'fss': False,
+               'rank_hist': True,
+               'spread_error': True,
+               'rapsd': True,
+               'quantiles': True,
+               'hist': True,
+               'crps': True,
+               'fss': True,
                'diurnal': True,
-               'confusion_matrix': False
+               'confusion_matrix': True
                }
 
 plot_persistence = False
@@ -99,6 +101,10 @@ ensmean_array = np.mean(arrays['samples_gen'], axis=-1)[:n_samples, :,:]
 dates = [d[0] for d in arrays['dates']][:n_samples]
 hours = [h[0] for h in arrays['hours']][:n_samples]
 
+# Times in EAT timezone
+eat_datetimes = [datetime(d.year, d.month, d.day, hours[n]).replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Africa/Nairobi')) for n,d in enumerate(dates)]
+eat_dates = [datetime(d.year, d.month, d.day) for d in eat_datetimes]
+eat_hours = [d.hour for d in eat_datetimes]
 
 assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
@@ -115,6 +121,7 @@ dry_day_indexes = [item[0] for item in sorted_means[:10]]
 # Get lat/lon range from log folder
 base_folder = '/'.join(log_folder.split('/')[:-1])
 config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
+
 model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
 
 # Locations
@@ -488,16 +495,15 @@ if metric_dict['hist']:
     #################################################################################
     ## Bias and RMSE
     # RMSE
-    rmse_dict = {'GAN_rmse': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
-                'fcst_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
-                'GAN_qmap_rmse': np.sqrt(np.mean(np.square(truth_array - cgan_corrected[:,:,:,0]), axis=0)),
-                'fcst_qmap_rmse' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected), axis=0))}
+    rmse_dict = {'GAN': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
+            'GAN + qmap' : np.sqrt(np.mean(np.square(truth_array - cgan_corrected[:n_samples,:,:,0]), axis=0)),
+            'Fcst' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
+            'Fcst + qmap' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected[:n_samples,:,:]), axis=0))}
 
-    bias_dict = {'GAN_bias': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
-                'ensmean_bias' : np.mean(ensmean_array - truth_array, axis=0),
-                'fcst_bias' : np.mean(fcst_array - truth_array, axis=0), 
-                'GAN_qmap_bias': np.mean(cgan_corrected[:,:,:,0] - truth_array, axis=0),
-                'fcst_qmap_bias' : np.mean(fcst_corrected - truth_array, axis=0)}
+    bias_dict = {'GAN': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
+            'GAN + qmap' : np.mean(cgan_corrected[:n_samples,:,:,0] - truth_array, axis=0),
+            'Fcst' : np.mean(fcst_array - truth_array, axis=0),
+            'Fcst + qmap' : np.mean(fcst_corrected[:n_samples, :,:] - truth_array, axis=0)}
 
     fig, ax = plt.subplots(len(rmse_dict.keys())+1,2, 
                         subplot_kw={'projection' : ccrs.PlateCarree()},
@@ -562,6 +568,23 @@ if metric_dict['hist']:
     plt.colorbar(im, ax=ax[n+2,1])
 
     plt.savefig(f'plots/bias_{model_type}_{model_number}.pdf', format='pdf')
+    
+    # RMSE by hour
+    from dsrnngan.evaluation.scoring import mse, get_metric_by_hour
+
+    fig, ax = plt.subplots(1,1)
+    data_dict = {'Obs (IMERG)': truth_array,
+                        'GAN + qmap': cgan_corrected[:,:,:,0],
+                        'Fcst + qmap': fcst_corrected}
+
+    for name, arr in data_dict.items():
+        if name != 'Obs (IMERG)':
+            metric_by_hour, hour_bin_edges = get_metric_by_hour(mse, obs_array=truth_array, fcst_array=arr, hours=eat_hours, bin_width=3)
+            ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
+            ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
+            ax.set_xticklabels(hour_bin_edges)
+    ax.legend()
+    plt.savefig(f'plots/rmse_hours_{model_type}_{model_number}.pdf', format='pdf')
 
 #################################################################################
 
@@ -686,32 +709,22 @@ if metric_dict['diurnal']:
                          'GAN': cgan_corrected[:,:,:,0],
                          'Fcst': fcst_corrected
                          }
-    ## Diurnal cycle
-    diurnal_data_sums = {}
-    for k, d in diurnal_data_dict.items():
-        
-        diurnal_data_sums[k], hourly_counts = get_diurnal_cycle(d, dates, hours, longitude_range, latitude_range)
 
-    fig, ax = plt.subplots(1,1, figsize=(5,5))
+    metric_fn = lambda x,y: x.mean()
+    fig, ax = plt.subplots(1,1)
+    for name, arr in diurnal_data_dict.items():
+        
+        metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=eat_hours, bin_width=3)
+        ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
 
-    for name, data in diurnal_data_sums.items():
-        
-        mean_hourly_data = [(data[n]/hourly_counts[n]) for n in range(24)]
-        # std_dev_hourly_data = np.array([data[n].std() for n in range(24)])
-        
-        # ax.errorbar(x=range(24), y=mean_hourly_data, fmt='-o', yerr=2*std_dev_hourly_data, label=name)
-        ax.plot(mean_hourly_data, '-o', label=name)
-        
-    ax.legend()
+    ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
+    ax.set_xticklabels(hour_bin_edges)
     ax.set_xlabel('Hour')
     ax.set_ylabel('Average mm/hr')
+    ax.legend()
     
-    plt.rcParams.update({'font.size': 20})
     plt.savefig(f'plots/diurnal_cycle_{model_type}_{model_number}.pdf', bbox_inches='tight')
-    
-    with open(f'plots/diurnal_cycle_{model_type}_{model_number}.pkl', 'wb+') as ofh:
-        pickle.dump(diurnal_data_sums, ofh)
-    
+        
     
     # # Seasonal diurnal cycle
     # seasons_dict = {'MAM': [3,4,5], 'OND': [10,11,12]}
@@ -852,6 +865,7 @@ if metric_dict.get('confusion_matrix'):
 
     results = {'hourly_thresholds': hourly_thresholds,
                'conf_mat': []}
+    
     for threshold in hourly_thresholds:
         y_true = (truth_array > threshold).astype(np.int0).flatten()
 
@@ -859,10 +873,9 @@ if metric_dict.get('confusion_matrix'):
                 'ifs': (fcst_array > threshold).astype(np.int0).flatten(),
                 'cgan' : (samples_gen_array[:,:,:,0]> threshold).astype(np.int0).flatten(),
                 'cgan_qmap' : (cgan_corrected[:,:,:,0]> threshold).astype(np.int0).flatten(),
-                'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten(),
-                'persistence': (persisted_fcst_array > threshold).astype(np.int0).flatten()}
+                'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten()}
 
-        tmp_results_dict = {'threshold': threshold}    
+        tmp_results_dict = {'threshold': threshold}
         for k, v in tqdm(y_dict.items()):
             tmp_results_dict[k] = confusion_matrix(y_true, v)
         

@@ -3,10 +3,12 @@ import json
 import os
 import math
 import git
+import wandb
+import copy
 import logging
 from glob import glob
 from pathlib import Path
-
+from types import SimpleNamespace
 from tensorflow import config as tf_config
 
 import matplotlib; matplotlib.use("Agg")  # noqa: E702
@@ -64,13 +66,15 @@ parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting 
 parser.add_argument('--output-suffix', default=None, type=str,
                     help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
 parser.add_argument('--log-folder', type=str, default=None)
-                    
-                    
+parser.add_argument('--debug', action='store_true')                
+
+
 def main(restart: bool, do_training: bool, num_images: int,
          noise_factor: float, ensemble_size: int, shuffle_eval: bool=True, records_folder: str=None, evalnum: str=None, eval_model_numbers: list=None, 
          seed: int=None, num_samples_override: int=None,
-         val_start: str=None, val_end: str=None, save_generated_samples: bool=False, training_weights: list=None, debug: bool=False,
-         output_suffix: str=None, log_folder=None
+         val_start: str=None, val_end: str=None, save_generated_samples: bool=False, training_weights: list=None, 
+         debug: bool=False,
+         output_suffix: str=None, log_folder: str=None
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -93,7 +97,6 @@ def main(restart: bool, do_training: bool, num_images: int,
         debug (bool, optional): Whether or not to use in debug mode (stops training after first checkpoint). Defaults to False.
         output_suffix (str, optional): Suffix to append to output folder name. Defaults to None.
         log_folder (str, optional): root folder to store results in. Defaults to None. If None then will be taken from config.
-
     """
     print('Reading config')
     if records_folder is None:
@@ -109,16 +112,32 @@ def main(restart: bool, do_training: bool, num_images: int,
         data_paths = read_config.get_data_paths(config_folder=records_folder)
     
     model_config = read_config.read_model_config()
-
+    
     log_folder = log_folder or model_config.log_folder 
     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
     if not output_suffix:
         # Attach model_config as suffix
-        output_suffix = '_' + utils.hash_dict()
+        model_config_dict = copy.deepcopy(model_config).__dict__
+        for k, v in model_config_dict.items():
+            if isinstance(v, SimpleNamespace):
+                model_config_dict[k] = v.__dict__
+        output_suffix = '_' + utils.hash_dict(model_config_dict)
     else:
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
         
     log_folder = log_folder + output_suffix
+    
+    # Initiialise weights and biases logging
+    wandb.init(
+        project='cgan-test' if args.debug else 'cgan-east-africa',
+        sync_tensorboard=True,
+        name=log_folder.split('/')[-1],
+        config={
+            'data': data_config.__dict__,
+            'model': model_config.__dict__,
+            'gpu_devices': tf_config.list_physical_devices('GPU')
+        }
+    )
     
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
@@ -377,4 +396,5 @@ if __name__ == "__main__":
         save_generated_samples=args.save_generated_samples,
         training_weights=args.training_weights,
         output_suffix=args.output_suffix,
-        log_folder=args.log_folder)
+        log_folder=args.log_folder,
+        debug=args.debug)

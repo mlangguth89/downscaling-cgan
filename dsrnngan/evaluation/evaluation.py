@@ -465,8 +465,8 @@ def evaluate_multiple_checkpoints(*,
                                   save_generated_samples=False,
                                   batch_size: int=1
                                   ):
-
-    df_dict = read_config.read_config()['DOWNSCALING']
+    #TODO: this should be an input argument
+    model_config = read_config.read_model_config()
 
     gen, data_gen_valid = setup_inputs(mode=mode,
                                        arch=arch,
@@ -476,7 +476,7 @@ def evaluate_multiple_checkpoints(*,
                                        fcst_fields=fcst_fields,
                                        latitude_range=latitude_range,
                                        longitude_range=longitude_range,
-                                       downscaling_steps=df_dict["steps"],
+                                       downscaling_steps=model_config.downscaling_stepsa,
                                        validation_range=validation_range,
                                        hour='random',
                                        downsample=downsample,

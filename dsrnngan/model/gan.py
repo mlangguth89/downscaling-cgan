@@ -1,4 +1,5 @@
 import gc
+import wandb
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input
@@ -11,6 +12,7 @@ from dsrnngan.model.meta import ensure_list, input_shapes, Nontrainable, load_op
 from dsrnngan.model.vaegantrain import VAE_trainer
 from dsrnngan.model.wloss import wasserstein_loss, CL_chooser
 
+# summary_writer = tf.summary.create_file_writer('/user/home/uz22147/repos/downscaling-cgan/logs')
 
 class WGANGP(object):
 
@@ -171,10 +173,12 @@ class WGANGP(object):
         for tmp_batch, _, _ in batch_gen.take(1).as_numpy_iterator():
             batch_size = tmp_batch.shape[0]
         del tmp_batch
+        
         if show_progress:
             # Initialize progbar and batch counter
             progbar = generic_utils.Progbar(
                 num_gen_batches*batch_size)
+            
         disc_target_real = np.ones(
             (batch_size, 1), dtype=np.float32)
         disc_target_fake = -disc_target_real
@@ -200,6 +204,7 @@ class WGANGP(object):
                 with Nontrainable(self.gen):
                     dl = self.disc_trainer.train_on_batch(
                         [cond, const, noise_gen(), sample], disc_target)
+                
 
                 if disc_loss is None:
                     disc_loss = np.array(dl)
@@ -229,16 +234,19 @@ class WGANGP(object):
                 elif self.mode == 'VAEGAN':
                     gen_loss = self.gen_trainer.train_step(
                         [gt_inputs, gt_outputs])
-
+                
                 gen_loss = ensure_list(gen_loss)
+
                 del sample, cond, const
 
             if show_progress:
                 losses = []
                 for (i, dl) in enumerate(disc_loss):
                     losses.append(("D{}".format(i), dl))
+                    wand.log({"D{}".format(i): dl})
                 for (i, gl) in enumerate(gen_loss):
                     losses.append(("G{}".format(i), gl))
+                    wand.log({"G{}".format(i): gl})
                 progbar.add(batch_size,
                             values=losses)
 
@@ -265,5 +273,5 @@ class WGANGP(object):
                 if self.ensemble_size is not None:
                     loss_log["gen_loss_ct"] = gen_loss[3].numpy()
             gc.collect()
-
+        
         return loss_log

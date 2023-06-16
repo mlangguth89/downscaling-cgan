@@ -13,10 +13,7 @@ CONFIG_FOLDER = HOME / 'config'
 from dsrnngan.utils.utils import load_yaml_file
 
 def read_config(config_filename: str=None, config_folder: str=CONFIG_FOLDER) -> dict:
-    
-    if config_filename is None:
-        config_filename = 'local_config.yaml'
-        
+
     config_path = os.path.join(config_folder, config_filename)
     try:
         config_dict = load_yaml_file(config_path)
@@ -27,9 +24,11 @@ def read_config(config_filename: str=None, config_folder: str=CONFIG_FOLDER) -> 
     
     return config_dict
 
-def read_model_config(config_filename: str='model_config.yaml', config_folder: str=CONFIG_FOLDER) -> dict:
-        
-    model_config_dict = read_config(config_filename=config_filename, config_folder=config_folder)
+def read_model_config(config_filename: str='model_config.yaml', config_folder: str=CONFIG_FOLDER,
+                      model_config_dict: dict=None) -> dict:
+    
+    if model_config_dict is None:
+        model_config_dict = read_config(config_filename=config_filename, config_folder=config_folder)
     
     model_config = copy.deepcopy(model_config_dict)
     for k, v in model_config.items():
@@ -37,13 +36,13 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
             model_config[k] = types.SimpleNamespace(**v)
     model_config = types.SimpleNamespace(**model_config)
     
-        
     model_config.train.num_epochs = model_config_dict["train"].get("num_epochs")
     model_config.train.num_samples = model_config_dict['train'].get('num_samples') # leaving this in while we transition to using epochs    
     model_config.train.crop_size = model_config_dict['train'].get('img_chunk_width')
     model_config.train.kl_weight = float(model_config.train.kl_weight)
     model_config.train.content_loss_weight = float(model_config.train.content_loss_weight)
-    
+    model_config.train.ensemble_size = model_config_dict['train'].get('ensemble_size')
+
     model_config.val.val_range = model_config_dict['val'].get('val_range')
     model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")
     
@@ -65,12 +64,13 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
 
     return model_config
 
-def read_data_config(config_filename: str='data_config.yaml', config_folder: str=CONFIG_FOLDER) -> dict:
+def read_data_config(config_filename: str='data_config.yaml', config_folder: str=CONFIG_FOLDER,
+                     data_config_dict: dict=None) -> dict:
+    if data_config_dict is None:
+        data_config_dict = read_config(config_filename=config_filename, config_folder=config_folder)
     
-    data_config = read_config(config_filename=config_filename, config_folder=config_folder)
-    
-    data_config_ns = types.SimpleNamespace(**data_config)
-    data_config_ns.load_constants = data_config.get('load_constants', True)
+    data_config_ns = types.SimpleNamespace(**data_config_dict)
+    data_config_ns.load_constants = data_config_dict.get('load_constants', True)
     data_config_ns.input_channels = len(data_config_ns.input_fields)
     
     return data_config_ns
@@ -127,3 +127,39 @@ def get_lat_lon_range_from_config(data_config=None):
     longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
     
     return latitude_range, longitude_range
+
+
+def get_config_objects(config: dict):
+
+    # Convert old style config into namespace objects; soon to be replaced 
+    # once legacy model runs are no longer in use    
+    local_config = types.SimpleNamespace(**config['LOCAL'])
+    model_config = types.SimpleNamespace(**config['MODEL'])
+    ds_config =  types.SimpleNamespace(**config['DOWNSCALING'])    
+    data_config = types.SimpleNamespace(**config['DATA'])
+    gen_config = types.SimpleNamespace(**config['GENERATOR'])
+    dis_config = types.SimpleNamespace(**config['DISCRIMINATOR'])
+    train_config = types.SimpleNamespace(**config['TRAIN'])
+    val_config = types.SimpleNamespace(**config['VAL'])
+    
+    train_config.num_epochs = config["TRAIN"].get("num_epochs")
+    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
+    train_config.crop_size = config['TRAIN'].get('img_chunk_width')
+    
+    val_config.val_range = config['VAL'].get('val_range')
+    val_config.val_size = config.get("VAL", {}).get("val_size")
+    
+    data_config.load_constants = config['DATA'].get('load_constants', True)
+    data_config.input_fields = config['DATA'].get('input_fields')
+    
+    model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
+    model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 
+    
+    gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
+    dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
+    train_config.kl_weight = float(train_config.kl_weight)
+    train_config.content_loss_weight = float(train_config.content_loss_weight)
+    
+    assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
+    
+    return model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config

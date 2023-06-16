@@ -66,7 +66,7 @@ class DataGenerator(Sequence):
                
         if self.downsample:
             # read downscaling factor from file
-            self.ds_factor = read_config.read_config()['DOWNSCALING']["downscaling_factor"]
+                self.ds_factor = read_model_config().downscaling_factor
         
         if not constants:
             # Dummy constants
