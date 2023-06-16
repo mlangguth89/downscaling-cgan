@@ -132,8 +132,12 @@ class TestBenchmarks(unittest.TestCase):
         qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=self.latitude_range, 
                                  longitude_range=self.longitude_range, num_lat_lon_chunks=2)
         # identify best threshold and train on all the data
-        qmapper.train(fcst_data=self.ifs_train_data, obs_data=self.imerg_train_data, 
-                      training_dates=self.training_dates, training_hours=self.training_hours)
+        mult_factor = 20
+        qmapper.train(fcst_data=np.concatenate([self.ifs_train_data]*mult_factor, axis=0),
+                      obs_data=np.concatenate([self.imerg_train_data]*mult_factor, axis=0), 
+                      training_dates=np.concatenate([self.training_dates]*mult_factor, axis=0), 
+                      training_hours=np.concatenate([self.training_hours]*mult_factor, axis=0))
+        
         self.assertGreaterEqual(1 - qmapper.quantile_locs[-2], 1 / self.ifs_train_data.size)
         
     def test_max_val(self):

@@ -128,7 +128,7 @@ class QuantileMapper():
         self.quantile_date_groupings = None
         self.quantiles_by_area = None
 
-    def update_quantile_locations(self, input_data: np.ndarray):
+    def update_quantile_locations(self, input_data: np.ndarray, max_step_size: int=0.01):
         """Remove quantile locations that are too precise given the minimum data constraints
 
         Args:
@@ -140,14 +140,16 @@ class QuantileMapper():
         data_size = input_data.size
         if self.raw_quantile_locs is None:
             min_step_size = 1/data_size
-
-            self.raw_quantile_locs = list(np.arange(0, 0.9999, 0.001)) 
-            
+          
             # Stopped at 10^{-12} since expect precision will become an issue, could be modified to accept higher precision
-            valid_steps = [10**(-n) for n in range(4,12) if 10**(-n) >= min_step_size] 
-            
+            valid_steps = [10**(-n) for n in range(1,12) if 10**(-n) >= min_step_size]
+            valid_steps = [v for v in valid_steps if v <= max_step_size]
+
+            max_val_reached = 0 
+            self.raw_quantile_locs = []
             for valid_step in valid_steps:
-                self.raw_quantile_locs += [self.raw_quantile_locs[-1] + valid_step*m for m in range(1,10)]
+                self.raw_quantile_locs += list(np.arange(max_val_reached, 1, valid_step))
+                max_val_reached = 1-valid_step
           
         if self.min_data_points_per_quantile:
             self.quantile_locs = get_valid_quantiles(data_size=data_size, min_data_points_per_quantile=self.min_data_points_per_quantile, raw_quantile_locations=self.raw_quantile_locs)
@@ -311,10 +313,11 @@ class QuantileMapper():
             for lat_index in range(lat_dim):
                 for lon_index in range(lon_dim):
                 
-                    
                     obs_quantiles, fcst_quantiles = self.get_weighted_quantiles(lat_index, lon_index, area_centres, quantiles_for_time_period)
 
                     tmp_fcst_array = fcst[d_ix, lat_index, lon_index].copy()
+                    
+                    # Note that np.interp clips any values greater than max(fcst_quantiles)
                     tmp_fcst_array = np.interp(tmp_fcst_array, fcst_quantiles, obs_quantiles)
      
                     # Deal with zeros; assign random bin
@@ -332,7 +335,7 @@ class QuantileMapper():
                     
                     if len(extreme_inds) > 0:
                         uplift = max_obs_forecast_val - max_training_forecast_val
-                        tmp_fcst_array[extreme_inds] = tmp_fcst_array[extreme_inds] + uplift
+                        tmp_fcst_array[extreme_inds] = fcst[d_ix, lat_index, lon_index][extreme_inds] + uplift
                     
                     fcst_corrected[d_ix,lat_index,lon_index] = tmp_fcst_array
 

@@ -190,4 +190,17 @@ def fss(obs_array, fcst_array, scale, thr, mode='constant'):
 
     return numer / denom
     
+
+def get_metric_by_hour(metric_fn, obs_array, fcst_array, hours, bin_width=1):
     
+    hour_bin_edges = np.arange(0, 24, bin_width)
+
+    digitized_hours = np.digitize(hours, bins=hour_bin_edges)
+
+    metric_by_hour = {}
+    for hour in range(24):
+        digitized_hour = np.digitize(hour, bins=hour_bin_edges)
+        hour_indexes = np.where(np.array(digitized_hours) == digitized_hour)[0]
+        
+        metric_by_hour[digitized_hour] = metric_fn(obs_array[hour_indexes,...], fcst_array[hour_indexes,...])
+    return metric_by_hour, hour_bin_edges

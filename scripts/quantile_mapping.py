@@ -28,7 +28,7 @@ from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONG
 from dsrnngan.evaluation.benchmarks import QuantileMapper, quantile_map_grid
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
 from dsrnngan.data.data import denormalise
-from dsrnngan.evaluation.plots import plot_quantiles, quantile_locs
+from dsrnngan.evaluation.plots import plot_quantiles
 
 parser = ArgumentParser(description='Script for quantile mapping.')
 
@@ -36,7 +36,7 @@ parser.add_argument('--num-lat-lon-chunks', type=int, help='Number of chunks to 
 parser.add_argument('--model-type', type=str, help='Choice of model type')
 parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
-parser.add_argument('--min-points-per-quantile', type=int, default=0, help='Minimum number of data points per quantile in the plots')
+parser.add_argument('--min-points-per-quantile', type=int, default=1, help='Minimum number of data points per quantile in the plots')
 parser.add_argument('--save-data', action='store_true', help='save data')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
@@ -161,6 +161,9 @@ month_ranges = [[n for n in range(1,13)]]
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 
+# Get auto spaced quantiles, up to one data point per quantile
+ifs_quantile_locs = qmapper.update_quantile_locations(input_data=fcst_array, max_step_size=0.01)
+
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
     # Do quantile mapping grid cell by grid cell
@@ -168,7 +171,7 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
     quantile_data_dicts['test']['Fcst + qmap']['data'] = quantile_map_grid(array_to_correct=fcst_array, 
                                                                                 fcst_train_data=ifs_train_data, 
                                                                                 obs_train_data=imerg_train_data, 
-                                                                                quantiles=quantile_locs,
+                                                                                quantiles=ifs_quantile_locs,
                                                                                 extrapolate='constant')
 else:
     
@@ -210,12 +213,28 @@ cgan_training_data = np.concatenate(cgan_training_data, axis=0)
 
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
+
+# Get auto spaced quantiles, up to one data point per quantile
+cgan_quantile_locs = qmapper.update_quantile_locations(input_data=fcst_array, max_step_size=0.01)
+
+
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
-    # Do quantile mapping grid cell by grid cell
-    quantile_data_dicts['test']['GAN + qmap']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
-                                                                            fcst_train_data=cgan_training_data, 
+    if args.save_data:
+        cgan_corrected = np.empty(samples_gen_array.shape)
+        
+        for en in range(ensemble_size):
+            cgan_corrected[:,:,:,en] =  quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,en], 
+                                                                                fcst_train_data=cgan_training_data, 
                                                                             obs_train_data=imerg_training_data, 
-                                                                            quantiles=quantile_locs,
+                                                                            quantiles=cgan_quantile_locs,
+                                                                            extrapolate='constant')
+        quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected[:,:,:,0]
+    else:
+        # Do quantile mapping grid cell by grid cell
+        quantile_data_dicts['test']['GAN + qmap']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
+                                                                                fcst_train_data=cgan_training_data, 
+                                                                                obs_train_data=imerg_training_data, 
+                                                                                quantiles=cgan_quantile_locs,
                                                                             extrapolate='constant')
 
 else:
@@ -226,12 +245,13 @@ else:
         cgan_corrected = np.empty(samples_gen_array.shape)
         
         for en in range(ensemble_size):
-            cgan_corrected[:,:,:,en] = quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+            cgan_corrected[:,:,:,en] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
             quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected[...,0]
     else:
         cgan_corrected = quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
         quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected
 
+        
 if args.save_data:
     ###########################
     print('### Saving data ', flush=True)
