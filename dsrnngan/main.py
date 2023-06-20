@@ -1,13 +1,11 @@
 import argparse
 import json
 import os
-import math
 import git
 import wandb
 import copy
 import logging
 from glob import glob
-from pathlib import Path
 from types import SimpleNamespace
 from tensorflow import config as tf_config
 
@@ -34,21 +32,29 @@ logger.addHandler(sh)
 parser = argparse.ArgumentParser()
 parser.add_argument('--records-folder', type=str, default=None,
                     help="Folder from which to gather the tensorflow records")
+model_config_group = parser.add_mutually_exclusive_group(required=False)
+
+model_config_group.add_argument('--model-folder', type=str, default=None,
+                    help="Folder in which previous model configs and training results have been stored.")
+model_config_group.add_argument('--model-config-path', type=str, help='Full path of config yaml file to use.')
+
 parser.add_argument('--no-train', dest='do_training', action='store_false',
                     help="Do NOT carry out training, only perform eval")
 parser.add_argument('--restart', dest='restart', action='store_true',
                     help="Restart training from latest checkpoint")
-group = parser.add_mutually_exclusive_group()
-group.add_argument('--eval-model-numbers', nargs='+', default=None,
+
+eval_group = parser.add_mutually_exclusive_group()
+eval_group.add_argument('--eval-model-numbers', nargs='+', default=None,
                     help='Model number(s) to evaluate on (space separated)')
-group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full")
-group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short")
-group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz")
+eval_group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full")
+eval_group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short")
+eval_group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz")
+
 parser.add_argument('--num-samples', type=int,
                     help="Override of num samples")
 parser.add_argument('--num-images', type=int, default=20,
                     help="Number of images to evaluate on")
-parser.add_argument('--ensemble-size', type=int, default=None,
+parser.add_argument('--eval-ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
 parser.add_argument('--noise-factor', type=float, default=1e-3,
                     help="Multiplicative noise factor for rank histogram")
@@ -69,12 +75,26 @@ parser.add_argument('--log-folder', type=str, default=None)
 parser.add_argument('--debug', action='store_true')                
 
 
-def main(restart: bool, do_training: bool, num_images: int,
-         noise_factor: float, ensemble_size: int, shuffle_eval: bool=True, records_folder: str=None, evalnum: str=None, eval_model_numbers: list=None, 
-         seed: int=None, num_samples_override: int=None,
-         val_start: str=None, val_end: str=None, save_generated_samples: bool=False, training_weights: list=None, 
+def main(restart: bool, 
+         do_training: bool, 
+         num_images: int,
+         noise_factor: float, 
+         eval_ensemble_size: int, 
+         model_config: SimpleNamespace,
+         data_config: SimpleNamespace,
+         data_paths: dict=None,
+         shuffle_eval: bool=True, 
+         evalnum: str=None, 
+         eval_model_numbers: list=None, 
+         seed: int=None, 
+         num_samples_override: int=None,
+         val_start: str=None, 
+         val_end: str=None, 
+         save_generated_samples: bool=False, 
+         training_weights: list=None, 
          debug: bool=False,
-         output_suffix: str=None, log_folder: str=None
+         output_suffix: str=None, 
+         log_folder: str=None
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -83,7 +103,7 @@ def main(restart: bool, do_training: bool, num_images: int,
         do_training (bool): If True then will run training on model 
         num_images (int): Number of images to evaluate on
         noise_factor (float): Noise factor to add to CRPS evaluation
-        ensemble_size (int): Size of ensemble to evaluate on
+        eval_ensemble_size (int): Size of ensemble to evaluate on
         shuffle_eval (bool, optional): If False then no shuffling of data before evaluation (for cases where you want to assess on a contiguous range of dates). Defaults to True.
         records_folder (str, optional): Location of tfrecords. Defaults to None. If None then will try to infer folder from tehash of the config.
         evalnum (str, optional): String representing type of evaluation: blitz, full, short. Defaults to None.
@@ -97,30 +117,49 @@ def main(restart: bool, do_training: bool, num_images: int,
         debug (bool, optional): Whether or not to use in debug mode (stops training after first checkpoint). Defaults to False.
         output_suffix (str, optional): Suffix to append to output folder name. Defaults to None.
         log_folder (str, optional): root folder to store results in. Defaults to None. If None then will be taken from config.
+    
     """
-    print('Reading config')
-    if records_folder is None:
-        
-        data_config = read_config.read_data_config()
-        data_paths = read_config.get_data_paths()
-        
-        records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(data_config.__dict__))
-        if not os.path.isdir(records_folder):
-            raise ValueError('Data has not been prepared that matches this config')
-    else:
-        data_config = read_config.read_data_config(config_folder=records_folder)
-        data_paths = read_config.get_data_paths(config_folder=records_folder)
     
-    model_config = read_config.read_model_config()
+    # if model_folder is not None:
+    #     model_config = read_config.read_model_config(config_folder=model_folder)
+    #     data_config = read_config.read_data_config(config_folder=model_folder)
+    #     log_folder = '_'.join(model_folder.split('_')[:-1])
+    #     output_suffix = model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
+    # else:
+    #     model_config = read_config.read_model_config()
+    #     data_config = None
     
-    log_folder = log_folder or model_config.log_folder 
-    log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
+    
+    # if data_config is None:
+    #     if records_folder is None:
+            
+    #         data_config = read_config.read_data_config()
+    #         data_paths = read_config.get_data_paths()
+            
+    #         records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(data_config.__dict__))
+    #         if not os.path.isdir(records_folder):
+    #             raise ValueError('Data has not been prepared that matches this config')
+    #     else:
+    #         data_config = read_config.read_data_config(config_folder=records_folder)
+    #         data_paths = read_config.get_data_paths(config_folder=records_folder)
+    
+    #     log_folder = log_folder or model_config.log_folder 
+    #     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
+    
+    # Create dicts for saving and hashing
+    model_config_dict = copy.deepcopy(model_config).__dict__
+    for k, v in model_config_dict.items():
+        if isinstance(v, SimpleNamespace):
+            model_config_dict[k] = v.__dict__
+            
+    data_config_dict = copy.deepcopy(data_config).__dict__
+    for k, v in data_config_dict.items():
+        if isinstance(v, SimpleNamespace):
+            data_config_dict[k] = v.__dict__
+                
     if not output_suffix:
         # Attach model_config as suffix
-        model_config_dict = copy.deepcopy(model_config).__dict__
-        for k, v in model_config_dict.items():
-            if isinstance(v, SimpleNamespace):
-                model_config_dict[k] = v.__dict__
+        
         output_suffix = '_' + utils.hash_dict(model_config_dict)
     else:
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
@@ -133,8 +172,8 @@ def main(restart: bool, do_training: bool, num_images: int,
         sync_tensorboard=True,
         name=log_folder.split('/')[-1],
         config={
-            'data': data_config.__dict__,
-            'model': model_config.__dict__,
+            'data': data_config_dict,
+            'model': model_config_dict,
             'gpu_devices': tf_config.list_physical_devices('GPU')
         }
     )
@@ -145,8 +184,6 @@ def main(restart: bool, do_training: bool, num_images: int,
     
     if training_weights is None:
         training_weights = model_config.train.training_weights
-
-    ensemble_size = ensemble_size or model_config.train.ensemble_size  
 
     if val_start:
         model_config.val.val_range[0] = val_start
@@ -183,8 +220,8 @@ def main(restart: bool, do_training: bool, num_images: int,
     os.makedirs(model_weights_root, exist_ok=True)
 
     # save setup parameters
-    utils.write_to_yaml(os.path.join(log_folder, 'data_config.yaml'), data_config.__dict__)
-    utils.write_to_yaml(os.path.join(log_folder, 'model_config.yaml'), model_config.__dict__)
+    utils.write_to_yaml(os.path.join(log_folder, 'data_config.yaml'), data_config_dict)
+    utils.write_to_yaml(os.path.join(log_folder, 'model_config.yaml'), model_config_dict)
         
     with open(os.path.join(log_folder, 'git_commit.txt'), 'w+') as ofh:
         ofh.write(sha)
@@ -206,7 +243,7 @@ def main(restart: bool, do_training: bool, num_images: int,
             lr_disc=model_config.discriminator.learning_rate_disc,
             lr_gen=model_config.generator.learning_rate_gen,
             kl_weight=model_config.train.kl_weight,
-            ensemble_size=ensemble_size,
+            ensemble_size=model_config.train.ensemble_size,
             CLtype=model_config.train.CL_type,
             content_loss_weight=model_config.train.content_loss_weight)
 
@@ -350,7 +387,7 @@ def main(restart: bool, do_training: bool, num_images: int,
                                                  latent_variables=model_config.generator.latent_variables,
                                                  noise_channels=model_config.generator.noise_channels,
                                                  padding=model_config.padding,
-                                                 ensemble_size=ensemble_size,
+                                                 ensemble_size=eval_ensemble_size,
                                                  constant_fields=data_config.constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
@@ -382,8 +419,46 @@ if __name__ == "__main__":
     else:
         eval_model_numbers = None
     print(args, flush=True)
+    
+    if args.model_config_path is not None:
+        path_split = os.path.split(args.model_config_path)
+        model_config = read_config.read_model_config(config_filename=path_split[-1],
+                                                     config_folder=path_split[0])
+        data_config = None
+        output_suffix = args.output_suffix
+        
+    elif args.model_folder is not None:
+        model_config = read_config.read_model_config(config_folder=args.model_folder)
+        data_config = read_config.read_data_config(config_folder=args.model_folder)
+        log_folder = '_'.join(args.model_folder.split('_')[:-1])
+        output_suffix = args.model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
+    else:
+        model_config = read_config.read_model_config()
+        data_config = None
+        output_suffix = args.output_suffix
+    
+    
+    if data_config is None:
+        if args.records_folder is None:
+            
+            data_config = read_config.read_data_config()
+            data_paths = read_config.get_data_paths()
+            
+            records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(data_config.__dict__))
+            if not os.path.isdir(records_folder):
+                raise ValueError('Data has not been prepared that matches this data config')
+        else:
+            data_config = read_config.read_data_config(config_folder=args.records_folder)
+            data_paths = read_config.get_data_paths(config_folder=args.records_folder)
+    
+        log_folder = args.log_folder or model_config.log_folder 
+        log_folder = os.path.join(log_folder, args.records_folder.split('/')[-1])
 
-    main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
+    main(
+         model_config=model_config,
+         data_config=data_config,
+         restart=args.restart, 
+         do_training=args.do_training, 
         evalnum=args.evalnum,
         noise_factor=args.noise_factor,
         num_samples_override=args.num_samples,
@@ -391,10 +466,10 @@ if __name__ == "__main__":
         eval_model_numbers=eval_model_numbers,
         val_start=args.val_ym_start,
         val_end=args.val_ym_end,
-        ensemble_size=args.ensemble_size,
+        eval_ensemble_size=args.eval_ensemble_size,
         shuffle_eval=not args.no_shuffle_eval,
         save_generated_samples=args.save_generated_samples,
         training_weights=args.training_weights,
-        output_suffix=args.output_suffix,
-        log_folder=args.log_folder,
+        output_suffix=output_suffix,
+        log_folder=log_folder,
         debug=args.debug)
