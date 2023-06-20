@@ -102,17 +102,14 @@ class QuantileMapper():
     
     def __init__(self, month_ranges: list, 
                  latitude_range: Iterable, longitude_range: Iterable, quantile_locs: list=None,
-                 num_lat_lon_chunks: int=2, min_data_points_per_quantile: int=0) -> None:
+                 num_lat_lon_chunks: int=2, min_data_points_per_quantile: int=None) -> None:
         
         self.month_ranges = month_ranges
         self.latitude_range = [np.round(item, 2) for item in sorted(latitude_range)]
         self.longitude_range = [np.round(item, 2) for item in sorted(longitude_range)]
         self.num_lat_lon_chunks = num_lat_lon_chunks
         
-        self.min_data_points_per_quantile = int(min_data_points_per_quantile)
-        
-        if self.min_data_points_per_quantile < 0:
-            raise ValueError('min_data_points_per_quantile must be a positive integer')
+        self.min_data_points_per_quantile = min_data_points_per_quantile
         
         self.raw_quantile_locs = quantile_locs
         
@@ -148,7 +145,7 @@ class QuantileMapper():
             max_val_reached = 0 
             self.raw_quantile_locs = []
             for valid_step in valid_steps:
-                self.raw_quantile_locs += list(np.arange(max_val_reached, 1, valid_step))
+                self.raw_quantile_locs += [max_val_reached + n*valid_step for n in range(10)]
                 max_val_reached = 1-valid_step
           
         if self.min_data_points_per_quantile:
@@ -274,8 +271,8 @@ class QuantileMapper():
         # TODO: make this work in time as well as space
         coordinate_array = np.array([lat_index, lon_index])
                     
-        # Calculate distance via exp(-|a-b|_1)
-        exp_weighting = {k: np.exp(- np.linalg.norm(v - coordinate_array, ord=1)) for k, v in area_centres.items()}
+        # Calculate distance via exp(-|a-b|_2)
+        exp_weighting = {k: np.exp(- np.linalg.norm(v - coordinate_array, ord=2)) for k, v in area_centres.items()}
         normalising_factor = np.sum(list(exp_weighting.values()))
         area_weights = {k: v / normalising_factor for k, v in exp_weighting.items()}
         

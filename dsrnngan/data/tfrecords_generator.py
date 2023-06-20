@@ -360,13 +360,14 @@ def write_data(year_month_range: list,
         num_samples_per_image = data_config['num_samples_per_image']
 
         if not os.path.isdir(records_folder):
-            os.mkdirs(records_folder, exist_ok=True)
+            os.makedirs(records_folder, exist_ok=True)
         
         #  Create directory that is hash of setup params, so that we know it's the right data later on
+        
         hash_dir = os.path.join(records_folder, hash_dict(data_config))
         
         if not os.path.isdir(hash_dir):
-            os.mkdir(hash_dir)
+            os.makedirs(hash_dir, exist_ok=True)
         
         print(f'Output folder will be {hash_dir}')
             

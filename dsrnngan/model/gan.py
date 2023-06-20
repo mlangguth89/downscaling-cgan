@@ -243,10 +243,10 @@ class WGANGP(object):
                 losses = []
                 for (i, dl) in enumerate(disc_loss):
                     losses.append(("D{}".format(i), dl))
-                    wand.log({"D{}".format(i): dl})
+                    wandb.log({"D{}".format(i): dl})
                 for (i, gl) in enumerate(gen_loss):
                     losses.append(("G{}".format(i), gl))
-                    wand.log({"G{}".format(i): gl})
+                    wandb.log({"G{}".format(i): gl})
                 progbar.add(batch_size,
                             values=losses)
 

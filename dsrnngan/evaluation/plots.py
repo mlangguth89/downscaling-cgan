@@ -8,7 +8,7 @@ import matplotlib as mpl
 import numpy as np
 import seaborn as sns
 from typing import Iterable, List
-
+from scipy.stats import pearsonr
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
@@ -51,8 +51,9 @@ range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'mark
               5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
               6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10},
               7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 10},
-              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10}}
-                  
+              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10},
+              9: {'start': 99.99999, 'stop': 99.999999, 'interval': 0.000001, 'marker': '+', 'marker_size': 10}}
+
 percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
 percentiles=np.concatenate(percentiles_list)
 quantile_locs = [item / 100.0 for item in percentiles]
@@ -132,25 +133,42 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
 
     quantile_results = {}
     max_quantile = 0
+    quantile_boundaries = {}
+    intervals = {}
+    
     for data_name, d in quantile_data_dict.items():
-            quantile_results[data_name] = {}
+        quantile_boundaries[data_name] = []
+        quantile_results[data_name] = {}
+        intervals[data_name] = []
+        
+        for k, v in tqdm(range_dict.items()):
+        
+            boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
+
+            if min_data_points_per_quantile is not None:
+                # check minimum number of points per quantile
+                boundaries = utils.get_valid_quantiles(data_size=d['data'].size, raw_quantile_locations=boundaries, 
+                                                        min_data_points_per_quantile=min_data_points_per_quantile)
             
-            for k, v in tqdm(range_dict.items()):
+            quantile_boundaries[data_name].append(boundaries)
+            intervals[data_name].append(v['interval']/100)
             
-                quantile_boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
+            if len(boundaries) > 0:
+                quantile_results[data_name][k] = np.quantile(d['data'], boundaries)
                 
-                if min_data_points_per_quantile is not None:
-                    # check minimum number of points per quantile
-                    quantile_boundaries = utils.get_valid_quantiles(data_size=d['data'].size, raw_quantile_locations=quantile_boundaries, 
-                                                                    min_data_points_per_quantile=min_data_points_per_quantile)
-                    
-                if len(quantile_boundaries) > 0:
-                    quantile_results[data_name][k] = np.quantile(d['data'], quantile_boundaries)
-                    
-                    if np.max(quantile_boundaries) > max_quantile:
-                        max_quantile = np.max(quantile_boundaries)
+                if np.max(boundaries) > max_quantile:
+                    max_quantile = np.max(boundaries)
 
-
+    # Save raw data
+    if save_path:
+        format_str = '.' + save_path.split('.')[-1]
+        data_save_path = save_path.replace(format_str, '.pkl')
+        
+        with open(data_save_path, 'wb+') as ofh:
+            pickle.dump({'quantile_results': quantile_results,
+                         'quantile_boundary_list': quantile_boundaries,
+                         'interval_list': intervals}, ofh)
+    
     if not ax:
         fig, ax = plt.subplots(1,1, figsize=(8,8))
     marker_handles = None
