@@ -113,8 +113,8 @@ for k, v in special_areas.items():
         
 quantile_data_dicts = {'test': {
                     'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
-                    'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
                     'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
+                    'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
                     'Fcst + qmap': {'data': None, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
                     'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7}
                     }}
@@ -274,7 +274,7 @@ if args.plot:
         fcst_key = 'GAN' if 'GAN' in quantile_data_dict else 'Fcst'
         
         plot_quantiles(quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile,
-                       save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_total_n{args.num_lat_lon_chunks}_total.pdf'))
+                       save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_n{args.num_lat_lon_chunks}_total.pdf'))
 
         # Q-Q plot for areas
         fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, len(special_areas)*10))
@@ -291,9 +291,8 @@ if args.plot:
                 local_quantile_data_dict[k]['data'] = local_quantile_data_dict[k]['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]]
             
             try:
-                plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile)
+                plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile,
+                               save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_n{args.num_lat_lon_chunks}_{area}.pdf'))
                 ax[n].set_title(area)
             except:
                 print(data_type, ' ', area )
-        
-        plt.savefig(os.path.join(args.output_folder, f'qq_plot_{data_type}_area_n{args.num_lat_lon_chunks}_total.pdf'), format='pdf')
