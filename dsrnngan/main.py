@@ -13,13 +13,10 @@ import matplotlib; matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
 
-from dsrnngan.data import data
+from dsrnngan.data import data, setupdata
 from dsrnngan.evaluation import evaluation
-from dsrnngan.utils import read_config
-from dsrnngan.data import setupdata
-from dsrnngan.model import setupmodel
-from dsrnngan.model import train
-from dsrnngan.utils import utils
+from dsrnngan.utils import read_config, utils
+from dsrnngan.model import setupmodel, train
 
 logger = logging.getLogger(__name__)
 sh = logging.StreamHandler()
@@ -82,6 +79,7 @@ def main(restart: bool,
          eval_ensemble_size: int, 
          model_config: SimpleNamespace,
          data_config: SimpleNamespace,
+         records_folder: str,
          data_paths: dict=None,
          shuffle_eval: bool=True, 
          evalnum: str=None, 
@@ -119,43 +117,11 @@ def main(restart: bool,
         log_folder (str, optional): root folder to store results in. Defaults to None. If None then will be taken from config.
     
     """
-    
-    # if model_folder is not None:
-    #     model_config = read_config.read_model_config(config_folder=model_folder)
-    #     data_config = read_config.read_data_config(config_folder=model_folder)
-    #     log_folder = '_'.join(model_folder.split('_')[:-1])
-    #     output_suffix = model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
-    # else:
-    #     model_config = read_config.read_model_config()
-    #     data_config = None
-    
-    
-    # if data_config is None:
-    #     if records_folder is None:
-            
-    #         data_config = read_config.read_data_config()
-    #         data_paths = read_config.get_data_paths()
-            
-    #         records_folder = os.path.join(data_paths['TFRecords']['tfrecords_path'], utils.hash_dict(data_config.__dict__))
-    #         if not os.path.isdir(records_folder):
-    #             raise ValueError('Data has not been prepared that matches this config')
-    #     else:
-    #         data_config = read_config.read_data_config(config_folder=records_folder)
-    #         data_paths = read_config.get_data_paths(config_folder=records_folder)
-    
-    #     log_folder = log_folder or model_config.log_folder 
-    #     log_folder = os.path.join(log_folder, records_folder.split('/')[-1])
+
     
     # Create dicts for saving and hashing
-    model_config_dict = copy.deepcopy(model_config).__dict__
-    for k, v in model_config_dict.items():
-        if isinstance(v, SimpleNamespace):
-            model_config_dict[k] = v.__dict__
-            
-    data_config_dict = copy.deepcopy(data_config).__dict__
-    for k, v in data_config_dict.items():
-        if isinstance(v, SimpleNamespace):
-            data_config_dict[k] = v.__dict__
+    model_config_dict = utils.convert_namespace_to_dict(model_config)
+    data_config_dict = utils.convert_namespace_to_dict(data_config)
                 
     if not output_suffix:
         # Attach model_config as suffix
@@ -165,6 +131,7 @@ def main(restart: bool,
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
         
     log_folder = log_folder + output_suffix
+    print("Models being written to folder: ", log_folder, flush=True)
     
     # Initiialise weights and biases logging
     wandb.init(
@@ -457,6 +424,7 @@ if __name__ == "__main__":
     main(
          model_config=model_config,
          data_config=data_config,
+         records_folder=args.records_folder,
          restart=args.restart, 
          do_training=args.do_training, 
         evalnum=args.evalnum,

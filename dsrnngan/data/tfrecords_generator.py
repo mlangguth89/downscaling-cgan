@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 import git
 
-from dsrnngan.utils import read_config
+from dsrnngan.utils import read_config, utils
 from dsrnngan.data.data import file_exists, denormalise
 from dsrnngan.utils.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 
@@ -351,20 +351,19 @@ def write_data(year_month_range: list,
         if not data_config:
             data_config = read_config.read_config(config_filename='data_config.yaml')
         
-        class_bin_boundaries = data_config.get('class_bin_boundaries')
-        if class_bin_boundaries is not None:
-            print(f'Data will be bundled according to class bin boundaries provided: {class_bin_boundaries}')
-            num_class = len(class_bin_boundaries) + 1
+        if data_config.class_bin_boundaries is not None:
+            print(f'Data will be bundled according to class bin boundaries provided: {data_config.class_bin_boundaries}')
+            num_class = len(data_config.class_bin_boundaries) + 1
 
-        input_image_width = data_config['input_image_width']
-        num_samples_per_image = data_config['num_samples_per_image']
+        input_image_width = data_config.input_image_width
+        num_samples_per_image = data_config.num_samples_per_image
 
         if not os.path.isdir(records_folder):
             os.makedirs(records_folder, exist_ok=True)
         
         #  Create directory that is hash of setup params, so that we know it's the right data later on
-        
-        hash_dir = os.path.join(records_folder, hash_dict(data_config))
+        data_config_dict = utils.convert_namespace_to_dict(data_config)
+        hash_dir = os.path.join(records_folder, hash_dict(data_config_dict))
         
         if not os.path.isdir(hash_dir):
             os.makedirs(hash_dir, exist_ok=True)
@@ -372,7 +371,7 @@ def write_data(year_month_range: list,
         print(f'Output folder will be {hash_dir}')
             
         # Write params in directory
-        write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config)
+        write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config_dict)
         
         with open(os.path.join(hash_dir, 'git_commit.txt'), 'w+') as ofh:
             repo = git.Repo(search_parent_directories=True)
@@ -443,7 +442,7 @@ def write_data(year_month_range: list,
                             
                             if sample[0]['hi_res_inputs'][k, 
                                                                idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, data_config['constant_fields']):
+                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, data_config.constant_fields):
                                 raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
        
                             # Check no Null values
@@ -467,15 +466,15 @@ def write_data(year_month_range: list,
                             example_to_string = example.SerializeToString()
                             
                             # If provided, bin data according to bin boundaries (typically quartiles)
-                            if class_bin_boundaries:
+                            if data_config.class_bin_boundaries is not None:
                                                         
                                 threshold = 0.1
                                 rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
-                                boundary_comparison = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries]
+                                boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
                                 if any(boundary_comparison):
-                                    clss = [rainy_pixel_fraction < cbb for cbb in class_bin_boundaries].index(True)
+                                    clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
                                 else:
-                                    clss = len(class_bin_boundaries) 
+                                    clss = len(data_config.class_bin_boundaries) 
                             else:
                                 clss = random.choice(range(num_class))
                                 
@@ -547,11 +546,18 @@ if __name__ == '__main__':
     parser.add_argument('--fcst-hours', nargs='+', default=np.arange(24), type=int, 
                     help='Hour(s) to process (space separated)')
     parser.add_argument('--records-folder', type=str, default=None)
+    parser.add_argument('--data-config-path', type=str, default=None)
     parser.add_argument('--debug',action='store_true')
     args = parser.parse_args()
     
     # Load relevant parameters from local config
-    data_config = read_config.read_data_config()
+    if args.data_config_path:
+        path_split = os.path.split(args.data_config_path)
+        data_config = read_config.read_data_config(config_filename=path_split[-1],
+                                                     config_folder=path_split[0])
+    else:
+        data_config = read_config.read_data_config()
+        
     model_config = read_config.read_model_config()
     
     val_range = None
@@ -576,6 +582,7 @@ if __name__ == '__main__':
     write_train_test_data(training_range=training_range,
                           validation_range=val_range,
                           test_range=eval_range,
+                          data_config=data_config,
                             forecast_data_source=data_config.fcst_data_source, 
                             observational_data_source=data_config.obs_data_source,
                             hours=args.fcst_hours,

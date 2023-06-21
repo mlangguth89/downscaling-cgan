@@ -204,7 +204,6 @@ class WGANGP(object):
                 with Nontrainable(self.gen):
                     dl = self.disc_trainer.train_on_batch(
                         [cond, const, noise_gen(), sample], disc_target)
-                
 
                 if disc_loss is None:
                     disc_loss = np.array(dl)
@@ -243,10 +242,11 @@ class WGANGP(object):
                 losses = []
                 for (i, dl) in enumerate(disc_loss):
                     losses.append(("D{}".format(i), dl))
-                    wandb.log({"D{}".format(i): dl})
+                wandb.log({"D{}".format(i): dl for (i,dl)in enumerate(disc_loss)})
+                
                 for (i, gl) in enumerate(gen_loss):
                     losses.append(("G{}".format(i), gl))
-                    wandb.log({"G{}".format(i): gl})
+                wandb.log({"G{}".format(i): gl for (i, gl) in enumerate(gen_loss)})
                 progbar.add(batch_size,
                             values=losses)
 

@@ -1,11 +1,10 @@
 import os
-import sys
 from pathlib import Path
 import hashlib
 import json
 import yaml
 import re
-import random
+import copy
 from glob import glob
 import datetime
 import pandas as pd
@@ -15,6 +14,7 @@ from calendar import monthrange
 from typing import Iterable, Tuple, Callable, List
 from timezonefinder import TimezoneFinder
 from dateutil import tz
+from types import SimpleNamespace
 
 tz_finder = TimezoneFinder()
 from_zone = tz.gettz('UTC')
@@ -267,3 +267,19 @@ def get_local_hour(hour: int, longitude: float, latitude: float):
     local_hour = utc_datetime.astimezone(to_zone).hour
     
     return local_hour
+
+def convert_namespace_to_dict(ns_obj: SimpleNamespace) -> dict:
+    """Convert nested namespace object to dict
+
+    Args:
+        ns_obj (SimpleNamespace): nested namespace
+
+    Returns:
+        dict: namespace converted into dict
+    """
+    output_dict = copy.deepcopy(ns_obj).__dict__
+    for k, v in output_dict.items():
+        if isinstance(v, SimpleNamespace):
+            output_dict[k] = v.__dict__
+            
+    return output_dict

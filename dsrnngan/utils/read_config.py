@@ -11,6 +11,7 @@ HOME = Path(__file__).parents[2]
 CONFIG_FOLDER = HOME / 'config'
 
 from dsrnngan.utils.utils import load_yaml_file
+from dsrnngan.model.wloss import CL_OPTIONS_DICT
 
 def read_config(config_filename: str=None, config_folder: str=CONFIG_FOLDER) -> dict:
 
@@ -49,12 +50,12 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     model_config.generator.learning_rate_gen = float(model_config.generator.learning_rate_gen)
     model_config.discriminator.learning_rate_disc = float(model_config.discriminator.learning_rate_disc)
     
-    
     if model_config.mode not in ['GAN', 'VAEGAN', 'det']:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
     
-    if model_config.train.CL_type not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
-        raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
+    possible_cl_types = list(CL_OPTIONS_DICT.keys())
+    if model_config.train.CL_type not in possible_cl_types:
+        raise ValueError(f"Content loss type is restricted to {possible_cl_types}")
     
     if model_config.train.num_samples is None:
         if model_config.train.num_epochs is None:
@@ -72,6 +73,7 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
     data_config_ns = types.SimpleNamespace(**data_config_dict)
     data_config_ns.load_constants = data_config_dict.get('load_constants', True)
     data_config_ns.input_channels = len(data_config_ns.input_fields)
+    data_config_ns.class_bin_boundaries = data_config_dict.get('class_bin_boundaries')
     
     return data_config_ns
 
