@@ -42,17 +42,18 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': True,
-               'scatter': True,
-               'rank_hist': True,
-               'spread_error': True,
-               'rapsd': True,
-               'quantiles': True,
-               'hist': True,
-               'crps': True,
-               'fss': True,
-               'diurnal': True,
-               'confusion_matrix': True
+metric_dict = {'examples': False,
+               'scatter': False,
+               'rank_hist': False,
+               'spread_error': False,
+               'rapsd': False,
+               'quantiles': False,
+               'hist': False,
+               'crps': False,
+               'fss': False,
+               'diurnal': False,
+               'confusion_matrix': True,
+               'csi': True
                }
 
 plot_persistence = False
@@ -152,11 +153,15 @@ for k, v in special_areas.items():
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
 
-with open(os.path.join(log_folder, f'fcst_qmap_270.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, f'fcst_qmap_2.pkl'), 'rb') as ifh:
     fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(log_folder, f'cgan_qmap_15.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
     cgan_corrected = pickle.load(ifh)
+    
+# clip values at 200mm/hr
+
+cgan_corrected = np.clip(cgan_corrected, 0, 200)
           
 ################################################################################
 ## Climatological data for comparison.
@@ -314,7 +319,6 @@ if metric_dict['rank_hist']:
     print('*********** Plotting Rank histogram **********************') 
     rng = np.random.default_rng()
     noise_factor = 1e-6
-    n_samples = 100
 
     temp_truth = np.repeat(truth_array[:n_samples, :, : ,None].copy(), samples_gen_array.shape[-1], axis=-1)
     temp_samples = samples_gen_array[:n_samples, :, :, :].copy()
@@ -368,9 +372,6 @@ if metric_dict['spread_error']:
 
 #################################################################################
 ## RAPSD
-
-
-
 plt.rcParams.update({'font.size': 16})
 if metric_dict['rapsd']:
     
@@ -625,7 +626,6 @@ if metric_dict['fss']:
     from dsrnngan.evaluation.plots import plot_fss_scores
 
     window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
-    n_samples = truth_array.shape[0]
     
     fss_data_dict = {
                         'cgan': samples_gen_array[:n_samples, :, :, 0],
@@ -882,3 +882,35 @@ if metric_dict.get('confusion_matrix'):
         results['conf_mat'].append(tmp_results_dict)
         with open(f'plots/confusion_matrices_{model_type}_{model_number}.pkl', 'wb+') as ofh:
             pickle.dump(results, ofh)
+            
+if metric_dict.get('csi'):
+    print('*********** Calculating critical success index **********************')
+
+    from dsrnngan.evaluation import scoring
+    hourly_thresholds = [0.1, 5, 20]
+
+    diurnal_data_dict = {'Obs (IMERG)': truth_array,
+                         'GAN': samples_gen_array[:,:,:,0],
+                         'Fcst': fcst_array,
+                         'GAN + qmap': cgan_corrected[:,:,:,0],
+                         'Fcst + qmap': fcst_corrected
+                         }
+    
+    csi_results = []
+        
+    for threshold in hourly_thresholds:
+        
+        tmp_results_dict = {'threshold': threshold}
+        for k, v in tqdm(y_dict.items()):
+            tmp_results_dict[k] = scoring.critical_success_index(truth_array,v, threshold=threshold)
+            
+            metric_fn = lambda x,y: scoring.critical_success_index(x,y, threshold=threshold)
+            
+            tmp_results_dict[k + '_hourly'] = scoring.get_metric_by_hour(metric_fn=metric_fn, obs_array=truth_array, fcst_array=v, 
+                                                    hours=hours,
+                                                    bin_width=1)
+        
+        csi_results.append(tmp_results_dict)
+        
+    with open(f'plots/csi_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(csi_results, ofh)
