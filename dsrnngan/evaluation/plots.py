@@ -14,12 +14,36 @@ from matplotlib import pyplot as plt
 from matplotlib import colorbar, colors, gridspec
 from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
-
+from cartopy.feature import NaturalEarthFeature, auto_scaler, AdaptiveScaler
+from shapely.geometry import Polygon
 
 # See https://matplotlib.org/stable/gallery/color/named_colors.html for edge colour options
 lake_feature = cfeature.NaturalEarthFeature(
     'physical', 'lakes',
     cfeature.auto_scaler, edgecolor='black', facecolor='never')
+
+# Have to subclass the borders feature to remove controversial borders
+class EABorderFeature(NaturalEarthFeature):
+            
+    def __init__(self, category: str, name: str, scale: AdaptiveScaler, border_to_remove: list, **kwargs):
+        self.removed_borders_poly = Polygon(border_to_remove)
+        
+        super().__init__(category, name, scale, **kwargs)
+    
+    def geometries(self):
+        geoms =  list(super().geometries())
+
+        return iter([item for item in geoms if not self.removed_borders_poly.contains(item)])
+    
+border_feature = EABorderFeature(
+                                    'cultural', 
+                                    'admin_0_boundary_lines_land',
+                                     auto_scaler, 
+                                     border_to_remove=[[47.5,7.85], [47.86, 7.52], [52.54, 10.26], [47.08, 12.7]], 
+                                     edgecolor='black', 
+                                     facecolor='never')
+
+[[47.5,7.85], [47.86, 7.52], [52.54, 10.26], [47.08, 12.7]]
 
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data import data
@@ -73,7 +97,7 @@ def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude
                     extend=extend)
 
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
-    ax.add_feature(cfeature.BORDERS)
+    ax.add_feature(border_feature)
     ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     
@@ -239,7 +263,7 @@ def plot_precipitation(ax: plt.Axes,
                     min(latitude_range), max(latitude_range)],
             transform=ccrs.PlateCarree(),
             alpha=0.8)
-    ax.add_feature(cfeature.BORDERS)
+    ax.add_feature(border_feature)
     ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     
