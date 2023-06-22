@@ -5,6 +5,48 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Permutation Feature Importance",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.permutation_feature_importance",
+            "justMyCode": true,
+            "args": [
+                "--model-type",
+                "cropped_v2",
+                "--debug"
+            ]
+        },
+        {
+            "name": "Python: quantile_mapping",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.quantile_mapping",
+            "justMyCode": true,
+            "args": [
+                "--num-lat-lon-chunks",
+                "1",
+                "--model-type",
+                "cropped",
+                "--output-folder",
+                "plots/quantile_map_plots",
+                "--plot"
+            ]
+        },
+        {
+            "name": "Python: qmap_cv",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.qmap_cv",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: setupdata",
+            "type": "python",
+            "request": "launch",
+            "module": "dsrnngan.setupdata",
+            "justMyCode": true
+        },
+        {
             "name": "Python: imerg monthly",
             "type": "python",
             "request": "launch",
@@ -12,7 +54,7 @@
             "justMyCode": true,
             "args": [
                 "--year",
-                "2019"
+                "2016"
             ]
         },
         {
@@ -24,6 +66,18 @@
             "args": [
                 "--year",
                 "2019"
+            ]
+        },
+        {
+            "name": "Python: make plots",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.make_plots",
+            "justMyCode": true,
+            "args": [
+                "--model-type",
+                "cropped_4000",
+                "--debug"
             ]
         },
         {
@@ -74,26 +128,51 @@
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
         {
-            "name": "Python: main.py",
+            "name": "Python: main.py train",
             "type": "python",
             "request": "launch",
             "module": "dsrnngan.main",
             "justMyCode": true,
             "args": [
                 "--num-samples",
-                "160000",
+                "230400",
                 "--num-images",
                 "5",
-                "--evaluate",
-                "--eval-short",
+                "--model-config-path",
+                "/user/home/uz22147/repos/downscaling-cgan/config/model_config_medium_batch16.yaml",
+                "--records-folder",
+                "/user/work/uz22147/tfrecords/d2032352fec00219",
+                "--log-folder",
+                "/user/work/uz22147/logs/test"            ],
+            "cwd": "/user/home/uz22147/repos/downscaling-cgan"
+        },
+        {
+            "name": "Python: main.py eval",
+            "type": "python",
+            "request": "launch",
+            "module": "dsrnngan.main",
+            "justMyCode": true,
+            "args": [
+                "--no-train",
+                "--num-samples",
+                "230400",
+                "--num-images",
+                "5",
+                "--eval-full",
                 "--val-ym-start",
                 "201806",
                 "--val-ym-end",
                 "201905",
-                "--ensemble-size",
-                "10",
-                "--records-folder",
-                "/user/work/uz22147/tfrecords/43ae7be47e9a182e"
+                "--eval-ensemble-size",
+                "1",
+                "--model-folder",
+                "/user/work/uz22147/logs/cgan/d2032352fec00219_small-cl1000-weightedcloss",
+                "--training-weights",
+                "0.4",
+                "0.3",
+                "0.2",
+                "0.1",
+                "--debug"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
@@ -102,12 +181,15 @@
             "type": "python",
             "request": "launch",
             "justMyCode": true,
-            "module": "dsrnngan.tfrecords_generator",
+            "module": "dsrnngan.data.tfrecords_generator",
             "args": [
                 "--fcst-hour",
                 "18",
                 "--records-folder",
-                "/user/work/uz22147/tfrecords"
+                "/user/work/uz22147/tfrecords/test",
+                "--debug",
+                "--data-config-path",
+                "/user/home/uz22147/repos/downscaling-cgan/config/data_config_plus_cin.yaml"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         }
