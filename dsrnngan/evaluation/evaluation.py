@@ -10,6 +10,7 @@ from properscoring import crps_ensemble
 from tensorflow.python.keras.utils import generic_utils
 from datetime import datetime
 from typing import Iterable
+from types import SimpleNamespace
 
 from dsrnngan.data.data_generator import DataGenerator
 from dsrnngan.data import data
@@ -127,25 +128,24 @@ def generate_gan_sample(gen: gan.WGANGP,
     return samples_gen
 
 def create_single_sample(*,
+                   data_config: SimpleNamespace,
+                   model_config: SimpleNamespace,
                    data_idx: int,
-                   mode: str,
                    batch_size: int,
                    gen: gan.WGANGP,
-                   fcst_data_source: str,
                    data_gen: DataGenerator,
-                   noise_channels: int,
-                   latent_variables: int,
                    latitude_range: Iterable,
                    longitude_range: Iterable,
                    ensemble_size: int,
                    denormalise_data: bool=True,
-                   seed: int=None):
+                   seed: int=None
+                   ):
     
-    tpidx = data.input_fields.index('tp')
+    tpidx = data_config.input_fields.index('tp')
     
     batch_size = 1  # do one full-size image at a time
 
-    if mode == "det":
+    if model_config.mode == "det":
         ensemble_size = 1  # can't generate an ensemble deterministically
 
     # load truth images
@@ -170,20 +170,20 @@ def create_single_sample(*,
         obs = data.denormalise(obs)
         fcst = data.denormalise(fcst)
             
-    if mode == "GAN":
+    if model_config.mode == "GAN":
         
-        samples_gen = generate_gan_sample(gen, cond, const, noise_channels, ensemble_size, batch_size, seed)
+        samples_gen = generate_gan_sample(gen, cond, const, model_config.generator.noise_channels, ensemble_size, batch_size, seed)
             
-    elif mode == "det":
+    elif model_config.mode == "det":
         samples_gen = []
         sample_gen = gen.predict([cond, const])
         samples_gen.append(sample_gen.astype("float32"))
         
-    elif mode == 'VAEGAN':
+    elif model_config.mode == 'VAEGAN':
         samples_gen = []
         # call encoder once
         mean, logvar = gen.encoder([cond, const])
-        noise_shape = np.array(cond)[0, ..., 0].shape + (latent_variables,)
+        noise_shape = np.array(cond)[0, ..., 0].shape + (model_config.latent_variables,)
         noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
         
         for ii in range(ensemble_size):
@@ -206,17 +206,15 @@ def create_single_sample(*,
     return obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour
 
 def eval_one_chkpt(*,
-                   mode,
                    gen,
-                   fcst_data_source,
+                   data_config,
+                   model_config,
                    data_gen,
-                   noise_channels,
-                   latent_variables,
                    num_images,
+                   noise_factor,
                    latitude_range,
                    longitude_range,
                    ensemble_size,
-                   noise_factor,
                    denormalise_data=True,
                    normalize_ranks=True,
                    show_progress=True,
@@ -245,11 +243,11 @@ def eval_one_chkpt(*,
     corr_all = []
     correlation_fcst_all = []
 
-    tpidx = data.input_fields.index('tp')
+    tpidx = data_config.input_fields.index('tp')
     
     batch_size = 1  # do one full-size image at a time
 
-    if mode == "det":
+    if model_config.mode == "det":
         ensemble_size = 1  # can't generate an ensemble deterministically
 
     if show_progress:
@@ -264,48 +262,36 @@ def eval_one_chkpt(*,
     data_idx = 0
     for kk in tqdm(range(num_images)):
         
-        try:
-            obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour = create_single_sample(mode=mode,
-                    data_idx=data_idx,
-                    batch_size=batch_size,
-                    gen=gen,
-                    fcst_data_source=fcst_data_source,
-                    data_gen=data_gen,
-                    noise_channels=noise_channels,
-                    latent_variables=latent_variables,
-                    latitude_range=latitude_range,
-                    longitude_range=longitude_range,
-                    ensemble_size=ensemble_size,
-                    denormalise_data=denormalise_data)
-        except IndexError:
-            # Run out of samples
-            break 
-               
-        except FileNotFoundError:
-            print('Could not load file, attempting retries')
-            success = False
-            for retry in range(5):
-                data_idx += 1
-                print(f'Attempting retry {retry} of 5')
-                try:
-                    obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour = create_single_sample(mode=mode,
+        success = False
+        for n in range(5):
+            if success:
+                continue
+            try:
+                obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour = create_single_sample(
                         data_idx=data_idx,
+                        data_config=data_config,
+                        model_config=model_config,
                         batch_size=batch_size,
                         gen=gen,
-                        fcst_data_source=fcst_data_source,
                         data_gen=data_gen,
-                        noise_channels=noise_channels,
-                        latent_variables=latent_variables,
                         latitude_range=latitude_range,
                         longitude_range=longitude_range,
                         ensemble_size=ensemble_size,
                         denormalise_data=denormalise_data)
-                    success = True
-                    break
-                except FileNotFoundError:
-                    pass
-            if not success:
-                raise FileNotFoundError
+                success = True
+                data_idx += 1
+                
+            except FileNotFoundError:
+                print('Could not load file, attempting retries')
+                success = False
+                data_idx += 1
+                continue
+            except IndexError:
+                # Run out of samples
+                break 
+
+        if not success:
+            raise FileNotFoundError
         
         dates.append(date)
         hours.append(hour)
@@ -390,8 +376,6 @@ def eval_one_chkpt(*,
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
     fcst_array = np.stack(fcst_vals, axis=0)
     persisted_fcst_array = np.stack(persisted_fcst_vals, axis=0)
-    cond_array = np.stack(cond_vals, axis=0)
-    const_array = np.stack(const_vals, axis=0)
     
     point_metrics = {}
         
@@ -435,58 +419,46 @@ def log_line(log_fname, line):
         print(line, file=f)
 
 
-def evaluate_multiple_checkpoints(*,
-                                  mode,
-                                  arch,
-                                  fcst_data_source,
-                                  obs_data_source,
+def evaluate_multiple_checkpoints(
+                                  model_config,
+                                  data_config,
                                   latitude_range,
                                   longitude_range,
-                                  validation_range,
                                   weights_dir,
                                   records_folder,
-                                  downsample,
-                                  noise_factor,
                                   model_numbers,
                                   log_folder,
+                                  noise_factor,
                                   ranks_to_save,
                                   num_images,
-                                  filters_gen,
-                                  filters_disc,
-                                  input_channels,
-                                  latent_variables,
-                                  noise_channels,
-                                  padding,
                                   ensemble_size,
-                                  constant_fields,
                                   data_paths,
                                   shuffle,
-                                  fcst_fields=None,
                                   save_generated_samples=False,
                                   batch_size: int=1
                                   ):
+    #TODO: pass args via model and data configs
     #TODO: this should be an input argument
-    model_config = read_config.read_model_config()
 
-    gen, data_gen_valid = setup_inputs(mode=mode,
-                                       arch=arch,
+    gen, data_gen_valid = setup_inputs(mode=model_config.mode,
+                                       arch=model_config.architecture,
                                        records_folder=records_folder,
-                                       fcst_data_source=fcst_data_source,
-                                       obs_data_source=obs_data_source,
-                                       fcst_fields=fcst_fields,
+                                       fcst_data_source=data_config.fcst_data_source,
+                                       obs_data_source=data_config.obs_data_source,
+                                       fcst_fields=data_config.input_fields,
                                        latitude_range=latitude_range,
                                        longitude_range=longitude_range,
                                        downscaling_steps=model_config.downscaling_steps,
-                                       validation_range=validation_range,
+                                       validation_range=model_config.val.val_range,
                                        hour='random',
-                                       downsample=downsample,
-                                       input_channels=input_channels,
-                                       filters_gen=filters_gen,
-                                       filters_disc=filters_disc,
-                                       noise_channels=noise_channels,
-                                       latent_variables=latent_variables,
-                                       padding=padding,
-                                       constant_fields=constant_fields,
+                                       downsample=model_config.downsample,
+                                       input_channels=data_config.input_channels,
+                                       filters_gen=model_config.generator.filters_gen,
+                                       filters_disc=model_config.discriminator.filters_disc,
+                                       noise_channels=model_config.generator.noise_channels,
+                                       latent_variables=model_config.generator.latent_variables,
+                                       padding=model_config.padding,
+                                       constant_fields=data_config.constant_fields,
                                        data_paths=data_paths,
                                        shuffle=shuffle)
 
@@ -501,15 +473,15 @@ def evaluate_multiple_checkpoints(*,
             continue
 
         print(gen_weights_file)
-        if mode == "VAEGAN":
-            _init_VAEGAN(gen, data_gen_valid, True, 1, latent_variables)
+        if model_config.mode == "VAEGAN":
+            _init_VAEGAN(gen, data_gen_valid, True, 1, model_config.latent_variables)
         gen.load_weights(gen_weights_file)
-        rank_arrays, agg_metrics, arrays = eval_one_chkpt(mode=mode,
+        
+        rank_arrays, agg_metrics, arrays = eval_one_chkpt(
                                              gen=gen,
                                              data_gen=data_gen_valid,
-                                             fcst_data_source=fcst_data_source,
-                                             noise_channels=noise_channels,
-                                             latent_variables=latent_variables,
+                                             data_config=data_config,
+                                             model_config=model_config,
                                              num_images=num_images,
                                              ensemble_size=ensemble_size,
                                              noise_factor=noise_factor,
@@ -520,7 +492,7 @@ def evaluate_multiple_checkpoints(*,
         OP = rank_OP(ranks)
         
         # save one directory up from model weights, in same dir as logfile
-        output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(validation_range)}_e{ensemble_size}")
+        output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(model_config.val.val_range)}_e{ensemble_size}")
         
         if not os.path.isdir(output_folder):
             os.mkdir(output_folder)

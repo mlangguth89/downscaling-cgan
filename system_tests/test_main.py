@@ -8,6 +8,7 @@ from pathlib import Path
 from glob import glob
 import xarray as xr
 from datetime import datetime
+from types import SimpleNamespace
 
 HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
@@ -15,6 +16,8 @@ sys.path.append(str(HOME))
 from dsrnngan.main import main, parser
 from dsrnngan.data.tfrecords_generator import write_data
 from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath
+from dsrnngan.utils.utils import load_yaml_file
+from dsrnngan.utils import read_config
 
 data_folder = HOME / 'system_tests' / 'data'
 ifs_path = str(data_folder / 'IFS')
@@ -27,18 +30,18 @@ tfrecords_folder = str(data_folder / 'tmp_model_test')
 # Create test config
 lat_range = np.arange(0, 1.1, 0.1) # deliberately asymettrical to test for non-square images
 lon_range = np.arange(33, 34, 0.1)
-config_path = str(HOME / 'config' /'local_config.yaml')
-with open(config_path, 'r') as f:
-    test_config = yaml.safe_load(f)
+model_config = read_config.read_model_config(config_folder=str(HOME / 'config'), config_filename='model_config.yaml')
+data_config = read_config.read_data_config(config_folder=str(HOME / 'config'), config_filename='data_config.yaml')
 
-test_config['DOWNSCALING'] = {'downscaling_factor': 1, 'steps': [1]}
-test_config['TRAIN']['steps_per_checkpoint'] = 1
-test_config['TRAIN']['img_chunk_width'] = 5
+model_config.downscaling_factor = 1
+model_config.downscaling_steps = [1]
+model_config.train.steps_per_checkpoint = 1
+model_config.train.img_chunk_width = 5
 
-test_config['DATA'] = {
+data_config = SimpleNamespace(**{
+    'data_paths': "BLUE_PEBBLE",
     'fcst_data_source': 'ifs',
     'obs_data_source': 'imerg',
-    'input_channels': 20,
     'constant_fields': 2,
     'input_image_width': 10, # Assumes a square image
     'num_samples': 10,
@@ -49,14 +52,34 @@ test_config['DATA'] = {
     'latitude_step_size': 0.1,
     'min_longitude': float(np.round(min(lon_range), 1)),
     'max_longitude': float(np.round(max(lon_range), 1)),
-    'longitude_step_size': 0.1
-}
+    'longitude_step_size': 0.1,
+    'input_fields': ['2t'
+    ,'cape'
+    ,'cp'
+    ,'r200'
+    ,'r700'
+    ,'r950'
+    ,'sp'
+    ,'t200'
+    ,'t700'
+    ,'tclw'
+    ,'tcwv'
+    ,'tisr'
+    ,'tp'
+    ,'u200'
+    ,'u700'
+    ,'v200'
+    ,'v700'
+    ,'w200'
+    ,'w500'
+    ,'w700']
+})
 
 test_data_paths = {'GENERAL': {'IFS': ifs_path, 'IMERG': imerg_folder, 'LSM': os.path.join(constants_path, 'lsm_HRES_EAfrica.nc'), 
                                 'OROGRAPHY': os.path.join(constants_path, 'h_HRES_EAfrica.nc'), 'CONSTANTS': constants_path}, 
                     'TFRecords': {'tfrecords_path': tfrecords_folder}}
 
-def create_example_model(config: dict=test_config,
+def create_example_model(model_config: SimpleNamespace,
                          data_paths: dict=test_data_paths, 
                          lat_range: list=lat_range, 
                          lon_range: list=lon_range):
@@ -86,7 +109,7 @@ def create_example_model(config: dict=test_config,
         latitude_range=lat_range,
         longitude_range=lon_range,
         debug=True,
-        config=config)
+        config=data_config)
 
     records_dir = data_paths['TFRecords']['tfrecords_path']
     log_folder = os.path.join(records_dir, 'cgan_output')
@@ -104,7 +127,9 @@ def create_example_model(config: dict=test_config,
                             '--output-suffix',
                             'asdf'])
 
-    log_folder = main(records_folder=args.records_folder, restart=args.restart, do_training=args.do_training, 
+    log_folder = main(records_folder=args.records_folder, 
+                      model_config=model_config,
+                      restart=args.restart, do_training=args.do_training, 
         evalnum=args.evalnum,
         noise_factor=args.noise_factor,
         num_samples_override=args.num_samples,
@@ -146,7 +171,7 @@ class TestMain(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tempdir:
             test_data_paths['TFRecords']['tfrecords_path'] = tempdir
-            create_example_model(config=test_config, data_paths=test_data_paths, lat_range=lat_range, lon_range=lon_range)
+            create_example_model(data_paths=test_data_paths, lat_range=lat_range, lon_range=lon_range)
 
 if __name__ == '__main__':
     unittest.main()

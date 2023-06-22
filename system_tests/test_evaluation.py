@@ -21,14 +21,12 @@ from dsrnngan.data import setupdata
 from dsrnngan.model.setupmodel import load_model_from_folder
 from dsrnngan.utils import read_config
 from dsrnngan.model.noise import NoiseGenerator
-from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints, create_single_sample, get_diurnal_cycle
+from dsrnngan.evaluation.evaluation import setup_inputs, eval_one_chkpt, evaluate_multiple_checkpoints, create_single_sample
 from dsrnngan.data.data import DATA_PATHS, all_ifs_fields, get_ifs_filepath, denormalise
-from system_tests.test_main import create_example_model, test_config, test_data_paths
+from system_tests.test_main import create_example_model, model_config, data_config, test_data_paths
 
-model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(test_config)
-
-train_config.batch_size = 1  # setup_params["TRAIN"]["batch_size"]
-output_image_width = data_config.input_image_width * ds_config.downscaling_factor
+model_config.train.batch_size = 1  # setup_params["TRAIN"]["batch_size"]
+output_image_width = data_config.input_image_width * model_config.downscaling_factor
 constants_image_width = data_config.input_image_width
 
 lat_range = np.arange(0, 1.1, 0.1) # deliberately asymettrical to test for non-square images
@@ -50,7 +48,6 @@ class TestEvaluation(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir_name = self.temp_dir.name
         self.tmp_data_folder = test_data_paths['TFRecords']['tfrecords_path']
-        self.config = test_config
         
         self.config['VAL']['val_range'] = ['201707']
         self.config['VAL']['val_size'] = 5
@@ -58,7 +55,7 @@ class TestEvaluation(unittest.TestCase):
         
         if not os.path.isdir(self.tmp_data_folder):
             # Create a dummy model if one doesn't already exist
-            self.records_folder, self.model_folder = create_example_model(config=test_config, data_paths=test_data_paths)
+            self.records_folder, self.model_folder = create_example_model(model_config=model_config, data_paths=test_data_paths)
         else:
             self.records_folder = '/'.join(glob(os.path.join(self.tmp_data_folder, '*/*.tfrecords'))[0].split('/')[:-1])
             self.model_folder = '/'.join(glob(os.path.join(self.tmp_data_folder, '*/*/models*'))[0].split('/')[:-1])
@@ -99,15 +96,15 @@ class TestEvaluation(unittest.TestCase):
                                         latitude_range=lat_range,
                                         longitude_range=lon_range,
                                         hour=18,
-                                        downscaling_steps=ds_config.steps,
-                                        validation_range=val_config.val_range,
+                                        downscaling_steps=model_config.downscaling_steps,
+                                        validation_range=model_config.val.val_range,
                                         downsample=model_config.downsample,
                                         input_channels=data_config.input_channels,
                                         constant_fields=data_config.constant_fields,
-                                        filters_gen=gen_config.filters_gen,
-                                        filters_disc=dis_config.filters_disc,
-                                        noise_channels=gen_config.noise_channels,
-                                        latent_variables=gen_config.latent_variables,
+                                        filters_gen=model_config.generator.filters_gen,
+                                        filters_disc=model_config.discriminator.filters_disc,
+                                        noise_channels=model_config.generator.noise_channels,
+                                        latent_variables=model_config.generator.latent_variables,
                                         padding=model_config.padding,
                                         data_paths=DATA_PATHS,
                                         shuffle=True)
@@ -129,8 +126,8 @@ class TestEvaluation(unittest.TestCase):
         if denormalise_data:
             truth = denormalise(truth)
 
-        noise_shape = np.array(cond)[0, ..., 0].shape + (gen_config.noise_channels,)
-        noise_gen = NoiseGenerator(noise_shape, batch_size=train_config.batch_size)
+        noise_shape = np.array(cond)[0, ..., 0].shape + (model_config.generator.noise_channels,)
+        noise_gen = NoiseGenerator(noise_shape, batch_size=model_config.train.batch_size)
 
         for ii in range(rank_samples):
             img_gen = gen.predict([cond, const, noise_gen()])
@@ -147,8 +144,8 @@ class TestEvaluation(unittest.TestCase):
                     gen=gen,
                     fcst_data_source=data_config.fcst_data_source,
                     data_gen=data_gen_valid,
-                    noise_channels=gen_config.noise_channels,
-                    latent_variables=gen_config.latent_variables,
+                    noise_channels=model_config.generator.noise_channels,
+                    latent_variables=model_config.generator.latent_variables,
                     latitude_range=lat_range,
                     longitude_range=lon_range,
                     ensemble_size=2,
@@ -163,8 +160,8 @@ class TestEvaluation(unittest.TestCase):
                     gen=gen,
                     fcst_data_source=data_config.fcst_data_source,
                     data_gen=data_gen_valid,
-                    noise_channels=gen_config.noise_channels,
-                    latent_variables=gen_config.latent_variables,
+                    noise_channels=model_config.generator.noise_channels,
+                    latent_variables=model_config.generator.latent_variables,
                     latitude_range=lat_range,
                     longitude_range=lon_range,
                     ensemble_size=2,
@@ -182,12 +179,10 @@ class TestEvaluation(unittest.TestCase):
         _, data_gen_valid = setupdata.load_data_from_config(self.config, data_paths=data_paths, hour=17)
                 
         eval_one_chkpt(
-                   mode=model_config.mode,
+                   model_config=model_config,
+                   data_config=data_config,    
                    gen=gen,
-                   fcst_data_source=data_config.fcst_data_source,
                    data_gen=data_gen_valid,
-                   noise_channels=gen_config.noise_channels,
-                   latent_variables=gen_config.latent_variables,
                    num_images=5,
                    latitude_range=lat_range,
                    longitude_range=lon_range,
@@ -209,13 +204,13 @@ class TestEvaluation(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = os.path.join(temp_dir, 'eval.txt')
-            evaluate_multiple_checkpoints(mode='GAN',
-                                        arch='forceconv',
+            evaluate_multiple_checkpoints(model_config.mode='GAN',
+                                        model_config.architecture='forceconv',
                                         fcst_data_source=data_config.fcst_data_source,
                                         obs_data_source=data_config.obs_data_source,
                                         latitude_range=latitude_range,
                                         longitude_range=longitude_range,
-                                    validation_range=['201902', '201902'],
+                                    model_config.val.val_range=['201902', '201902'],
                                     log_folder=temp_dir,
                                     weights_dir='/user/work/uz22147/logs/cgan/d34d309eb0e00b04/models',
                                     records_folder=records_folder,
@@ -234,25 +229,5 @@ class TestEvaluation(unittest.TestCase):
                                     constant_fields=data_config.constant_fields,
                                     data_paths=DATA_PATHS)
             
-            
-    def test_diurnal_cycle(self):
-        
-        
-        with open(os.path.join(data_folder, 'plot_test_data.pkl'), 'rb') as ifh:
-            data = pickle.load(ifh)
-        
-        gridded_data = np.stack([data['data']]*24, axis=0)
-        latitude_range = data['latitude_range']
-        longitude_range = data['longitude_range']
-        
-        start_date = datetime(2018,12,1)
-        dates = [start_date + timedelta(days=n) for n in range(gridded_data.shape[0])]
-        hours = range(0,24)
-        hourly_sum, hourly_counts = get_diurnal_cycle(gridded_data,
-                                                       dates, hours, 
-                                                       longitude_range=longitude_range,
-                                                       latitude_range=latitude_range)
-        self.assertIsInstance(hourly_sum, dict)
-        self.assertIsInstance(hourly_counts, dict)
-        self.assertEqual(set(hourly_counts.keys()), set(hours))
+
         

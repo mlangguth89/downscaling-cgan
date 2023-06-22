@@ -133,17 +133,18 @@ def main(restart: bool,
     log_folder = log_folder + output_suffix
     print("Models being written to folder: ", log_folder, flush=True)
     
-    # Initiialise weights and biases logging
-    wandb.init(
-        project='cgan-test' if args.debug else 'cgan-east-africa',
-        sync_tensorboard=True,
-        name=log_folder.split('/')[-1],
-        config={
-            'data': data_config_dict,
-            'model': model_config_dict,
-            'gpu_devices': tf_config.list_physical_devices('GPU')
-        }
-    )
+    if do_training:
+        # Initiialise weights and biases logging
+        wandb.init(
+            project='cgan-test' if args.debug else 'cgan-east-africa',
+            sync_tensorboard=True,
+            name=log_folder.split('/')[-1],
+            config={
+                'data': data_config_dict,
+                'model': model_config_dict,
+                'gpu_devices': tf_config.list_physical_devices('GPU')
+            }
+        )
     
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
@@ -332,30 +333,18 @@ def main(restart: bool,
     # evaluate model performance
     if evaluate:
         logger.debug('Performing evaluation')
-        evaluation.evaluate_multiple_checkpoints(mode=model_config.mode,
-                                                 arch=model_config.architecture,
-                                                 fcst_data_source=data_config.fcst_data_source,
-                                                 obs_data_source=data_config.obs_data_source,
-                                                 fcst_fields=data_config.input_fields,
-                                                 validation_range=model_config.val.val_range,
+        evaluation.evaluate_multiple_checkpoints(model_config=model_config,
+                                                 data_config=data_config,
                                                  latitude_range=latitude_range,
                                                  longitude_range=longitude_range,
                                                  log_folder=log_folder,
                                                  weights_dir=model_weights_root,
                                                  records_folder=records_folder,
-                                                 downsample=model_config.downsample,
                                                  noise_factor=noise_factor,
                                                  model_numbers=eval_model_numbers,
                                                  ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
-                                                 filters_gen=model_config.generator.filters_gen,
-                                                 filters_disc=model_config.discriminator.filters_disc,
-                                                 input_channels=data_config.input_channels,
-                                                 latent_variables=model_config.generator.latent_variables,
-                                                 noise_channels=model_config.generator.noise_channels,
-                                                 padding=model_config.padding,
                                                  ensemble_size=eval_ensemble_size,
-                                                 constant_fields=data_config.constant_fields,
                                                  data_paths=data_paths,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
@@ -399,6 +388,11 @@ if __name__ == "__main__":
         data_config = read_config.read_data_config(config_folder=args.model_folder)
         log_folder = '_'.join(args.model_folder.split('_')[:-1])
         output_suffix = args.model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
+        
+        if args.records_folder is None:
+            data_paths = read_config.get_data_paths()
+        else:
+            data_paths = read_config.get_data_paths(config_folder=args.records_folder)
     else:
         model_config = read_config.read_model_config()
         data_config = None
@@ -424,6 +418,7 @@ if __name__ == "__main__":
     main(
          model_config=model_config,
          data_config=data_config,
+         data_paths=data_paths,
          records_folder=args.records_folder,
          restart=args.restart, 
          do_training=args.do_training, 

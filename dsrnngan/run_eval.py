@@ -50,8 +50,8 @@ elif mode == "det":
 
 out_fn = "{}/eval_{}.txt".format(log_folder, str(val_years))
 
-evaluation.evaluate_multiple_checkpoints(mode=mode,
-                                         arch=arch,
+evaluation.evaluate_multiple_checkpoints(model_config.mode=mode,
+                                         model_config.architecture=arch,
                                          val_years=val_years,
                                          log_fname=out_fn,
                                          weights_dir=model_weights_root,
