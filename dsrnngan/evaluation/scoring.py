@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 from scipy.stats import pearsonr
 from scipy.ndimage import uniform_filter
+from sklearn.metrics import confusion_matrix
 
 def crps_ensemble(observation, forecasts):
     """
@@ -39,6 +40,15 @@ def calculate_pearsonr(array_1, array_2):
     
     return pearsonr(vals_1, vals_2)
 
+def calculate_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
+
+    y_true_int = (y_true > threshold).astype(np.int0).flatten()
+    y_pred_int = (y_pred > threshold).astype(np.int0).flatten()
+    
+    conf_mat = confusion_matrix(y_true=y_true_int, y_pred=y_pred_int)
+    
+    return conf_mat
+    
 def mae(x, y):
     return np.mean(np.abs(x - y))
 
@@ -47,6 +57,42 @@ def mse(x, y):
 
 def rmse(x, y):
     return np.sqrt(mse(x, y))
+
+def recall(c):
+    return c[1][1] / (c[1][0] + c[1][1])
+
+def precision(c):
+    return c[1][1] / (c[0][1] + c[1][1])
+
+def f1(c):
+    r = recall(c)
+    p = precision(c)
+    
+    f1 = 2*p*r / (p+r)
+    
+    return f1
+
+def hit_rate(c):
+    return recall(c)
+
+def false_alarm_rate(c):
+    return c[0][1] / (c[0][0] + c[0][1])
+
+def _pierce_skill_score(c):
+    return hit_rate(c) - false_alarm_rate(c)
+
+def _csi(c):
+    
+    return c[1][1] / (c[1][1] + c[0][1] + c[1][0])
+
+
+def critical_success_index(y_true: np.ndarray, y_pred: np.ndarray, threshold):
+    
+    conf_mat = calculate_confusion_matrix(y_true=y_true, y_pred=y_pred, threshold=threshold)
+    csi_result = _csi(conf_mat)
+
+    return csi_result
+    
 
 def mae_above_threshold(y_true, y_pred, percentile_threshold=0.95):
     
@@ -117,7 +163,22 @@ def get_spread_error_data(n_samples: int, observation_array: np.ndarray, ensembl
         
     return variance_mse_pairs
 
+def get_metric_by_hour(metric_fn, obs_array, fcst_array, hours, bin_width=1):
+    
+    hour_bin_edges = np.arange(0, 24, bin_width)
 
+    digitized_hours = np.digitize(hours, bins=hour_bin_edges)
+
+    metric_by_hour = {}
+    for hour in range(24):
+        digitized_hour = np.digitize(hour, bins=hour_bin_edges)
+        hour_indexes = np.where(np.array(digitized_hours) == digitized_hour)[0]
+        
+        if len(hour_indexes) == 0:
+            metric_by_hour[digitized_hour] = np.nan
+        else:
+            metric_by_hour[digitized_hour] = metric_fn(obs_array[hour_indexes,...], fcst_array[hour_indexes,...])
+    return metric_by_hour, hour_bin_edges
 ##
 # The code below is based off the pysteps code, please refer to their license
 
@@ -191,16 +252,3 @@ def fss(obs_array, fcst_array, scale, thr, mode='constant'):
     return numer / denom
     
 
-def get_metric_by_hour(metric_fn, obs_array, fcst_array, hours, bin_width=1):
-    
-    hour_bin_edges = np.arange(0, 24, bin_width)
-
-    digitized_hours = np.digitize(hours, bins=hour_bin_edges)
-
-    metric_by_hour = {}
-    for hour in range(24):
-        digitized_hour = np.digitize(hour, bins=hour_bin_edges)
-        hour_indexes = np.where(np.array(digitized_hours) == digitized_hour)[0]
-        
-        metric_by_hour[digitized_hour] = metric_fn(obs_array[hour_indexes,...], fcst_array[hour_indexes,...])
-    return metric_by_hour, hour_bin_edges
