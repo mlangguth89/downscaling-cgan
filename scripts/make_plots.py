@@ -25,7 +25,7 @@ sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
-from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles
+from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, plot_csi
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
@@ -52,11 +52,18 @@ metric_dict = {'examples': False,
                'crps': False,
                'fss': False,
                'diurnal': False,
-               'confusion_matrix': True,
+               'confusion_matrix': False,
                'csi': True
                }
 
 plot_persistence = False
+
+format_lookup = {'GAN': {'color': 'b'}, 
+                 'Fcst': {'color': 'r'}, 
+                 'GAN + qmap': {'color': 'b', 'linestyle': '--'}, 
+                 'Fcst + qmap': {'color': 'r', 'linestyle': '--'},
+                 'Obs (IMERG)': {'color': 'k', 'linestyle': '-'}}
+
 
 ################################################################################
 ## Setup
@@ -104,8 +111,8 @@ hours = [h[0] for h in arrays['hours']][:n_samples]
 
 # Times in EAT timezone
 eat_datetimes = [datetime(d.year, d.month, d.day, hours[n]).replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Africa/Nairobi')) for n,d in enumerate(dates)]
-eat_dates = [datetime(d.year, d.month, d.day) for d in eat_datetimes]
-eat_hours = [d.hour for d in eat_datetimes]
+dates = [datetime(d.year, d.month, d.day) for d in eat_datetimes]
+hours = [d.hour for d in eat_datetimes]
 
 assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
@@ -162,6 +169,13 @@ with open(os.path.join(log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
 # clip values at 200mm/hr
 
 cgan_corrected = np.clip(cgan_corrected, 0, 200)
+
+data_dict = {
+                        'GAN': samples_gen_array[:, :, :, 0],
+                        'Obs (IMERG)': truth_array,
+                        'Fcst': fcst_array,
+                        'Fcst + qmap':fcst_corrected,
+                        'GAN + qmap': cgan_corrected[:,:,:,0]}
           
 ################################################################################
 ## Climatological data for comparison.
@@ -376,28 +390,25 @@ plt.rcParams.update({'font.size': 16})
 if metric_dict['rapsd']:
     
     print('*********** Plotting RAPSD **********************')
-
-    rapsd_data_dict = {
-                        'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'linestyle': '-'},
-                        'Obs (IMERG)': {'data': truth_array, 'color': 'k', 'linestyle': '-'},
-                        'Fcst': {'data': fcst_array, 'color': 'r', 'linestyle': '-'},
-                        'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'linestyle': '--'},
-                        'GAN + qmap': {'data': cgan_corrected[:,:,:,0], 'color': 'b', 'linestyle': '--'}}
-
     rapsd_results = {}
-    for k, v in rapsd_data_dict.items():
+    for k, v in data_dict.items():
             rapsd_results[k] = []
             for n in tqdm(range(n_samples)):
             
-                    fft_freq_pred = rapsd(v['data'][n,:,:], fft_method=np.fft)
+                    fft_freq_pred = rapsd(v[n,:,:], fft_method=np.fft)
                     rapsd_results[k].append(fft_freq_pred)
 
             rapsd_results[k] = np.mean(np.stack(rapsd_results[k], axis=-1), axis=-1)
+    
+    # Save results
+    with open(f'plots/rapsd_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(rapsd_results, ofh)
 
+    # plot
     fig, ax = plt.subplots(1,1)
 
     for k, v in rapsd_results.items():
-        ax.plot(v, label=k, color=rapsd_data_dict[k]['color'], linestyle=rapsd_data_dict[k]['linestyle'])
+        ax.plot(v, label=k, **format_lookup[k])
     
     plt.xscale('log')
     plt.yscale('log')
@@ -414,15 +425,14 @@ if metric_dict['rapsd']:
 if metric_dict['quantiles']:
 
     print('*********** Plotting Q-Q  **********************')
-    quantile_data_dict = {
-                    'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
-                    'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
-                    'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
-                    'Fcst + qmap': {'data': fcst_corrected, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
-                    'GAN + qmap': {'data': cgan_corrected[:, :, :, 0], 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
+    quantile_format_dict = {'GAN': {'color': 'b', 'marker': '+', 'alpha': 1},
+                    'Obs (IMERG)': {'color': 'k'},
+                    'Fcst': {'color': 'r', 'marker': '+', 'alpha': 1},
+                    'Fcst + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
+                    'GAN + qmap': {'color': 'b', 'marker': 'o', 'alpha': 0.7}}
 
     fig, ax = plt.subplots(1,1)
-    plot_quantiles(quantile_data_dict=quantile_data_dict, ax=ax, min_data_points_per_quantile=1,
+    plot_quantiles(quantile_data_dict=data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
                    save_path=f'plots/quantiles_total_{model_type}_{model_number}.pdf')
 
     # Quantiles for different areas
@@ -580,7 +590,7 @@ if metric_dict['hist']:
 
     for name, arr in data_dict.items():
         if name != 'Obs (IMERG)':
-            metric_by_hour, hour_bin_edges = get_metric_by_hour(mse, obs_array=truth_array, fcst_array=arr, hours=eat_hours, bin_width=3)
+            metric_by_hour, hour_bin_edges = get_metric_by_hour(mse, obs_array=truth_array, fcst_array=arr, hours=hours, bin_width=3)
             ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
             ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
             ax.set_xticklabels(hour_bin_edges)
@@ -634,8 +644,8 @@ if metric_dict['fss']:
                         'cgan_qmap': cgan_corrected[:n_samples, :, :, 0]}
 
     # get quantiles
-    quantile_locs = [0.5, 0.985, 0.999, 0.9999]
-    hourly_thresholds = np.quantile(truth_array, quantile_locs)
+
+    hourly_thresholds = [0.1, 1, 10, 20, 50]
 
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
@@ -663,10 +673,15 @@ if metric_dict['fss']:
                         'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
                         'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
                         'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
-        fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, quantile_locs, window_sizes, n_samples)
+        fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
         
         plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{model_type}_{model_number}')
+    
+    with open(f'plots/fss_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(fss_area_results, ofh)
         
+    # Save results
+    
 
     # FSS for grid scale
     # from dsrnngan.scoring import get_filtered_array
@@ -714,7 +729,7 @@ if metric_dict['diurnal']:
     fig, ax = plt.subplots(1,1)
     for name, arr in diurnal_data_dict.items():
         
-        metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=eat_hours, bin_width=3)
+        metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=hours, bin_width=3)
         ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
 
     ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
@@ -887,30 +902,73 @@ if metric_dict.get('csi'):
     print('*********** Calculating critical success index **********************')
 
     from dsrnngan.evaluation import scoring
-    hourly_thresholds = [0.1, 5, 20]
+    hourly_thresholds = [1, 5, 10, 20, 50]
 
-    diurnal_data_dict = {'Obs (IMERG)': truth_array,
+    csi_dict = {
                          'GAN': samples_gen_array[:,:,:,0],
                          'Fcst': fcst_array,
                          'GAN + qmap': cgan_corrected[:,:,:,0],
                          'Fcst + qmap': fcst_corrected
                          }
     
-    csi_results = []
-        
-    for threshold in hourly_thresholds:
-        
-        tmp_results_dict = {'threshold': threshold}
-        for k, v in tqdm(y_dict.items()):
-            tmp_results_dict[k] = scoring.critical_success_index(truth_array,v, threshold=threshold)
-            
-            metric_fn = lambda x,y: scoring.critical_success_index(x,y, threshold=threshold)
-            
-            tmp_results_dict[k + '_hourly'] = scoring.get_metric_by_hour(metric_fn=metric_fn, obs_array=truth_array, fcst_array=v, 
-                                                    hours=hours,
-                                                    bin_width=1)
-        
-        csi_results.append(tmp_results_dict)
+    csi_results =  scoring.get_skill_score_results(
+            skill_score_function=scoring.critical_success_index,
+                     data_dict=csi_dict, obs_array=truth_array,
+                    hours=hours,
+                    hourly_thresholds=hourly_thresholds
+                    )
         
     with open(f'plots/csi_{model_type}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(csi_results, ofh)
+        
+
+    ets_results =  scoring.get_skill_score_results(
+            skill_score_function=scoring.equitable_threat_score,
+                     data_dict=csi_dict, obs_array=truth_array,
+                    hours=hours,
+                    hourly_thresholds=hourly_thresholds
+                    )
+    
+    with open(f'plots/ets_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(ets_results, ofh)
+    
+    csi_area_results = {}
+    ets_area_results = {}
+    for n, (area, area_range) in enumerate(special_areas.items()):
+        
+        lat_range_ends = area_range['lat_range']
+        lon_range_ends = area_range['lon_range']
+        lat_range_index = area_range['lat_index_range']
+        lon_range_index = area_range['lon_index_range']
+        lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
+        lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
+        
+        area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
+        area_data_dict = {
+                        'GAN': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
+                        'Fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'Fcst + qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'GAN + qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
+
+        csi_area_results[area] =  scoring.get_skill_score_results(
+            skill_score_function=scoring.critical_success_index,
+                     data_dict=area_data_dict, obs_array=area_truth_array,
+                    hours=hours,
+                    hourly_thresholds=hourly_thresholds
+                    )
+        
+        ets_area_results[area] =  scoring.get_skill_score_results(
+            skill_score_function=scoring.equitable_threat_score,
+                     data_dict=area_data_dict, obs_array=area_truth_array,
+                    hours=hours,
+                    hourly_thresholds=hourly_thresholds
+                    )
+    
+    with open(f'plots/csi_area_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(csi_area_results, ofh)
+    
+    with open(f'plots/ets_area_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        pickle.dump(ets_area_results, ofh) 
+    
+    
+        
