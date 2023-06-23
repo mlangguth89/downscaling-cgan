@@ -45,7 +45,8 @@ def calculate_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, threshold
     y_true_int = (y_true > threshold).astype(np.int0).flatten()
     y_pred_int = (y_pred > threshold).astype(np.int0).flatten()
     
-    conf_mat = confusion_matrix(y_true=y_true_int, y_pred=y_pred_int)
+    # Note that the conf mat rows indicate true label, and columns indicate predicted label
+    conf_mat = confusion_matrix(y_true=y_true_int, y_pred=y_pred_int, labels=[0,1])
     
     return conf_mat
     
@@ -76,13 +77,26 @@ def hit_rate(c):
     return recall(c)
 
 def false_alarm_rate(c):
-    return c[0][1] / (c[0][0] + c[0][1])
+    return c[0][1] / (c[1][0] + c[1][1])
 
 def _pierce_skill_score(c):
     return hit_rate(c) - false_alarm_rate(c)
 
-def _csi(c):
+def _equitable_threat_score(c):
+    total = np.array(c).sum()
     
+    hits = c[1][1]
+    misses = c[1][0]
+    false_alarms = c[0][1]
+    
+    hits_random = (hits + misses)*(hits + false_alarms) / total
+    ets = (hits - hits_random) / (hits + misses + false_alarms - hits_random)
+    
+    return ets
+    
+
+def _csi(c):
+       
     return c[1][1] / (c[1][1] + c[0][1] + c[1][0])
 
 
@@ -92,7 +106,49 @@ def critical_success_index(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     csi_result = _csi(conf_mat)
 
     return csi_result
+
+def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     
+    conf_mat = calculate_confusion_matrix(y_true=y_true, y_pred=y_pred, threshold=threshold)
+    ets_results = _equitable_threat_score(conf_mat)
+
+    return ets_results
+
+def pierce_skill_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
+    
+    conf_mat = calculate_confusion_matrix(y_true=y_true, y_pred=y_pred, threshold=threshold)
+    pss_result = _pierce_skill_score(conf_mat)
+
+    return pss_result
+
+
+def get_skill_score_results(
+                skill_score_function,
+                data_dict: dict, obs_array: np.ndarray,
+             hours,
+             hourly_thresholds: list
+             ):
+    
+    csi_results = []
+        
+    for threshold in hourly_thresholds:
+        
+        tmp_results_dict = {'threshold': threshold}
+        for k, v in data_dict.items():
+            tmp_results_dict[k] = skill_score_function(obs_array, v, threshold=threshold)
+            
+            metric_fn = lambda x,y: skill_score_function(x, y, threshold=threshold)
+            
+            tmp_results_dict[k + '_hourly'] = get_metric_by_hour(metric_fn=metric_fn, 
+                                                                         obs_array=obs_array, 
+                                                                         fcst_array=v,
+                                                                         hours=hours,
+                                                                         bin_width=1)
+        
+        csi_results.append(tmp_results_dict)
+        
+    return csi_results
+
 
 def mae_above_threshold(y_true, y_pred, percentile_threshold=0.95):
     
@@ -173,11 +229,12 @@ def get_metric_by_hour(metric_fn, obs_array, fcst_array, hours, bin_width=1):
     for hour in range(24):
         digitized_hour = np.digitize(hour, bins=hour_bin_edges)
         hour_indexes = np.where(np.array(digitized_hours) == digitized_hour)[0]
-        
+  
         if len(hour_indexes) == 0:
             metric_by_hour[digitized_hour] = np.nan
         else:
             metric_by_hour[digitized_hour] = metric_fn(obs_array[hour_indexes,...], fcst_array[hour_indexes,...])
+
     return metric_by_hour, hour_bin_edges
 ##
 # The code below is based off the pysteps code, please refer to their license

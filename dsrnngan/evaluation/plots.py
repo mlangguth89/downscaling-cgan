@@ -43,13 +43,13 @@ border_feature = EABorderFeature(
                                      edgecolor='black', 
                                      facecolor='never')
 
-[[47.5,7.85], [47.86, 7.52], [52.54, 10.26], [47.08, 12.7]]
 
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data import data
 from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.evaluation.rapsd import plot_spectrum1d, rapsd
 from dsrnngan.evaluation.thresholded_ranks import findthresh
+from dsrnngan.evaluation import scoring
 
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -129,7 +129,9 @@ def plot_fss_scores(fss_results, output_folder, output_suffix):
     plt.savefig(os.path.join(output_folder, f'fractional_skill_score_{output_suffix}.pdf'), format='pdf')
     
     
-def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figure=None, 
+def plot_quantiles(quantile_data_dict: dict, 
+                   format_lookup: dict,
+                   save_path: str=None, fig: plt.figure=None, 
                    ax: plt.Axes=None, 
                    obs_key: str='Obs (IMERG)',
                    range_dict: dict=range_dict,
@@ -140,11 +142,12 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
     Args:
         quantile_data_dict (dict): Dict containing entries for data sets to plot. One must have the key=obs_key. Structure:
                     {
-                    data_name_1: 
-                        {'data': np.ndarray, 'color': str, 'marker': str, 'alpha': float},
+                    data_name_1: : np.ndarray, },
                     data_name_2: 
                         {'data': np.ndarray, 'color': str, 'marker': str, 'alpha': float}
                     }
+        format_lookup (dict): Doct containing formatting details for different datasets
+            e.g.   {data_name_1: {'color': str, 'marker': str, 'alpha': float} }
         save_path (str, optional): Path to save plots in. Defaults to None.
         fig (plt.figure, optional): Existing figure to plot in. Defaults to None.
         ax (plt.Axes, optional): Axis to plot on. Defaults to None.
@@ -202,7 +205,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
         
     for k, v in tqdm(range_dict.items()):
         
-        size=v.get('marker_size', 32)
+        size= v.get('marker_size', 32)
         cmap = plt.colormaps["plasma"]
         
         if k in quantile_results[obs_key]:
@@ -211,8 +214,8 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
             marker_hndl_list = []
             for data_name, res in quantile_results.items():
                 if data_name != obs_key:
-                    s = ax.scatter(quantile_results[obs_key][k], res[k], c=quantile_data_dict[data_name]['color'], marker=quantile_data_dict[data_name]['marker'], label=data_name, s=size, 
-                                cmap=cmap, alpha=quantile_data_dict[data_name].get('alpha', 1))
+                    s = ax.scatter(quantile_results[obs_key][k], res[k], c=format_lookup[data_name]['color'], marker=format_lookup[data_name]['marker'], label=data_name, s=size, 
+                                cmap=cmap, alpha=format_lookup[data_name].get('alpha', 1))
                     marker_hndl_list.append(s)
             
             if not marker_handles:
@@ -235,7 +238,7 @@ def plot_quantiles(quantile_data_dict: dict, save_path: str=None, fig: plt.figur
         ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 12)}th')
     
     if save_path:
-        plt.savefig(save_path, format='pdf')
+        plt.savefig(save_path, format=format_str.replace('.', ''))
         
     return fig, ax
 
@@ -268,52 +271,48 @@ def plot_precipitation(ax: plt.Axes,
     ax.set_title(title)
     
     return im
-# def plot_precipitation(ds, variable, fig=None, ax=None, transpose=False, title=None,
-#                        lat_var_name='lat', lon_var_name='lon', log_precip=False, tick_interval=2,
-#                        colorbar=False):
-#     latitude_vals = ds[lat_var_name].values
-#     longitude_vals = ds[lon_var_name].values
 
-#     ds = ds.sortby(lat_var_name, ascending=True)
-#     ds = ds.sortby(lon_var_name, ascending=True)
-#     if ax is None or fig is None:
-#         fig, ax = plt.subplots(1, 1, subplot_kw={'projection': ccrs.PlateCarree()})
+def plot_csi(data_dict: dict, obs_array: np.ndarray,
+             hours: Iterable, format_lookup: dict,
+             hourly_thresholds: list= [0.1, 5, 20],
+             obs_key: str='Obs (IMERG)',
+             save_path: str=None):
+    
+    csi_results = []
         
-#     precip = np.around(ds[variable][0, :, :], 5)
-#     if log_precip:
-#         precip = np.log(1 + precip)
+    for threshold in hourly_thresholds:
+        
+        tmp_results_dict = {'threshold': threshold}
+        for k, v in tqdm(data_dict.items()):
+            tmp_results_dict[k] = scoring.critical_success_index(obs_array, v, threshold=threshold)
+            
+            metric_fn = lambda x,y: scoring.critical_success_index(x, y, threshold=threshold)
+            
+            tmp_results_dict[k + '_hourly'] = scoring.get_metric_by_hour(metric_fn=metric_fn, obs_array=obs_array, fcst_array=v, 
+                                                    hours=hours,
+                                                    bin_width=1)
+        
+        csi_results.append(tmp_results_dict)
     
-#     if transpose:
-#         precip = precip.transpose()
-#     ax.add_feature(cfeature.BORDERS)
-#     ax.add_feature(cfeature.LAKES)
-#     im = ax.contourf(longitude_vals, latitude_vals , precip, transform=ccrs.PlateCarree(),
-#                     cmap='Greys')
+    if save_path:
+        format_str = '.' + save_path.split('.')[-1]
+        data_save_path = save_path.replace(format_str, '.pkl')
+        with open(data_save_path, 'wb+') as ofh:
+            pickle.dump(csi_results, ofh)
 
-#     ax.coastlines()
+    fig, axs = plt.subplots(len(data_dict),1, figsize=(8, 8))
+    for n in range(len(data_dict)):
+        for pk in data_dict:
+            
+            axs[n].plot(csi_results[n][pk + '_hourly'][0].values(), label=pk, **format_lookup[pk])
+            axs[n].set_title(f"Threshold = {csi_results[n]['threshold']}")
+        axs[n].legend()
+        axs[n].set_ylim([0,None])
 
-
-#     ax.set_xticks(np.arange(int(min(longitude_vals) +1 ), int(max(longitude_vals -1)), 2))
-#     ax.set_yticks(np.arange(int(min(latitude_vals) +1 ), int(max(latitude_vals)), 2))
-#     ax.set_xlabel('longitude')
-#     ax.set_ylabel('latitude')
-    
-#     if colorbar:
-#         #get size and extent of axes:
-#         axpos = ax.get_position()
-#         pos_x = axpos.x0+axpos.width + 0.01 # + 0.25*axpos.width
-#         pos_y = axpos.y0
-#         cax_width = 0.04
-#         cax_height = axpos.height
-#         #create new axes where the colorbar should go.
-#         #it should be next to the original axes and have the same height!
-#         pos_cax = fig.add_axes([pos_x,pos_y,cax_width,cax_height])
-#         plt.colorbar(im, cax = pos_cax)
-    
-#     if title:
-#         ax.set_title(title)
-#     return im, ax
-
+    fig.tight_layout(pad=1)
+        
+    if save_path:
+        plt.savefig(save_path, format=format_str.replace('.', ''))
 
 def plot_img(img, value_range=(np.log10(0.1), np.log10(100)), extent=None):
     plt.imshow(img,

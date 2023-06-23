@@ -20,7 +20,7 @@ from dsrnngan.model import setupmodel
 from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.model.pooling import pool
 from dsrnngan.evaluation.rapsd import rapsd
-from dsrnngan.evaluation.scoring import rmse, mse, mae, calculate_pearsonr, fss
+from dsrnngan.evaluation.scoring import rmse, mse, mae, calculate_pearsonr, fss, critical_success_index
 from dsrnngan.model import gan
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -242,6 +242,8 @@ def eval_one_chkpt(*,
     ralsd_rmse_all = []
     corr_all = []
     correlation_fcst_all = []
+    csi_fcst_all = []
+    csi_all = []
 
     tpidx = data_config.input_fields.index('tp')
     
@@ -312,6 +314,10 @@ def eval_one_chkpt(*,
 
         corr_all.append(calculate_pearsonr(obs, samples_gen[:, :, 0]))
         correlation_fcst_all.append(calculate_pearsonr(obs, fcst))
+        
+        # critical success index
+        csi_all.append(critical_success_index(obs, samples_gen[:,:,0], threshold=1.0))
+        csi_fcst_all.append(critical_success_index(obs, fcst, threshold=1.0))
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(obs)
@@ -390,6 +396,7 @@ def eval_one_chkpt(*,
     point_metrics['ralsd'] = np.nanmean(ralsd_rmse_all)
     point_metrics['corr'] = np.mean(corr_all)
     point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
+    point_metrics['csi'] = np.mean(csi_all)
     
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)

@@ -42,7 +42,7 @@ def ensmean_MSE_weighted(y_true, y_pred, threshold: float=25.0):
     y_true_squ = tf.squeeze(y_true, axis=-1)
     sq_diff = tf.math.squared_difference(pred_mean, y_true_squ)
     
-    weights = tf.math.maximum(y_true_squ, tf.constant([threshold]))
+    weights = tf.math.maximum(y_true_squ + tf.constant([1.0]), tf.constant([threshold]))
     
     return tf.reduce_mean(sq_diff * weights)
 
