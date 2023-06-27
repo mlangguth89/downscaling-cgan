@@ -82,8 +82,16 @@ percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for 
 percentiles=np.concatenate(percentiles_list)
 quantile_locs = [item / 100.0 for item in percentiles]
 
+
+def get_geoaxes(*args, **kwargs):
+    fig, ax = plt.subplots(*args, 
+                        subplot_kw={'projection' : ccrs.PlateCarree()},
+                        **kwargs)
+    
+    return fig, ax
+
 def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
-                  cmap='Reds', extend: str='both'):
+                  cmap='Reds', extend: str='both', add_borders=True):
     
     if value_range is not None:
         im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),
@@ -97,7 +105,9 @@ def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude
                     extend=extend)
 
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
-    ax.add_feature(border_feature)
+    
+    if add_borders:
+        ax.add_feature(border_feature)
     ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     

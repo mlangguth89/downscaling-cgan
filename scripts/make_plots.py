@@ -914,8 +914,8 @@ if metric_dict.get('csi'):
     csi_results =  scoring.get_skill_score_results(
             skill_score_function=scoring.critical_success_index,
                      data_dict=csi_dict, obs_array=truth_array,
-                    hours=hours,
-                    hourly_thresholds=hourly_thresholds
+                     hours=hours,
+                     hourly_thresholds=hourly_thresholds
                     )
         
     with open(f'plots/csi_{model_type}_{model_number}.pkl', 'wb+') as ofh:

@@ -49,4 +49,20 @@ class TestScoring(unittest.TestCase):
                                                  hours=np.random.choice(range(12), self.imerg_train_data.shape[0]),
                                                  bin_width=4)
         
+    def test_get_skill_score_results(self):
+        
+        
+        csi_dict = { 'Fcst': self.ifs_train_data
+                                }
+
+        csi_results = scoring.get_skill_score_results(
+            skill_score_function=scoring.critical_success_index,
+            data_dict=csi_dict, obs_array=self.imerg_train_data,
+                    hours=np.random.choice(range(24), self.imerg_train_data.shape[0]),
+                    hourly_thresholds=[1, 5, 10]
+                    )
+        
+        self.assertIsInstance(csi_results, list)
+
+                
         

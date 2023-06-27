@@ -102,17 +102,42 @@ def _csi(c):
 
 def critical_success_index(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     
-    conf_mat = calculate_confusion_matrix(y_true=y_true, y_pred=y_pred, threshold=threshold)
-    csi_result = _csi(conf_mat)
+    y_true_int = (y_true > threshold).astype(np.int32)
+    not_y_true_int = (y_true <= threshold).astype(np.int32)
+    y_pred_int = (y_pred > threshold).astype(np.int32)
+    not_y_pred_int = (y_pred <= threshold).astype(np.int32)
 
-    return csi_result
+    hits = np.multiply(y_true_int, y_pred_int).sum()
+    misses = np.multiply(y_true_int, not_y_pred_int).sum()
+    false_alarms = np.multiply(not_y_true_int, y_pred_int).sum()
 
-def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
+    if hits + misses + false_alarms == 0:
+        csi = np.nan
+    else:
+        csi = hits / (hits + misses + false_alarms)
+
+    return csi
+
+def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
     
-    conf_mat = calculate_confusion_matrix(y_true=y_true, y_pred=y_pred, threshold=threshold)
-    ets_results = _equitable_threat_score(conf_mat)
+    y_true_int = (y_true > threshold).astype(np.int32)
+    not_y_true_int = (y_true <= threshold).astype(np.int32)
+    y_pred_int = (y_pred > threshold).astype(np.int32)
+    not_y_pred_int = (y_pred <= threshold).astype(np.int32)
 
-    return ets_results
+    hits = np.multiply(y_true_int, y_pred_int).sum()
+    misses = np.multiply(y_true_int, not_y_pred_int).sum()
+    false_alarms = np.multiply(not_y_true_int, y_pred_int).sum()
+    
+    
+    hits_random = (hits + misses)*(hits + false_alarms) / y_true.size
+
+    if hits + misses + false_alarms + hits_random == 0:
+        ets = np.nan
+    else:
+        ets = (hits - hits_random) / (hits + misses + false_alarms - hits_random)
+
+    return ets
 
 def pierce_skill_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     
@@ -121,6 +146,18 @@ def pierce_skill_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
 
     return pss_result
 
+def get_metric_by_grid_cell(metric_fn, y_true, y_pred, **kwargs):
+    
+    (_, W, H) = y_true.shape
+    metric_by_grid_cell = np.empty((W,H))
+    metric_by_grid_cell[:,:] = np.nan
+
+    for w in range(W):
+        for h in range(H):
+            
+            metric_by_grid_cell[w,h] = metric_fn(y_true=y_true[:,w,h], y_pred=y_pred[:,w,h], **kwargs)
+    
+    return metric_by_grid_cell
 
 def get_skill_score_results(
                 skill_score_function,

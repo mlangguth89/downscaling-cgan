@@ -33,6 +33,12 @@ class TestPlots(unittest.TestCase):
         self.latitude_range = data['latitude_range']
         self.longitude_range = data['longitude_range']
         
+        with open(str(data_folder / 'quantile_mapping' / 'quantile_mapping_test_data.pkl'), 'rb') as ifh:
+            train_data = pickle.load(ifh)
+        
+        self.ifs_train_data = train_data['ifs_train_data']
+        self.imerg_train_data = train_data['imerg_train_data']
+        
         return super().setUp()
     
     def test_contourf(self):
@@ -69,15 +75,10 @@ class TestPlots(unittest.TestCase):
         
     def test_plot_quantile(self):
         
-        with open(str(data_folder / 'quantile_mapping' / 'quantile_mapping_test_data.pkl'), 'rb') as ifh:
-            train_data = pickle.load(ifh)
-        
-        ifs_train_data = train_data['ifs_train_data']
-        imerg_train_data = train_data['imerg_train_data']
         
         quantile_data_dict = {
-                    'fcst': {'data': ifs_train_data, 'color': 'b', 'marker': '+', 'alpha': 1},
-                    'Obs (IMERG)': {'data': imerg_train_data, 'color': 'k'}
+                    'fcst': {'data': self.ifs_train_data, 'color': 'b', 'marker': '+', 'alpha': 1},
+                    'Obs (IMERG)': {'data': self.imerg_train_data, 'color': 'k'}
                     }
         
         fig, ax = plt.subplots(1,1)
@@ -88,39 +89,14 @@ class TestPlots(unittest.TestCase):
     def test_diurnal_cycle(self):
         
         
-        with open(os.path.join(data_folder, 'plot_test_data.pkl'), 'rb') as ifh:
-            data = pickle.load(ifh)
-        
-        gridded_data = np.stack([data['data']]*24, axis=0)
-        latitude_range = data['latitude_range']
-        longitude_range = data['longitude_range']
-        
         start_date = datetime(2018,12,1)
         dates = [start_date + timedelta(days=n) for n in range(gridded_data.shape[0])]
         hours = range(0,24)
-        hourly_sum, hourly_counts = evaluation.get_diurnal_cycle(gridded_data,
+        hourly_sum, hourly_counts = evaluation.get_diurnal_cycle(self.gridded_data,
                                                        dates, hours, 
-                                                       longitude_range=longitude_range,
-                                                       latitude_range=latitude_range)
+                                                       longitude_range=self.longitude_range,
+                                                       latitude_range=self.latitude_range)
         self.assertIsInstance(hourly_sum, dict)
         self.assertIsInstance(hourly_counts, dict)
         self.assertEqual(set(hourly_counts.keys()), set(hours))
         
-    def test_plot_csi(self):
-        
-        with open(os.path.join(data_folder, 'plot_test_data.pkl'), 'rb') as ifh:
-            data = pickle.load(ifh)
-        
-        gridded_data = np.stack([data['data']]*3*24, axis=0)
-        latitude_range = data['latitude_range']
-        longitude_range = data['longitude_range']
-        
-        start_date = datetime(2018,12,1)
-        dates = [start_date + timedelta(days=n) for n in range(gridded_data.shape[0])]
-        hours = list(range(0,24))*3
-        
-        from dsrnngan.evaluation.evaluation import get_metric_by_hour
-        
-        confusion_matrix(y_true, v)
-        
-        t=1
