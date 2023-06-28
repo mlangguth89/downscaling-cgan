@@ -7,6 +7,8 @@ from typing import Iterable, Union
 from numpy.typing import ArrayLike
 from sklearn.linear_model import LinearRegression, HuberRegressor
 from numba import jit
+from scipy.ndimage import uniform_filter
+
 
 logger = logging.getLogger(__name__)
 sh = logging.StreamHandler()
@@ -97,6 +99,9 @@ def quantile_map_grid(array_to_correct: np.ndarray, fcst_train_data: np.ndarray,
             fcst_corrected[:,w,h] = result
             
     return fcst_corrected
+
+
+
 
 class QuantileMapper():
     
@@ -244,44 +249,35 @@ class QuantileMapper():
         self.quantiles_by_area = {}
         for time_period, date_indexes in self.quantile_date_groupings.items():
             self.quantiles_by_area[time_period] = {}
+                
+            fcst_q_cols = []
+            obs_q_cols = []
             
-            for n, lat_grouping in self.quantile_latitude_groupings.items():
-                for m, lon_grouping in self.quantile_longitude_groupings.items():
-                    
-                    area_id = f'lat{n}_lon{m}'
+            # Note that the ordering of these for loops is crucial
+            # to make sure the 
+            for m, lon_grouping in self.quantile_longitude_groupings.items():
+                fcst_q_rows = []
+                obs_q_rows=[]
 
+                lon_index_range = lon_grouping['lon_index_range']
+
+                for n, lat_grouping in self.quantile_latitude_groupings.items():
+                        
                     lat_index_range = lat_grouping['lat_index_range']
-                    lon_index_range = lon_grouping['lon_index_range']
                     
-                    fcst = fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
-                    obs = obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]]
+                    fcst_q_rows += [np.quantile(fcst_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]].flatten(), 
+                                                self.quantile_locs)] * (lat_index_range[1] - lat_index_range[0])
                     
-                    obs_quantiles = np.quantile(obs.flatten(), self.quantile_locs)
-                    fcst_quantiles = np.quantile(fcst.flatten(), self.quantile_locs)
+                    obs_q_rows += [np.quantile(obs_data[date_indexes, lat_index_range[0]:lat_index_range[1], lon_index_range[0]:lon_index_range[1]].flatten(), 
+                                                self.quantile_locs)] * (lat_index_range[1] - lat_index_range[0])
+                fcst_q_cols += [np.vstack(fcst_q_rows).transpose()] * (lon_index_range[1] - lon_index_range[0]) 
+                obs_q_cols += [np.vstack(obs_q_rows).transpose()] * (lon_index_range[1] - lon_index_range[0]) 
 
-                    self.quantiles_by_area[time_period][area_id] = {'fcst_quantiles': fcst_quantiles, 
-                                                                    'obs_quantiles': obs_quantiles}
+            self.quantiles_by_area[time_period]['fcst_quantiles'] = np.dstack(fcst_q_cols)
+            self.quantiles_by_area[time_period]['obs_quantiles'] = np.dstack(obs_q_cols)
 
         return self.quantiles_by_area
-    
-    @staticmethod
-    def get_weighted_quantiles(lat_index: int, lon_index: int, 
-                               area_centres: dict, quantiles_for_time_period: dict):
-        
-        # TODO: make this work in time as well as space
-        coordinate_array = np.array([lat_index, lon_index])
-                    
-        # Calculate distance via exp(-|a-b|_2)
-        exp_weighting = {k: np.exp(- np.linalg.norm(v - coordinate_array, ord=2)) for k, v in area_centres.items()}
-        normalising_factor = np.sum(list(exp_weighting.values()))
-        area_weights = {k: v / normalising_factor for k, v in exp_weighting.items()}
-        
-        # Calculate weighted average of quantiles to use
-        obs_quantiles = np.sum(np.stack([v['obs_quantiles'] * area_weights[k] for k, v in quantiles_for_time_period.items()], axis=0), axis=0)
-        fcst_quantiles = np.sum(np.stack([v['fcst_quantiles'] * area_weights[k] for k, v in quantiles_for_time_period.items()], axis=0), axis=0)
-        
-        return obs_quantiles, fcst_quantiles
-        
+       
         
     def get_quantile_mapped_forecast(self, fcst: np.ndarray, dates: Iterable, hours: Iterable=None):
 
@@ -301,16 +297,33 @@ class QuantileMapper():
         
         fcst_corrected = np.empty(fcst.shape)
         fcst_corrected[:,:,:] = np.nan
-        area_centres = {f'lat{n}_lon{m}': np.array([self.quantile_latitude_groupings[n]['lat_range_mean'], self.quantile_longitude_groupings[m]['lon_range_mean']]) for n in range(self.num_lat_lon_chunks) for m in range(self.num_lat_lon_chunks)}
 
         for date_index_name, d_ix in test_date_indexes.items():
             
             quantiles_for_time_period = self.quantiles_by_area[f't{date_index_name}']
+            
+            
+            weighted_fcst_quantiles = np.empty([len(self.quantile_locs)] + list(fcst.shape[1:]))
+            weighted_fcst_quantiles[...] = np.nan
 
+            weighted_obs_quantiles = np.empty([len(self.quantile_locs)] + list(fcst.shape[1:]))
+            weighted_obs_quantiles[...] = np.nan
+
+            lon_chunk_size = list(self.quantile_longitude_groupings.values())[0]['lon_index_range'][-1]
+            lat_chunk_size = list(self.quantile_latitude_groupings.values())[0]['lat_index_range'][-1]
+            filter_size = np.mean([lon_chunk_size, lat_chunk_size])
+
+            # Create smoothed quantiles (i.e. averaging quantiles over a neighbourhood centred at each pixel)
+            for q_pos in range(len(self.quantile_locs)):
+                
+                weighted_fcst_quantiles[q_pos, ...] = uniform_filter(quantiles_for_time_period['fcst_quantiles'][q_pos, ...], size=filter_size, mode='reflect')
+                weighted_obs_quantiles[q_pos, ...] = uniform_filter(quantiles_for_time_period['obs_quantiles'][q_pos, ...], size=filter_size, mode='reflect')
+    
+            # Use smoothed quantiles to transform forecast values
             for lat_index in range(lat_dim):
                 for lon_index in range(lon_dim):
                 
-                    obs_quantiles, fcst_quantiles = self.get_weighted_quantiles(lat_index, lon_index, area_centres, quantiles_for_time_period)
+                    obs_quantiles, fcst_quantiles = weighted_obs_quantiles[:,lat_index, lon_index], weighted_fcst_quantiles[:,lat_index, lon_index]
 
                     tmp_fcst_array = fcst[d_ix, lat_index, lon_index].copy()
                     
@@ -337,6 +350,7 @@ class QuantileMapper():
                     fcst_corrected[d_ix,lat_index,lon_index] = tmp_fcst_array
 
         return fcst_corrected
+
 
 
 def get_exponential_tail_params(data, percentile_threshold=0.9999):

@@ -9,7 +9,7 @@ from scipy.stats import pearsonr
 HOME = Path(__file__).parents[1]
 data_folder = HOME / 'system_tests' / 'data'
 
-from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map, quantile_map_grid
+from dsrnngan.evaluation.benchmarks import QuantileMapper, QuantileMapper_old, empirical_quantile_map, quantile_map_grid
 
 sys.path.append(str(HOME))
 
