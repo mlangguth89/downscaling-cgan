@@ -244,6 +244,7 @@ def eval_one_chkpt(*,
     correlation_fcst_all = []
     csi_fcst_all = []
     csi_all = []
+    max_bias_all = []
 
     tpidx = data_config.input_fields.index('tp')
     
@@ -318,6 +319,9 @@ def eval_one_chkpt(*,
         # critical success index
         csi_all.append(critical_success_index(obs, samples_gen[:,:,0], threshold=1.0))
         csi_fcst_all.append(critical_success_index(obs, fcst, threshold=1.0))
+        
+        # Max difference
+        max_bias_all.append((samples_gen - obs).max())
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(obs)
@@ -397,6 +401,7 @@ def eval_one_chkpt(*,
     point_metrics['corr'] = np.mean(corr_all)
     point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
     point_metrics['csi'] = np.mean(csi_all)
+    point_metrics['max_bias'] = np.mean(max_bias_all)
     
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)

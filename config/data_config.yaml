@@ -2,7 +2,6 @@ data_paths: "BLUE_PEBBLE"  # Choose which paths version to use in PATHS
 fcst_data_source: "ifs"
 obs_data_source: "imerg"
 normalisation_year: 2017
-constant_fields: 2
 input_image_width: 264 # Assumes a square image
 num_samples: 320000
 num_samples_per_image: 1
@@ -35,6 +34,9 @@ input_fields:
     - w200
     - w500
     - w700
+constant_fields:
+    - lsm
+    - orography
 paths:
   BLUE_PEBBLE:
       GENERAL:
@@ -43,6 +45,8 @@ paths:
           IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
           OROGRAPHY: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/h_HRES_EAfrica.nc'
           LSM: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lsm_HRES_EAfrica.nc'
+          LAKES: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lake_mask.nc'
+          SEA: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/sea_mask.nc'
           CONSTANTS: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants'
       TFRecords:
           tfrecords_path: '/user/work/uz22147/tfrecords/'

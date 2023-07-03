@@ -146,9 +146,14 @@ def main(restart: bool,
             }
         )
     
+    # For backwards compatability
+    if isinstance(data_config.constant_fields, int):
+        data_config.constant_fields = ['lsm', 'orography']
+    num_constant_fields = len(data_config.constant_fields)
+            
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.constant_fields)
+    constants_image_shape = (data_config.input_image_width, data_config.input_image_width, num_constant_fields)
     
     if training_weights is None:
         training_weights = model_config.train.training_weights
@@ -202,7 +207,7 @@ def main(restart: bool,
             architecture=model_config.architecture,
             downscaling_steps=model_config.downscaling_steps,
             input_channels=data_config.input_channels,
-            constant_fields=data_config.constant_fields,
+            constant_fields=num_constant_fields,
             latent_variables=model_config.generator.latent_variables,
             filters_gen=model_config.generator.filters_gen,
             filters_disc=model_config.discriminator.filters_disc,
@@ -274,7 +279,8 @@ def main(restart: bool,
                                          checkpoint=checkpoint,
                                          steps_per_checkpoint=model_config.train.steps_per_checkpoint,
                                          plot_samples=model_config.val.val_size,
-                                         plot_fn=plot_fname)
+                                         plot_fn=plot_fname,
+                                         training_ratio=model_config.train.training_ratio)
 
             training_samples += model_config.train.steps_per_checkpoint * model_config.train.batch_size
             checkpoint += 1

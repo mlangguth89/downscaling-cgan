@@ -17,7 +17,8 @@ def train_model(*,
                 do_plot=False,
                 plot_samples=8,
                 plot_fn=None,
-                log_folder=None):
+                log_folder=None,
+                training_ratio=5):
 
     for cond, _, _ in batch_gen_train.take(1).as_numpy_iterator():
         img_shape = cond.shape[1:-1]
@@ -28,7 +29,7 @@ def train_model(*,
         noise_shape = (img_shape[0], img_shape[1], noise_channels)
         noise_gen = noise.NoiseGenerator(noise_shape, batch_size=batch_size)
         loss_log = model.train(batch_gen_train, noise_gen,
-                               steps_per_checkpoint, training_ratio=5)
+                               steps_per_checkpoint, training_ratio=training_ratio)
 
     elif mode == 'VAEGAN':
         noise_shape = (img_shape[0], img_shape[1], latent_variables)

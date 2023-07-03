@@ -90,8 +90,11 @@ def get_geoaxes(*args, **kwargs):
     
     return fig, ax
 
-def plot_contourf(ax, data, title, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
+def plot_contourf( data, title, ax=None, value_range=None, lon_range=default_longitude_range, lat_range=default_latitude_range,
                   cmap='Reds', extend: str='both', add_borders=True):
+    
+    if ax is None:
+        fig, ax = get_geoaxes(1,1)
     
     if value_range is not None:
         im = ax.contourf(lon_range, lat_range, data, transform=ccrs.PlateCarree(),

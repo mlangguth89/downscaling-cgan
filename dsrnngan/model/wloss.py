@@ -46,6 +46,29 @@ def ensmean_MSE_weighted(y_true, y_pred, threshold: float=25.0):
     
     return tf.reduce_mean(sq_diff * weights)
 
+def ensmean_MSE_weighted_clipped(y_true, y_pred, threshold: float=25.0):
+    
+    pred_mean = tf.reduce_mean(y_pred, axis=0)
+    y_true_squ = tf.squeeze(y_true, axis=-1)
+    sq_diff = tf.math.squared_difference(pred_mean, y_true_squ)
+    
+    weights = tf.math.minimum(y_true_squ + tf.constant([1.0]), tf.constant([threshold]))
+    
+    return tf.reduce_mean(sq_diff * weights)
+
+def ensmean_MSE_phys_weighted(y_true, y_pred, threshold=50.0):
+    y_true = denormalise(y_true)
+    y_pred = denormalise(y_pred)
+    
+    pred_mean = tf.reduce_mean(y_pred, axis=0)
+    y_true_squ = tf.squeeze(y_true, axis=-1)
+    
+    weights = tf.math.minimum(y_true_squ + tf.constant([1.0], dtype=tf.float32), tf.constant([threshold], dtype=tf.float32))
+
+    sq_diff = tf.math.squared_difference(pred_mean, y_true_squ)
+
+    return  tf.reduce_mean(sq_diff * weights)
+
 def ensmean_MSE_phys(y_true, y_pred):
     y_true = denormalise(y_true)
     y_pred = denormalise(y_pred)
@@ -56,7 +79,9 @@ CL_OPTIONS_DICT = {"CRPS": sample_crps,
             "CRPS_phys": sample_crps_phys,
             "ensmeanMSE": ensmean_MSE,
             "ensmeanMSE_phys": ensmean_MSE_phys,
-            "ensmeanMSE_weighted": ensmean_MSE_weighted}
+            "ensmeanMSE_weighted": ensmean_MSE_weighted,
+            "ensmeanMSE_weighted_clipped": ensmean_MSE_weighted_clipped,
+            "ensmeanMSE_phys_weighted": ensmean_MSE_phys_weighted}
 
 def CL_chooser(CLtype):
     return CL_OPTIONS_DICT[CLtype]

@@ -43,6 +43,7 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     model_config.train.kl_weight = float(model_config.train.kl_weight)
     model_config.train.content_loss_weight = float(model_config.train.content_loss_weight)
     model_config.train.ensemble_size = model_config_dict['train'].get('ensemble_size')
+    model_config.train.training_ratio = model_config_dict['train'].get('training_ratio', 5)
 
     model_config.val.val_range = model_config_dict['val'].get('val_range')
     model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")
@@ -77,8 +78,10 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
     
     return data_config_ns
 
-def get_data_paths(config_folder: str=CONFIG_FOLDER):
-    data_config = read_data_config(config_folder=config_folder)
+def get_data_paths(config_folder: str=CONFIG_FOLDER, data_config=None):
+    
+    if data_config is None:
+        data_config = read_data_config(config_folder=config_folder)
     data_paths = data_config.paths[data_config.data_paths]
     return data_paths
 

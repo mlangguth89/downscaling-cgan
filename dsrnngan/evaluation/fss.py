@@ -108,7 +108,7 @@ def plot_fss_curves(*,
                                          batch_size=batch_size,
                                          normalise=True,
                                          shuffle=True,
-                                         constants=True,
+                                         constant_fields=True,
                                          hour='random',
                                          downsample=downsample)
 
@@ -125,7 +125,7 @@ def plot_fss_curves(*,
                                             batch_size=batch_size,
                                             normalise=False,
                                             shuffle=True,
-                                            constants=True,
+                                            constant_fields=True,
                                             hour="random")
         tpidx = input_fields.index('tp')
 

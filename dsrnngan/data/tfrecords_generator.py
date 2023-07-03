@@ -12,6 +12,7 @@ import git
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data.data import file_exists, denormalise
 from dsrnngan.utils.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
+from dsrnngan.utils.read_config import get_data_paths
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.DEBUG)
@@ -297,17 +298,9 @@ def _float_feature(list_of_floats: list):  # float32
 
 def write_data(year_month_range: list,
                data_label: str,
-               forecast_data_source: str, 
-               observational_data_source: str,
                hours: list,
-               num_class: int=4,
-               normalise: bool=True,
-               data_paths: dict=DATA_PATHS,
-               constants: bool=True,
-               latitude_range: list=None,
-               longitude_range: list=None,
-               debug: bool=False,
                data_config: dict=None,
+               debug: bool=False,
                num_shards: int=1) -> str:
     """
     Function to write training data to TF records
@@ -318,11 +311,7 @@ def write_data(year_month_range: list,
         forecast_data_source (str): Source of forecast data (e.g. ifs)
         observational_data_source (str): Source of observational data (e.g. imerg)
         hours (list): List of hours to include
-        num_class (int, optional): Number of classes to split data into. Defaults to 4.
-        normalise (bool, optional): Whether or not to normalise the input data. Defaults to True.
         data_paths (dict, optional): Dict of paths to the data sources. Defaults to DATA_PATHS.
-        constants (bool, optional): Whether or not to include constants. Defaults to True.
-        latitude_range (list, optional): Latitude range to use. Defaults to None.
         longitude_range (list, optional): Longitude range to use. Defaults to None.
         debug (bool, optional): Debug mode. Defaults to False.
         config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
@@ -334,22 +323,27 @@ def write_data(year_month_range: list,
 
     from .data_generator import DataGenerator
     logger.info('Start of write data')
-    logger.info(locals())     
+    logger.info(locals())
+    
+    if not data_config:
+        data_config = read_config.read_config(config_filename='data_config.yaml')
+
+    data_paths=get_data_paths(data_config=data_config)
+    records_folder = data_paths['TFRecords']["tfrecords_path"]
+    
+    latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
+    longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size)
       
     dates = date_range_from_year_month_range(year_month_range)
     start_date = dates[0]
-    dates = [item for item in dates if file_exists(data_source=forecast_data_source, year=item.year,
+    dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
                                                         month=item.month, day=item.day,
                                                         data_paths=data_paths)]
     if dates:
         if not dates[0] == start_date and not debug:
             # Means there likely isn't forecast data for the day before
             dates = dates[1:]
-            
-        records_folder = data_paths["TFRecords"]["tfrecords_path"]
-        
-        if not data_config:
-            data_config = read_config.read_config(config_filename='data_config.yaml')
+      
         
         if data_config.class_bin_boundaries is not None:
             print(f'Data will be bundled according to class bin boundaries provided: {data_config.class_bin_boundaries}')
@@ -385,14 +379,15 @@ def write_data(year_month_range: list,
             print('Hour = ', hour)
             start_time = time.time()
             dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
-                                forecast_data_source=forecast_data_source, 
-                                observational_data_source=observational_data_source,
+                                forecast_data_source=data_config.fcst_data_source, 
+                                observational_data_source=data_config.obs_data_source,
                                 data_paths=data_paths,
                                 batch_size=1,
                                 shuffle=False,
-                                constants=constants,
+                                constant_fields=data_config.constant_fields,
+                                fields=data_config.input_fields,
                                 hour=hour,
-                                normalise=normalise,
+                                normalise=data_config.normalise,
                                 longitude_range=longitude_range,
                                 latitude_range=latitude_range)
             print(f'Data generator initialization took {time.time() - start_time}')
@@ -401,7 +396,7 @@ def write_data(year_month_range: list,
             
             if dates:
                 fle_hdles = {}
-                for cl in range(num_class):
+                for cl in range(data_config.num_classes):
                     fle_hdles[cl] = []
                     for shard in range(num_shards):
                         flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
@@ -442,7 +437,7 @@ def write_data(year_month_range: list,
                             
                             if sample[0]['hi_res_inputs'][k, 
                                                                idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, data_config.constant_fields):
+                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, len(data_config.constant_fields)):
                                 raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
        
                             # Check no Null values
@@ -476,7 +471,7 @@ def write_data(year_month_range: list,
                                 else:
                                     clss = len(data_config.class_bin_boundaries) 
                             else:
-                                clss = random.choice(range(num_class))
+                                clss = random.choice(range(data_config.num_classes))
                                 
                             # Choose random shard
                             fh = random.choice(fle_hdles[clss])
@@ -575,20 +570,8 @@ if __name__ == '__main__':
             if hasattr(model_config.eval, 'eval_range'):
                 eval_range =  [str(item) for item in model_config.eval.eval_range]
     
-    data_paths = DATA_PATHS
-    if args.records_folder:
-        data_paths['TFRecords']['tfrecords_path'] = args.records_folder
-    
     write_train_test_data(training_range=training_range,
-                          validation_range=val_range,
-                          test_range=eval_range,
-                          data_config=data_config,
-                            forecast_data_source=data_config.fcst_data_source, 
-                            observational_data_source=data_config.obs_data_source,
-                            hours=args.fcst_hours,
-                            num_class=data_config.num_classes,
-                            normalise=data_config.normalise,
-                            data_paths=data_paths,
-                            constants=data_config.load_constants,
-                            latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size),
-                            longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size))
+                            validation_range=val_range,
+                            test_range=eval_range,
+                            data_config=data_config,
+                            hours=args.fcst_hours)

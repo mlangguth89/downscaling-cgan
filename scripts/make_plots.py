@@ -50,10 +50,10 @@ metric_dict = {'examples': False,
                'quantiles': False,
                'hist': False,
                'crps': False,
-               'fss': False,
+               'fss': True,
                'diurnal': False,
                'confusion_matrix': False,
-               'csi': True
+               'csi': False
                }
 
 plot_persistence = False
@@ -160,10 +160,10 @@ for k, v in special_areas.items():
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
 
-with open(os.path.join(log_folder, f'fcst_qmap_2.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, f'fcst_qmap_20.pkl'), 'rb') as ifh:
     fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, f'cgan_qmap_6.pkl'), 'rb') as ifh:
     cgan_corrected = pickle.load(ifh)
     
 # clip values at 200mm/hr
@@ -361,7 +361,7 @@ if metric_dict['spread_error']:
     print('*********** Plotting spread error **********************')
     plt.rcParams.update({'font.size': 20})
     
-    upper_percentile = 99.9
+    upper_percentile = 99
     quantile_step_size = (100-upper_percentile) / 100
     
     data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
@@ -645,7 +645,7 @@ if metric_dict['fss']:
 
     # get quantiles
 
-    hourly_thresholds = [0.1, 1, 10, 20, 50]
+    hourly_thresholds = [1, 5, 10, 20, 50]
 
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 

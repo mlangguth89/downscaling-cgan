@@ -155,7 +155,7 @@ class TestLoad(unittest.TestCase):
 
         latitude_vals = np.arange(-1, 1, 0.1)
         longitude_vals = np.arange(33, 34, 0.1)
-        lsm = load_land_sea_mask(lsm_path=lsm_path, latitude_vals=latitude_vals, 
+        lsm = load_land_sea_mask(filepath=lsm_path, latitude_vals=latitude_vals, 
                                 longitude_vals=longitude_vals)
         self.assertIsInstance(lsm, np.ndarray)
         shape = lsm.shape
@@ -180,7 +180,7 @@ class TestLoad(unittest.TestCase):
 
         # latitude_vals = np.arange(-1, 1, 0.1)
         # longitude_vals = np.arange(33, 34, 0.1)
-        h = load_orography(oro_path=oro_path,  latitude_vals=latitude_vals, 
+        h = load_orography(filepath=oro_path,  latitude_vals=latitude_vals, 
                                 longitude_vals=longitude_vals,
                                 interpolate=False)
         self.assertIsInstance(h, np.ndarray)
@@ -198,14 +198,19 @@ class TestLoad(unittest.TestCase):
         lsm_path = data_folder / 'constants' / 'lsm_HRES_EAfrica.nc'
         oro_path = data_folder / 'constants' / 'h_HRES_EAfrica.nc'
         
+        data_paths = {'lsm': lsm_path, 'orography': oro_path, 'lakes': lsm_path,
+                      'sea': lsm_path}
+        
         latitude_vals = np.arange(-1, 1, 0.1)
         longitude_vals = np.arange(33, 34, 0.1)
         batch_size = 4
         
-        c = load_hires_constants(oro_path=oro_path, lsm_path=lsm_path,
+        fields = ['lsm', 'orography', 'lakes', 'sea']
+        c = load_hires_constants( fields=fields,
+                                    data_paths=data_paths,
                                  batch_size=batch_size, latitude_vals=latitude_vals, 
                                  longitude_vals=longitude_vals)
-        self.assertEqual(c.shape, (batch_size, len(latitude_vals), len(longitude_vals), 2))
+        self.assertEqual(c.shape, (batch_size, len(latitude_vals), len(longitude_vals), len(fields)))
         
         # check values between 0 and 1
         self.assertLessEqual(c.max(), 1.0)

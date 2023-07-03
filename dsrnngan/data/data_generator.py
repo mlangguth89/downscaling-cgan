@@ -12,7 +12,7 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
     def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, fields: list=None, data_paths: dict=DATA_PATHS,
-                 shuffle: bool=True, constants: bool=True, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
+                 shuffle: bool=True, constant_fields: bool=True, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
                  latitude_range: Iterable[float]=None, normalise: bool=True,
                  downsample: bool=False, repeat_data: bool=False, seed: int=None):
         
@@ -57,6 +57,7 @@ class DataGenerator(Sequence):
         self.repeat_data = repeat_data
 
         self.fcst_fields = input_fields if fields is None else fields
+        self.constant_fields = constant_fields
         self.shuffle = shuffle
         self.hour = hour
         self.normalise = normalise
@@ -68,17 +69,15 @@ class DataGenerator(Sequence):
             # read downscaling factor from file
                 self.ds_factor = read_model_config().downscaling_factor
         
-        if not constants:
+        if self.constant_fields is None:
             # Dummy constants
             self.constants = np.ones((self.batch_size, len(self.latitude_range), len(self.longitude_range), 1))
-        elif constants is True:
-            self.constants = load_hires_constants(self.batch_size,
-                                                  lsm_path=data_paths['GENERAL']['LSM'], 
-                                                  oro_path=data_paths['GENERAL']['OROGRAPHY'],
-                                                  latitude_vals=latitude_range, longitude_vals=longitude_range)
         else:
-            self.constants = np.repeat(constants, self.batch_size, axis=0)
-
+            self.constants = load_hires_constants(
+                                                  fields=self.constant_fields,
+                                                  data_paths=data_paths['GENERAL'],
+                                                  batch_size=self.batch_size,
+                                                  latitude_vals=latitude_range, longitude_vals=longitude_range)
     def __len__(self):
         # Number of batches in dataset
         return len(self.dates) // self.batch_size

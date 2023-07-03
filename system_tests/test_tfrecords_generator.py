@@ -16,6 +16,7 @@ sys.path.append(str(HOME))
 
 from dsrnngan.data.tfrecords_generator import write_data, create_dataset
 from dsrnngan.data.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
+from dsrnngan.utils.read_config import read_data_config
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -32,29 +33,40 @@ class TestTfrecordsGenerator(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             
             test_data_dir = HOME / 'system_tests' / 'data'
-            
-            data_paths = {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
+            data_config = {'data_paths': 'BLUE_PEBBLE', 
+             'fcst_data_source': 'ifs', 
+             'obs_data_source': 'imerg', 
+             'normalisation_year': 2017, 
+             'input_image_width': 10, 
+             'num_samples': 3, 
+             'num_samples_per_image': 1, 
+             'normalise': True,
+             'num_classes': 4, 
+             'min_latitude': -1.95, 
+             'max_latitude': 1.95, 
+             'latitude_step_size': 0.1, 
+             'min_longitude': 32.05, 
+             'max_longitude': 34.95, 
+             'longitude_step_size': 0.1, 
+             'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
+             'constant_fields': ['lakes', 'sea', 'orography'], 
+             'paths': {'BLUE_PEBBLE':
+                 {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
                                     'IFS': str(test_data_dir / 'IFS'),
                                     'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
                                     'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
+                                    'LAKES': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
+                                    'SEA':  str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
                                     'CONSTANTS': str(test_data_dir / 'constants')},
-                          'TFRecords': {'tfrecords_path': tmpdirname}}            
+                          'TFRecords': {'tfrecords_path': tmpdirname}}}}   
 
+            data_config_ns = read_data_config(data_config_dict=data_config)
+               
             output_dir = write_data(['201707', '201712'],
                                     data_label='train',
-                    forecast_data_source='ifs', 
-                    observational_data_source='imerg',
                     hours=[18],
-                    img_chunk_width=10,
-                    img_size=10,
-                    num_class=4,
-                    log_precip=True,
-                    fcst_norm=True,
-                    scaling_factor=1,
-                    data_paths=data_paths,
-                    debug=True,
-                    latitude_range=np.arange(0.05, 1.05, 0.1),
-                    longitude_range=np.arange(33.05, 34.05, 0.1))
+                    data_config=data_config_ns,
+                    debug=True)
             files_0 = glob(os.path.join(output_dir, '*train*'))
             self.assertGreater(len(files_0), 0)
             

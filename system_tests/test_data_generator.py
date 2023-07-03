@@ -42,7 +42,7 @@ class TestDataGenerator(unittest.TestCase):
         
         data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                    shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                    shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
                                     latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None)
         
@@ -65,7 +65,7 @@ class TestDataGenerator(unittest.TestCase):
         
         data_gen = DataGenerator(date_range, batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                 shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                 shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
                                  latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None, repeat_data=False)
         
@@ -73,7 +73,7 @@ class TestDataGenerator(unittest.TestCase):
         
         repeat_data_gen = DataGenerator(date_range, batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                 shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                 shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
                                  latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None, repeat_data=True)
         
@@ -88,7 +88,7 @@ class TestDataGenerator(unittest.TestCase):
         
         data_gen = DataGenerator(date_range, batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                 shuffle=False, constants=True, hour=hours, longitude_range=longitude_vals,
+                                 shuffle=False, constant_fields=True, hour=hours, longitude_range=longitude_vals,
                                  latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None, repeat_data=False)
         
@@ -101,7 +101,7 @@ class TestDataGenerator(unittest.TestCase):
         # create data first
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]
         data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], 1, forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                    shuffle=False, constants=True, hour=17, longitude_range=longitude_vals,
+                                    shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
                                     latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=5)
         

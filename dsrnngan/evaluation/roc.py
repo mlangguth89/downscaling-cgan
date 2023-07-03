@@ -80,7 +80,7 @@ def calculate_roc(*,
                                          batch_size=batch_size,
                                          normalise=True,
                                          shuffle=True,
-                                         constants=True,
+                                         constant_fields=True,
                                          hour='random',
                                          downsample=downsample)
 
@@ -98,7 +98,7 @@ def calculate_roc(*,
                                             batch_size=batch_size,
                                             normalise=False,
                                             shuffle=True,
-                                            constants=True,
+                                            constant_fields=True,
                                             hour="random")
         tpidx = all_fcst_fields.index('tp')
 

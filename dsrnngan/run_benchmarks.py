@@ -43,7 +43,7 @@ data_benchmarks = DataGeneratorFull(dates=dates,
                                     batch_size=batch_size,
                                     noralise=False,  # no need to denormalise data
                                     shuffle=True,
-                                    constants=True,
+                                    constant_fields=True,
                                     hour='random',
                                     fcst_norm=False)
 

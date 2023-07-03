@@ -41,6 +41,8 @@ parser.add_argument('--save-data', action='store_true', help='save data')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
 
+if not args.plot and not args.save_data:
+    raise ValueError('Either --plot or --save-data must be specified')
 
 ###########################
 # Load model data
@@ -273,7 +275,13 @@ if args.plot:
         
         fcst_key = 'GAN' if 'GAN' in quantile_data_dict else 'Fcst'
         
-        plot_quantiles(quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile,
+        quantile_format_dict = {'GAN': {'color': 'b', 'marker': '+', 'alpha': 1},
+                    'Obs (IMERG)': {'color': 'k'},
+                    'Fcst': {'color': 'r', 'marker': '+', 'alpha': 1},
+                    'Fcst + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
+                    'GAN + qmap': {'color': 'b', 'marker': 'o', 'alpha': 0.7}}
+        
+        plot_quantiles(quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile, format_lookup=quantile_format_dict,
                        save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_n{args.num_lat_lon_chunks}_total.pdf'))
 
         # Q-Q plot for areas
@@ -291,7 +299,7 @@ if args.plot:
                 local_quantile_data_dict[k]['data'] = local_quantile_data_dict[k]['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]]
             
             try:
-                plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile,
+                plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile,  format_lookup=quantile_format_dict,
                                save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_n{args.num_lat_lon_chunks}_{area}.pdf'))
                 ax[n].set_title(area)
             except:

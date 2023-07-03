@@ -53,6 +53,7 @@ all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950',
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
                   'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
 input_fields = data_config.input_fields
+constant_fields = data_config.constant_fields
 all_fcst_hours = np.array(range(24))
 
 # TODO: change this to behave like the IFS data load (to allow other vals of v, u etc)
@@ -293,9 +294,7 @@ def file_exists(data_source: str, year: int,
                 
 def filter_by_lat_lon(ds: xr.Dataset, 
                       lon_range: list, 
-                      lat_range: list, 
-                      lon_var_name:str='lon', 
-                      lat_var_name:str ='lat'):
+                      lat_range: list):
     """
     Filter dataset by latitude / longitude range
 
@@ -357,8 +356,7 @@ def interpolate_dataset_on_lat_lon(ds: xr.Dataset,
     
     # Filter to correct lat/lon range (faster this way)
     # Add a buffer around it for interpolation
-    ds = filter_by_lat_lon(ds, [min_lon - 2, max_lon+2], [min_lat - 2, max_lat +2], 
-                      lon_var_name=lon_var_name, lat_var_name=lat_var_name)
+    ds = filter_by_lat_lon(ds, [min_lon - 2, max_lon+2], [min_lat - 2, max_lat +2])
 
     # check enough data to interpolate
     min_actual_lat = min(ds.coords[lat_var_name].values)
@@ -467,7 +465,7 @@ def load_observational_data(data_source: str, *args, **kwargs):
         raise NotImplementedError(f'Data source {data_source} not implemented yet')
 
 
-def load_orography(oro_path: str=OROGRAPHY_PATH, 
+def load_orography(filepath: str=OROGRAPHY_PATH, 
                    latitude_vals: list=None, 
                    longitude_vals: list=None,
                    interpolate: bool=True):
@@ -475,7 +473,7 @@ def load_orography(oro_path: str=OROGRAPHY_PATH,
     Load orography values
 
     Args:
-        oro_path (str, optional): path to orography data. Defaults to OROGRAPHY_PATH.
+        filepath (str, optional): path to orography data. Defaults to OROGRAPHY_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
         interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
@@ -483,7 +481,7 @@ def load_orography(oro_path: str=OROGRAPHY_PATH,
     Returns:
         np.ndarray: orography data array
     """
-    ds = xr.load_dataset(oro_path)
+    ds = xr.load_dataset(filepath)
     
     # Note that this assumes the orography is somewhat filtered already 
     # If it is worldwide orography then normalised values will probably be too small!
@@ -508,7 +506,7 @@ def load_orography(oro_path: str=OROGRAPHY_PATH,
 
     return h_vals
 
-def load_land_sea_mask(lsm_path=LSM_PATH, 
+def load_land_sea_mask(filepath=LSM_PATH, 
                        latitude_vals=None, 
                        longitude_vals=None,
                        interpolate=True):
@@ -516,7 +514,7 @@ def load_land_sea_mask(lsm_path=LSM_PATH,
     Load land-sea mask values
 
     Args:
-        lsm_path (str, optional): path to land-sea masj data. Defaults to LSM_PATH.
+        filepath (str, optional): path to land-sea masj data. Defaults to LSM_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
         interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
@@ -524,7 +522,7 @@ def load_land_sea_mask(lsm_path=LSM_PATH,
     Returns:
         np.ndarray: land-sea mask data array
     """
-    ds = xr.load_dataset(lsm_path)
+    ds = xr.load_dataset(filepath)
     
     if latitude_vals is not None and longitude_vals is not None:
         if interpolate:
@@ -542,8 +540,11 @@ def load_land_sea_mask(lsm_path=LSM_PATH,
     
     return lsm
 
-def load_hires_constants(batch_size: int=1, lsm_path: str=LSM_PATH, 
-                         oro_path: str=OROGRAPHY_PATH,
+
+def load_hires_constants(
+                         fields: Iterable,
+                         data_paths: dict,
+                         batch_size: int=1,
                          latitude_vals: list=None, 
                          longitude_vals: list=None):
     """
@@ -561,17 +562,27 @@ def load_hires_constants(batch_size: int=1, lsm_path: str=LSM_PATH,
     Returns:
         np.ndarray: array of data
     """
-    # LSM 
-    lsm = load_land_sea_mask(lsm_path=lsm_path, latitude_vals=latitude_vals,
-                             longitude_vals=longitude_vals)
-    lsm= np.expand_dims(lsm, axis=0) # Need to expand so that dims are consistent with other data
-
-    # Orography
-    z = load_orography(oro_path=oro_path, latitude_vals=latitude_vals, 
-                       longitude_vals=longitude_vals)
-    z = np.expand_dims(z, axis=0)
     
-    return np.repeat(np.stack([z, lsm], axis=-1), batch_size, axis=0)
+    function_lookup = {'lsm': load_land_sea_mask,
+                       'orography': load_orography,
+                       'lakes': load_land_sea_mask,
+                       'sea': load_land_sea_mask}
+    
+    unrecognised_fields = [f for f in fields if f not in function_lookup]
+
+    if len(unrecognised_fields) > 0:
+        raise ValueError(f'Unrecognised constant field names: {unrecognised_fields}')
+    
+    constant_data = []
+    for field in fields:
+        tmp_array = function_lookup[field.lower()](filepath=data_paths[field.upper()],
+                                                            latitude_vals=latitude_vals,
+                                                            longitude_vals=longitude_vals)
+        tmp_array = np.expand_dims(tmp_array, axis=0)
+        
+        constant_data.append(tmp_array)
+    
+    return np.repeat(np.stack(constant_data, axis=-1), batch_size, axis=0)
 
 
 ### These functions work with IFS / Nimrod.
@@ -614,7 +625,7 @@ def load_fcst_radar_batch(batch_dates: Iterable,
     if (not constants):
         return np.array(batch_x), np.array(batch_y)
     else:
-        return [np.array(batch_x), load_hires_constants(len(batch_dates))], np.array(batch_y)
+        return [np.array(batch_x), load_hires_constants(batch_size=len(batch_dates))], np.array(batch_y)
 
 def get_ifs_filepath(field: str, loaddate: datetime, 
                      loadtime: int, fcst_dir: str=IFS_PATH):

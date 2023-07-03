@@ -61,7 +61,7 @@ def setup_full_image_dataset(year_month_range,
                              fcst_data_source,
                              obs_data_source,
                              fcst_fields,
-                             load_constants,
+                             constant_fields,
                              data_paths,
                              latitude_range,
                              longitude_range,
@@ -85,7 +85,7 @@ def setup_full_image_dataset(year_month_range,
                                   longitude_range=longitude_range,
                                   batch_size=batch_size,
                                   shuffle=shuffle,
-                                  constants=load_constants,
+                                  constant_fields=constant_fields,
                                   normalise=True,
                                   downsample=downsample,
                                   data_paths=data_paths,
@@ -106,7 +106,7 @@ def setup_data(fcst_data_source: str,
                fcst_shape: tuple[int]=(20, 20, 9),
                con_shape: tuple[int]=(200, 200, 1),
                out_shape: tuple[int]=(200, 200, 1),
-               load_constants: bool=True, # If True will load constants data
+               constant_fields: list=None, # If True will load constants data
                weights: Iterable=None,
                batch_size: int=None,
                load_full_image: bool=False,
@@ -131,7 +131,7 @@ def setup_data(fcst_data_source: str,
         fcst_shape (tuple[int], optional): _description_. Defaults to (20, 20, 9).
         con_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
         out_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
-        load_constants (bool, optional): _description_. Defaults to True.
+        constant_fields (list, optional): _description_. Defaults to None.
         batch_size (int, optional): _description_. Defaults to None.
         load_full_image (bool, optional): _description_. Defaults to False.
         seed (int, optional): _description_. Defaults to None.
@@ -155,7 +155,7 @@ def setup_data(fcst_data_source: str,
                                           longitude_range=longitude_range,
                                           batch_size=batch_size,
                                           downsample=downsample,
-                                          load_constants=load_constants,
+                                          constant_fields=constant_fields,
                                           data_paths=data_paths,
                                           hour=hour,
                                           shuffle=shuffle)
@@ -170,7 +170,7 @@ def setup_data(fcst_data_source: str,
                                           longitude_range=longitude_range,
                                           batch_size=batch_size,
                                           downsample=downsample,
-                                          load_constants=load_constants,
+                                          constant_fields=constant_fields,
                                           data_paths=data_paths,
                                           hour=hour,
                                           shuffle=shuffle)
@@ -312,7 +312,7 @@ if __name__=='__main__':
         data_gen = setup_full_image_dataset(ym_range,
                                 fcst_data_source=fcst_data_source,
                                 obs_data_source=obs_data_source,
-                                load_constants=True,
+                                constant_fields=True,
                                 data_paths=DATA_PATHS,
                                 latitude_range=DEFAULT_LATITUDE_RANGE,
                                 longitude_range=DEFAULT_LONGITUDE_RANGE,
