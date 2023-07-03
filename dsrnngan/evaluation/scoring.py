@@ -73,71 +73,72 @@ def f1(c):
     
     return f1
 
-def hit_rate(c):
-    return recall(c)
 
-def false_alarm_rate(c):
-    return c[0][1] / (c[1][0] + c[1][1])
 
 def _pierce_skill_score(c):
     return hit_rate(c) - false_alarm_rate(c)
-
-def _equitable_threat_score(c):
-    total = np.array(c).sum()
     
-    hits = c[1][1]
-    misses = c[1][0]
-    false_alarms = c[0][1]
+def get_contingency_table_values(y_true: np.ndarray, y_pred: np.ndarray, threshold: float, mask: np.ndarray=None):
     
-    hits_random = (hits + misses)*(hits + false_alarms) / total
-    ets = (hits - hits_random) / (hits + misses + false_alarms - hits_random)
+    if mask is not None:
+        y_true = y_true[mask].flatten()
+        y_pred = y_pred[mask].flatten()
+    else:     
+        y_true = y_true.flatten()
+        y_pred = y_pred.flatten()
+        
+    y_true_int = (y_true > threshold).astype(np.int32)
+    not_y_true_int = (y_true <= threshold).astype(np.int32)
+    y_pred_int = (y_pred > threshold).astype(np.int32)
+    not_y_pred_int = (y_pred <= threshold).astype(np.int32)
     
-    return ets
+    hits = np.multiply(y_true_int, y_pred_int).sum()
+    misses = np.multiply(y_true_int, not_y_pred_int).sum()
+    false_alarms = np.multiply(not_y_true_int, y_pred_int).sum()
+    correct_negatives = np.multiply(not_y_true_int, not_y_pred_int).sum()
     
-
-def _csi(c):
-       
-    return c[1][1] / (c[1][1] + c[0][1] + c[1][0])
-
+    output_dict = {
+            'hits': hits,
+            'misses': misses,
+            'false_alarms': false_alarms,
+            'hits_random': (hits + misses)*(hits + false_alarms) / y_true.size,
+            'correct_negatives': correct_negatives
+            }
+    
+    return output_dict
 
 def critical_success_index(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     
-    y_true_int = (y_true > threshold).astype(np.int32)
-    not_y_true_int = (y_true <= threshold).astype(np.int32)
-    y_pred_int = (y_pred > threshold).astype(np.int32)
-    not_y_pred_int = (y_pred <= threshold).astype(np.int32)
+    vals = get_contingency_table_values(y_true, y_pred, threshold)
 
-    hits = np.multiply(y_true_int, y_pred_int).sum()
-    misses = np.multiply(y_true_int, not_y_pred_int).sum()
-    false_alarms = np.multiply(not_y_true_int, y_pred_int).sum()
-
-    if hits + misses + false_alarms == 0:
+    if vals['hits'] + vals['misses'] + vals['false_alarms'] == 0:
         csi = np.nan
     else:
-        csi = hits / (hits + misses + false_alarms)
+        csi = vals['hits'] / (vals['hits'] + vals['misses'] + vals['false_alarms'])
 
     return csi
 
-def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
+def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold: float, mask=None):
     
-    y_true_int = (y_true > threshold).astype(np.int32)
-    not_y_true_int = (y_true <= threshold).astype(np.int32)
-    y_pred_int = (y_pred > threshold).astype(np.int32)
-    not_y_pred_int = (y_pred <= threshold).astype(np.int32)
+    vals = get_contingency_table_values(y_true, y_pred, threshold=threshold, mask=mask)
 
-    hits = np.multiply(y_true_int, y_pred_int).sum()
-    misses = np.multiply(y_true_int, not_y_pred_int).sum()
-    false_alarms = np.multiply(not_y_true_int, y_pred_int).sum()
-    
-    
-    hits_random = (hits + misses)*(hits + false_alarms) / y_true.size
-
-    if hits + misses + false_alarms + hits_random == 0:
+    if vals['hits'] + vals['misses'] + vals['false_alarms'] + vals['hits_random'] == 0:
         ets = np.nan
     else:
-        ets = (hits - hits_random) / (hits + misses + false_alarms - hits_random)
+        ets = (vals['hits'] - vals['hits_random'] ) / (vals['hits'] + vals['misses'] + vals['false_alarms'] - vals['hits_random'])
 
     return ets
+
+def hit_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
+    
+    vals = get_contingency_table_values(y_true, y_pred, threshold)
+    
+    return vals['hits'] / (vals['hits'] + vals['misses'])
+
+def false_alarm_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
+    vals = get_contingency_table_values(y_true, y_pred, threshold)
+    
+    return vals['false_alarms'] / (vals['hits'] + vals['false_alarms'])
 
 def pierce_skill_score(y_true: np.ndarray, y_pred: np.ndarray, threshold):
     

@@ -48,6 +48,24 @@ class TestScoring(unittest.TestCase):
         csi_by_hour = scoring.get_metric_by_hour(metric_fn=metric_fn, obs_array=self.imerg_train_data, fcst_array=self.ifs_train_data, 
                                                  hours=np.random.choice(range(12), self.imerg_train_data.shape[0]),
                                                  bin_width=4)
+    def test_ets(self):
+        
+        ets = scoring.equitable_threat_score(self.imerg_train_data, self.ifs_train_data, threshold=1)
+
+        self.assertIsInstance(ets, float)
+        
+        metric_fn = lambda x,y: scoring.equitable_threat_score(x,y, threshold=1)
+        
+        ets_by_hour = scoring.get_metric_by_hour(metric_fn=metric_fn, obs_array=self.imerg_train_data, fcst_array=self.ifs_train_data, 
+                                                 hours=np.random.choice(range(12), self.imerg_train_data.shape[0]),
+                                                 bin_width=4)
+        
+        (n_samples, width, height) = self.imerg_train_data.shape
+        # check with mask
+        mask = np.random.rand(width, height) > 0.5
+        mask = np.stack([mask]*n_samples, axis=0)
+        ets_masked = scoring.equitable_threat_score(self.imerg_train_data, self.ifs_train_data, threshold=1, mask=mask)
+
         
     def test_get_skill_score_results(self):
         
