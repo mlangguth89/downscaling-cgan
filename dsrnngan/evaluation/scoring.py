@@ -80,7 +80,12 @@ def _pierce_skill_score(c):
     
 def get_contingency_table_values(y_true: np.ndarray, y_pred: np.ndarray, threshold: float, mask: np.ndarray=None):
     
+    
     if mask is not None:
+        shape = y_true.shape
+        if len(shape) == 3 and len(mask.shape) == 2:
+            mask = np.stack([mask]*shape[0], axis=0)
+        
         y_true = y_true[mask].flatten()
         y_pred = y_pred[mask].flatten()
     else:     
@@ -129,14 +134,14 @@ def equitable_threat_score(y_true: np.ndarray, y_pred: np.ndarray, threshold: fl
 
     return ets
 
-def hit_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
+def hit_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float, mask: np.ndarray=None):
     
-    vals = get_contingency_table_values(y_true, y_pred, threshold)
+    vals = get_contingency_table_values(y_true, y_pred, threshold, mask=mask)
     
     return vals['hits'] / (vals['hits'] + vals['misses'])
 
-def false_alarm_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float):
-    vals = get_contingency_table_values(y_true, y_pred, threshold)
+def false_alarm_rate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float, mask=None):
+    vals = get_contingency_table_values(y_true, y_pred, threshold, mask=mask)
     
     return vals['false_alarms'] / (vals['hits'] + vals['false_alarms'])
 

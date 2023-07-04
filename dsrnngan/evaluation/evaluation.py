@@ -65,7 +65,7 @@ def setup_inputs(*,
                                    noise_channels=noise_channels,
                                    latent_variables=latent_variables,
                                    padding=padding,
-                                   constant_fields=constant_fields)
+                                   num_constant_fields=len(constant_fields))
 
     gen = model.gen
 
@@ -75,6 +75,7 @@ def setup_inputs(*,
         fcst_data_source,
         obs_data_source,
         fcst_fields=fcst_fields,
+        constant_fields=constant_fields,
         records_folder=records_folder,
         latitude_range=latitude_range,
         longitude_range=longitude_range,
@@ -321,7 +322,7 @@ def eval_one_chkpt(*,
         csi_fcst_all.append(critical_success_index(obs, fcst, threshold=1.0))
         
         # Max difference
-        max_bias_all.append((samples_gen - obs).max())
+        max_bias_all.append((samples_gen - np.stack([obs]*ensemble_size, axis=-1)).max())
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(obs)

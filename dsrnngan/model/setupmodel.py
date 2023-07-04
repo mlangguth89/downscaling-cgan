@@ -20,7 +20,7 @@ def setup_model(*,
                 filters_gen,
                 filters_disc,
                 noise_channels,
-                constant_fields,
+                num_constant_fields,
                 latent_variables=None,
                 padding=None,
                 kl_weight=None,
@@ -46,14 +46,14 @@ def setup_model(*,
                          arch=architecture,
                          downscaling_steps=downscaling_steps,
                          input_channels=input_channels,
-                         constant_fields=constant_fields,
+                         num_constant_fields=num_constant_fields,
                          noise_channels=noise_channels,
                          filters_gen=filters_gen,
                          padding=padding)
         disc = disc_to_use(arch=architecture,
                            downscaling_steps=downscaling_steps,
                            input_channels=input_channels,
-                           constant_fields=constant_fields,
+                           num_constant_fields=num_constant_fields,
                            filters_disc=filters_disc,
                            padding=padding)
         model = gan.WGANGP(gen, disc, mode, lr_disc=lr_disc, lr_gen=lr_gen,
@@ -118,7 +118,7 @@ def load_model_from_folder(model_folder, model_number=None):
                                    noise_channels=gen_config.noise_channels,
                                    latent_variables=gen_config.latent_variables,
                                    padding=model_config.padding,
-                                   constant_fields=data_config.constant_fields)
+                                   num_constant_fields=len(data_config.constant_fields))
 
     gen = model.gen
 

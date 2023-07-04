@@ -13,7 +13,7 @@ def generator(mode,
               latent_variables=1,
               noise_channels=8,
               filters_gen=64,
-              constant_fields=2,
+              num_constant_fields=2,
               conv_size=(3, 3),
               padding=None,
               stride=1,
@@ -26,7 +26,7 @@ def generator(mode,
     generator_input = Input(shape=(None, None, input_channels), name="lo_res_inputs")
     print(f"generator_input shape: {generator_input.shape}")
     # constant fields
-    const_input = Input(shape=(None, None, constant_fields), name="hi_res_inputs")
+    const_input = Input(shape=(None, None, num_constant_fields), name="hi_res_inputs")
     print(f"constants_input shape: {const_input.shape}")
 
     # Convolve constant fields down to match other input dimensions
@@ -108,7 +108,7 @@ def generator(mode,
 def discriminator(arch,
                   downscaling_steps,
                   input_channels=9,
-                  constant_fields=2,
+                  num_constant_fields=2,
                   filters_disc=64,
                   conv_size=(3, 3),
                   padding=None,
@@ -122,7 +122,7 @@ def discriminator(arch,
     generator_input = Input(shape=(None, None, input_channels), name="lo_res_inputs")
     print(f"generator_input shape: {generator_input.shape}")
     # constant fields
-    const_input = Input(shape=(None, None, constant_fields), name="hi_res_inputs")
+    const_input = Input(shape=(None, None, num_constant_fields), name="hi_res_inputs")
     print(f"constants_input shape: {const_input.shape}")
     # target image
     generator_output = Input(shape=(None, None, 1), name="output")
