@@ -69,23 +69,7 @@ VAR_LOOKUP_ERA5 = {'tp': {'folder': 'total_precipitation', 'suffix': 'day',
                         'v': {'folder': 'v', 'subfolder': 'v700', 'suffix': 'day_1deg',
                               'normalisation': 'minmax'}}
 
-IFS_NORMALISATION_STRATEGY = {'tp': {'negative_vals': False, 'normalisation': 'log'}, 
-                              'cp': {'negative_vals': False, 'normalisation': 'log'},
-                  'pr': {'negative_vals': False, 'normalisation': 'log'}, 
-                  'prl': {'negative_vals': False, 'normalisation': 'log'},
-                  'prc': {'negative_vals': False, 'normalisation': 'log'},
-                  'sp': {'normalisation': 'minmax'},
-                  'u': {'normalisation': 'max'},
-                  'v': {'normalisation': 'max'},
-                  'w': {'normalisation': 'max'},
-                  'r': {'normalisation': 'max'}, 
-                  '2t': {'normalisation': 'minmax', 'negative_vals': False}, 
-                  'cape': {'normalisation': 'log'}, 
-                  'cin': {'normalisation': 'max'}, 
-                  't': {'normalisation': 'minmax', 'negative_vals': False},
-                  'tclw': {'normalisation': 'log'}, 
-                  'tcwv': {'normalisation': 'max'}, 
-                  'tisr': {'normalisation': 'max'}}
+IFS_NORMALISATION_STRATEGY = data_config.input_normalisation_strategy
 
 VAR_LOOKUP_IFS = {field: IFS_NORMALISATION_STRATEGY[re.sub(r'([0-9]*[a-z]+)[0-9]*', r'\1', field)] 
                   for field in all_ifs_fields}
