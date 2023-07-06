@@ -416,7 +416,7 @@ if metric_dict['rapsd']:
     ax.set_xlabel('Wavenumber')
     ax.legend()
     
-    plt.savefig(f'plots/rapsd_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/rapsd_{model_type}_{model_number}.pdf', format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Q-Q plot
