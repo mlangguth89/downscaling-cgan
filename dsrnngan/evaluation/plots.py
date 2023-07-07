@@ -75,8 +75,7 @@ range_dict = {0: {'start': 0.1, 'stop': 1, 'interval': 0.1, 'marker': '+', 'mark
               5: {'start': 99.9, 'stop': 99.99, 'interval': 0.01, 'marker': '+', 'marker_size': 32 },
               6: {'start': 99.99, 'stop': 99.999, 'interval': 0.001, 'marker': '+', 'marker_size': 10},
               7: {'start': 99.999, 'stop': 99.9999, 'interval': 0.0001, 'marker': '+', 'marker_size': 10},
-              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10},
-              9: {'start': 99.99999, 'stop': 99.999999, 'interval': 0.000001, 'marker': '+', 'marker_size': 10}}
+              8: {'start': 99.9999, 'stop': 99.99999, 'interval': 0.00001, 'marker': '+', 'marker_size': 10}}
 
 percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
 percentiles=np.concatenate(percentiles_list)
@@ -214,11 +213,12 @@ def plot_quantiles(quantile_data_dict: dict,
     marker_handles = None
 
     # Quantiles for annotating plot
-    quantile_annotation_dict = {str(np.round(q, 11)): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(1, 10)] if q <=max_quantile}
+    quantile_annotation_dict = {str(np.round(q, 11)): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(3, 6)] if q <=max_quantile}
         
     for k, v in tqdm(range_dict.items()):
         
-        size= v.get('marker_size', 32)
+        # size= v.get('marker_size', 32)
+        size = 20
         cmap = plt.colormaps["plasma"]
         
         if k in quantile_results[obs_key]:
@@ -251,7 +251,7 @@ def plot_quantiles(quantile_data_dict: dict,
         ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 12)}th')
     
     if save_path:
-        plt.savefig(save_path, format=format_str.replace('.', ''))
+        plt.savefig(save_path, format=format_str.replace('.', ''), bbox_inches='tight')
         
     return fig, ax
 

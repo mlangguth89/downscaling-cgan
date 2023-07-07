@@ -44,6 +44,7 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     model_config.train.content_loss_weight = float(model_config.train.content_loss_weight)
     model_config.train.ensemble_size = model_config_dict['train'].get('ensemble_size')
     model_config.train.training_ratio = model_config_dict['train'].get('training_ratio', 5)
+    model_config.train.rotate = model_config_dict['train'].get('rotate', False)
 
     model_config.val.val_range = model_config_dict['val'].get('val_range')
     model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")

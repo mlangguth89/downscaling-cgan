@@ -31,7 +31,7 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
-                  downsample=False, weights=None, crop_size=None,
+                  downsample=False, weights=None, crop_size=None, rotate=False,
                   records_folder=records_folder, seed=None):
     return create_mixed_dataset(data_label, 
                                 batch_size,
@@ -42,6 +42,7 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 downsample=downsample, 
                                 weights=weights, 
                                 crop_size=crop_size,
+                                rotate=rotate,
                                 folder=records_folder, 
                                 seed=seed)
 
@@ -57,6 +58,7 @@ def create_mixed_dataset(data_label: str,
                          shuffle_size: int=1024,
                          weights: list=None,
                          crop_size: int=None,
+                         rotate: bool=False,
                          seed: int=None):
     """_summary_
 
@@ -72,6 +74,7 @@ def create_mixed_dataset(data_label: str,
         shuffle_size (int, optional): buffer size of shuffling. Defaults to 1024.
         weights (list, optional): list of floats, weights of classes when sampling. Defaults to None.
         crop_size (int, optional): Size to crop randomly crop images to.
+        rotate (bool, optional): whether or not to randomly rotate images.
         seed (int, optional): seed for shuffling and sampling. Defaults to None.
 
     Returns:
@@ -90,6 +93,7 @@ def create_mixed_dataset(data_label: str,
                                shuffle_size=shuffle_size,
                                repeat=repeat,
                                crop_size=crop_size,
+                               rotate=rotate,
                                seed=seed)
                 for i in range(classes)]
     
@@ -207,6 +211,7 @@ def create_dataset(data_label: str,
                    shuffle_size: int=1024,
                    repeat: bool=True,
                    crop_size: int=None,
+                   rotate: bool=False,
                    seed: int=None):
     """
     Load tfrecords and parse into appropriate shapes
@@ -220,6 +225,7 @@ def create_dataset(data_label: str,
         folder (_type_, optional): folder containing tf records. Defaults to records_folder.
         shuffle_size (int, optional): buffer size for shuffling. Defaults to 1024.
         crop_size (int, optional): Size to crop randomly crop images to.
+        rotate (bool, optional): If True, then samples are randomly rotated by 180 degrees.
         repeat (bool, optional): create repeat dataset or not. Defaults to True.
 
     Returns:
@@ -255,7 +261,9 @@ def create_dataset(data_label: str,
         else:
             ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed), 
                                                             num_parallel_calls=AUTOTUNE)
-        
+    
+    if rotate:
+        raise NotImplementedError    
     
     if repeat:
         return ds.repeat()

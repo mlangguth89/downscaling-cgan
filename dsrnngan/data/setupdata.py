@@ -23,6 +23,7 @@ def setup_batch_gen(records_folder: str,
                     downsample: bool=False,
                     weights=None,
                     crop_size: int=None,
+                    rotate: bool=False,
                     seed: int=None,
                     val=False,
                     val_fixed=False,
@@ -38,6 +39,7 @@ def setup_batch_gen(records_folder: str,
                            downsample=downsample, 
                            weights=weights, 
                            crop_size=crop_size,
+                           rotate=rotate,
                            records_folder=records_folder,
                            seed=seed)
 
@@ -113,6 +115,7 @@ def setup_data(fcst_data_source: str,
                seed: int=None,
                data_paths: dict=DATA_PATHS,
                crop_size: int=None,
+               rotate: bool=False,
                shuffle: bool=True) -> tuple[Generator]:
     """
         Setup data for training or validation; if load_ful
@@ -137,6 +140,7 @@ def setup_data(fcst_data_source: str,
         seed (int, optional): _description_. Defaults to None.
         data_paths (dict, optional): _description_. Defaults to DATA_PATHS.
         crop_size (int, optional): _description_. Defaults to None.
+        rotate (bool, optional): If True, images are randomly rotated by 180 degrees during training.
         permute_var_index (int, optional): _description_. Defaults to None.
         shuffle (bool, optional): _description_. Defaults to True.
 
@@ -188,6 +192,7 @@ def setup_data(fcst_data_source: str,
             downsample=downsample,
             weights=weights,
             crop_size=crop_size,
+            rotate=rotate,
             seed=seed)
 
     gc.collect()

@@ -235,6 +235,7 @@ def main(restart: bool,
             out_shape=output_image_shape,
             weights=training_weights,
             crop_size=model_config.train.crop_size,
+            rotate=model.config.train.rotate,
             batch_size=model_config.train.batch_size,
             load_full_image=False,
             seed=seed)
