@@ -6,7 +6,7 @@ from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
 from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, input_fields
-from dsrnngan.utils import read_config
+from dsrnngan.utils.read_config import read_model_config
 
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 

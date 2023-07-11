@@ -79,10 +79,14 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
     
     return data_config_ns
 
-def get_data_paths(config_folder: str=CONFIG_FOLDER, data_config=None):
+def get_data_paths(config_folder: str=CONFIG_FOLDER, data_config: types.SimpleNamespace=None):
     
     if data_config is None:
         data_config = read_data_config(config_folder=config_folder)
+        
+    if isinstance(data_config, dict):
+        data_config = types.SimpleNamespace(**copy.deepcopy(data_config))
+        
     data_paths = data_config.paths[data_config.data_paths]
     return data_paths
 

@@ -28,7 +28,8 @@ def setup_model(*,
                 CLtype=None,
                 content_loss_weight=None,
                 lr_disc=None,
-                lr_gen=None):
+                lr_gen=None,
+                rotate=False):
 
     if mode in ("GAN", "VAEGAN"):
         gen_to_use = {"normal": models.generator,
@@ -49,13 +50,15 @@ def setup_model(*,
                          num_constant_fields=num_constant_fields,
                          noise_channels=noise_channels,
                          filters_gen=filters_gen,
-                         padding=padding)
+                         padding=padding,
+                         rotate=rotate)
         disc = disc_to_use(arch=architecture,
                            downscaling_steps=downscaling_steps,
                            input_channels=input_channels,
                            num_constant_fields=num_constant_fields,
                            filters_disc=filters_disc,
-                           padding=padding)
+                           padding=padding,
+                           rotate=rotate)
         model = gan.WGANGP(gen, disc, mode, lr_disc=lr_disc, lr_gen=lr_gen,
                            ensemble_size=ensemble_size,
                            CLtype=CLtype,
@@ -118,7 +121,8 @@ def load_model_from_folder(model_folder, model_number=None):
                                    noise_channels=gen_config.noise_channels,
                                    latent_variables=gen_config.latent_variables,
                                    padding=model_config.padding,
-                                   num_constant_fields=len(data_config.constant_fields))
+                                   num_constant_fields=len(data_config.constant_fields),
+                                   rotate=model_config.train.rotate)
 
     gen = model.gen
 

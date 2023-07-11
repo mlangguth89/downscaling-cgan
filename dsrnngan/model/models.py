@@ -1,7 +1,8 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import concatenate, Conv2D, Dense, GlobalAveragePooling2D
-from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D
+from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation
 
 from dsrnngan.model.blocks import residual_block, const_upscale_block
 
@@ -18,7 +19,8 @@ def generator(mode,
               padding=None,
               stride=1,
               relu_alpha=0.2,
-              norm=None):
+              norm=None,
+              rotate=False):
 
     forceconv = True if arch in ("forceconv", "forceconv-long") else False
     # Network inputs
@@ -28,6 +30,13 @@ def generator(mode,
     # constant fields
     const_input = Input(shape=(None, None, num_constant_fields), name="hi_res_inputs")
     print(f"constants_input shape: {const_input.shape}")
+    
+    if rotate:
+        # Data augmentation by rotation
+        rng = np.random.default_rng()
+        seed = rng.integers(low=0, high=None, size=1)[0]
+        generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
+        const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
 
     # Convolve constant fields down to match other input dimensions
     upscaled_const_input = const_upscale_block(const_input, steps=downscaling_steps, filters=filters_gen)
@@ -93,7 +102,7 @@ def generator(mode,
     # Output layer
     generator_output = Conv2D(filters=1, kernel_size=(1, 1), activation='softplus', name="output")(generator_output)
     print(f"Output shape: {generator_output.shape}")
-
+    
     if mode == 'VAEGAN':
         decoder_model = Model(inputs=[mean_input, logvar_input, noise_input, const_input], outputs=generator_output, name='decoder')
         return (encoder_model, decoder_model)
@@ -114,7 +123,8 @@ def discriminator(arch,
                   padding=None,
                   stride=1,
                   relu_alpha=0.2,
-                  norm=None):
+                  norm=None,
+                  rotate=False):
 
     forceconv = True if arch in ("forceconv", "forceconv-long") else False
     # Network inputs
@@ -127,8 +137,16 @@ def discriminator(arch,
     # target image
     generator_output = Input(shape=(None, None, 1), name="output")
     print(f"generator_output shape: {generator_output.shape}")
+    
+    if rotate:
+        # Data augmentation by rotation. Choose seed to be consistent
+        rng = np.random.default_rng()
+        seed = rng.integers(low=0, high=None, size=1)[0]
+        generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
+        const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
+        generator_output = RandomRotation(factor=0.5, seed=seed)(generator_output)
 
-    # convolve down constant fields to match ERA
+    # convolve down constant fields to match dimensions
     lo_res_const_input = const_upscale_block(const_input, steps=downscaling_steps, filters=filters_disc)
     print(f"upscaled constants shape: {lo_res_const_input.shape}")
 
@@ -169,7 +187,7 @@ def discriminator(arch,
     print(f"discriminator output shape: {disc_output.shape}")
     disc_output = Dense(1, name="disc_output")(disc_output)
     print(f"discriminator output shape: {disc_output.shape}")
-
+    
     disc = Model(inputs=[generator_input, const_input, generator_output], outputs=disc_output, name='disc')
 
     return disc

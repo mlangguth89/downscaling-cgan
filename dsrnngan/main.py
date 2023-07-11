@@ -218,7 +218,8 @@ def main(restart: bool,
             kl_weight=model_config.train.kl_weight,
             ensemble_size=model_config.train.ensemble_size,
             CLtype=model_config.train.CL_type,
-            content_loss_weight=model_config.train.content_loss_weight)
+            content_loss_weight=model_config.train.content_loss_weight,
+            rotate=model_config.train.rotate)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
             training_range=model_config.train.training_range,
@@ -235,7 +236,6 @@ def main(restart: bool,
             out_shape=output_image_shape,
             weights=training_weights,
             crop_size=model_config.train.crop_size,
-            rotate=model_config.train.rotate,
             batch_size=model_config.train.batch_size,
             load_full_image=False,
             seed=seed)

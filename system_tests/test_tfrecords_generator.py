@@ -2,6 +2,7 @@ import sys, os
 import unittest
 import copy
 import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 from glob import glob
 import numpy as np
@@ -16,7 +17,8 @@ sys.path.append(str(HOME))
 
 from dsrnngan.data.tfrecords_generator import write_data, create_dataset
 from dsrnngan.data.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
-from dsrnngan.utils.read_config import read_data_config
+from dsrnngan.utils.read_config import read_data_config, get_data_paths, get_lat_lon_range_from_config
+from system_tests.test_data import create_dummy_stats_data
 
 data_folder = HOME / 'system_tests' / 'data'
 
@@ -26,74 +28,69 @@ constants_path = str(data_folder / 'constants')
 era5_path = ERA5_PATH
 imerg_folder = IMERG_PATH
 
+test_data_dir = HOME / 'system_tests' / 'data'
+
 class TestTfrecordsGenerator(unittest.TestCase):
+    
+    def setUp(self) -> None:
+        
+
+        
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir_name = self.temp_dir.name
+        self.data_config_dict = {'data_paths': 'BLUE_PEBBLE', 
+                            'fcst_data_source': 'ifs', 
+                            'obs_data_source': 'imerg', 
+                            'normalisation_year': 2017, 
+                            'input_image_width': 10, 
+                            'num_samples': 3, 
+                            'num_samples_per_image': 1, 
+                            'normalise': True,
+                            'num_classes': 1, 
+                            'min_latitude': -1.95, 
+                            'max_latitude': 1.95, 
+                            'latitude_step_size': 0.1, 
+                            'min_longitude': 32.05, 
+                            'max_longitude': 34.95, 
+                            'longitude_step_size': 0.1, 
+                            'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
+                            'constant_fields': ['lakes', 'sea', 'orography'], 
+                            'paths': {'BLUE_PEBBLE':
+                                {'GENERAL': {'IMERG': str(test_data_dir/ 'IMERG/half_hourly/final'),
+                                                'IFS': str(test_data_dir/  'IFS'),
+                                                'ERA5': str(test_data_dir/ 'ERA5'),
+                                                'OROGRAPHY': str(test_data_dir/ 'constants/h_HRES_EAfrica.nc'),
+                                                'LSM': str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'LAKES': str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'SEA':  str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'CONSTANTS': os.path.join(self.temp_dir.name, 'constants')},
+                                        'TFRecords': {'tfrecords_path': self.temp_dir.name}}}}
+
+        self.data_config = read_data_config(data_config_dict=self.data_config_dict)
+        
+        self.lat_range, self.lon_range = get_lat_lon_range_from_config(data_config=self.data_config)
+        
+        self.constants_path = os.path.join(self.temp_dir_name, 'constants')
+        os.mkdir(self.constants_path)
+        
+        create_dummy_stats_data(constants_path=self.constants_path, lon_range=[32,34], lat_range=[-1, 1])
+
+        return super().setUp()
+    
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+        return super().tearDown()
             
     def test_write_ifs_data(self):
-        
-        with tempfile.TemporaryDirectory() as tmpdirname:
+                    
+        output_dir = write_data(['201707', '201712'],
+                                data_label='train',
+                hours=[18],
+                data_config=self.data_config,
+                debug=True)
+        files_0 = glob(os.path.join(output_dir, '*train*'))
+        self.assertGreater(len(files_0), 0)
             
-            test_data_dir = HOME / 'system_tests' / 'data'
-            data_config = {'data_paths': 'BLUE_PEBBLE', 
-             'fcst_data_source': 'ifs', 
-             'obs_data_source': 'imerg', 
-             'normalisation_year': 2017, 
-             'input_image_width': 10, 
-             'num_samples': 3, 
-             'num_samples_per_image': 1, 
-             'normalise': True,
-             'num_classes': 4, 
-             'min_latitude': -1.95, 
-             'max_latitude': 1.95, 
-             'latitude_step_size': 0.1, 
-             'min_longitude': 32.05, 
-             'max_longitude': 34.95, 
-             'longitude_step_size': 0.1, 
-             'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
-             'constant_fields': ['lakes', 'sea', 'orography'], 
-             'paths': {'BLUE_PEBBLE':
-                 {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
-                                    'IFS': str(test_data_dir / 'IFS'),
-                                    'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
-                                    'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
-                                    'LAKES': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
-                                    'SEA':  str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
-                                    'CONSTANTS': str(test_data_dir / 'constants')},
-                          'TFRecords': {'tfrecords_path': tmpdirname}}}}   
-
-            data_config_ns = read_data_config(data_config_dict=data_config)
-               
-            output_dir = write_data(['201707', '201712'],
-                                    data_label='train',
-                    hours=[18],
-                    data_config=data_config_ns,
-                    debug=True)
-            files_0 = glob(os.path.join(output_dir, '*train*'))
-            self.assertGreater(len(files_0), 0)
-            
-            
-    def test_write_ifs_data2(self):
-        
-        from dsrnngan.data.data import DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
-        data_paths = copy.copy(DATA_PATHS)
-        
-        
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            data_paths['TFRecords']['tfrecords_path'] = tmpdirname
-            
-            test_data_dir = HOME / 'system_tests' / 'data'      
-
-            output_dir = write_data(['201807', '201808'],
-                                    data_label='train',
-                    forecast_data_source='ifs', 
-                    observational_data_source='imerg',
-                    hours=[18],
-                    num_class=4,
-                    normalise=True,
-                    data_paths=data_paths,
-                    debug=True,
-                    constants=True,
-                    latitude_range=DEFAULT_LATITUDE_RANGE,
-                    longitude_range=DEFAULT_LONGITUDE_RANGE)
             
     def test_write_era5_data(self):
         
@@ -192,39 +189,28 @@ class TestTfrecordsGenerator(unittest.TestCase):
         self.assertEqual(output_vals.shape, (4, 4, 1))
 
         
-    def test_create_dataset_era5_imerg(self):
+    def test_create_dataset_ifs_imerg(self):
         '''
         Note that the tfrecords have been created using the test_write_era5_data function, so 
         the forecast and output shapes will be the same as for them
         '''
-        
-        lat_range = np.arange(0, 1, 0.1)
-        lon_range = np.arange(33, 34, 0.1)
-        test_data_dir = HOME / 'system_tests' / 'data'
-        data_paths = DATA_PATHS.copy()
-        data_paths['TFRecords']['tfrecords_path'] = str(test_data_dir / 'tmp')
-
-        hash_dir = write_data(['201811', '201812'],
-               'train',
-                forecast_data_source='era5', 
-                observational_data_source='imerg',
+        data_config = copy.copy(self.data_config)
+        data_config.paths['BLUE_PEBBLE'] = DATA_PATHS
+        data_config.paths['BLUE_PEBBLE']['TFRecords']['tfrecords_path'] = self.temp_dir_name
+        data_config.paths['BLUE_PEBBLE']['GENERAL']['CONSTANTS'] = self.constants_path
+        hash_dir = write_data(['201707'],
+                                data_label='train',
                 hours=[18],
-                num_class=1,
-                log_precip=True,
-                fcst_norm=True,
-                data_paths=data_paths,
-                constants=True,
-                latitude_range=lat_range,
-                longitude_range=lon_range,
+                data_config=self.data_config,
                 debug=True)
-        
+
         # Without cropping
-        height = len(lat_range)
-        width = len(lon_range)
+        height = data_config.input_image_width
+        width = data_config.input_image_width
         ds  = create_dataset(data_label='train',
                    clss=0,
-                   fcst_shape=(height, width, 5),
-                   con_shape=(height, width, 2),
+                   fcst_shape=(height, width, len(data_config.input_fields)),
+                   con_shape=(height, width, len(data_config.constant_fields)),
                    out_shape=(height, width, 1),
                    folder=hash_dir,
                    shuffle_size=1024,
@@ -236,6 +222,7 @@ class TestTfrecordsGenerator(unittest.TestCase):
 
         self.assertEqual(set(element_spec[0].keys()), {'lo_res_inputs', 'hi_res_inputs'})
         self.assertEqual(set(element_spec[1].keys()), {'output'})
+        
 
         sample_vals = list(ds.take(1))[0]
         lo_res_vals = sample_vals[0]['lo_res_inputs'].numpy()
@@ -246,16 +233,17 @@ class TestTfrecordsGenerator(unittest.TestCase):
         self.assertFalse((lo_res_vals == np.nan).any())
         self.assertFalse((hi_res_vals == np.nan).any())
         self.assertFalse((output_vals == np.nan).any())
-        self.assertEqual(lo_res_vals.shape, (height, width, len(all_era5_fields)))
-        self.assertEqual(hi_res_vals.shape, (height, width, 2))
+        self.assertEqual(lo_res_vals.shape, (height, width, len(data_config.input_fields)))
+        self.assertEqual(hi_res_vals.shape, (height, width, len(data_config.constant_fields)))
         self.assertEqual(output_vals.shape, (height, width, 1))
         
+        #############################
         # with cropping
         crop_size = 4
         ds  = create_dataset(data_label='train',
                    clss=0,
-                   fcst_shape=(height, width, 5),
-                   con_shape=(height, width, 2),
+                   fcst_shape=(height, width, len(data_config.input_fields)),
+                   con_shape=(height, width, len(data_config.constant_fields)),
                    out_shape=(height, width, 1),
                    folder=hash_dir,
                    shuffle_size=1024,
@@ -270,8 +258,8 @@ class TestTfrecordsGenerator(unittest.TestCase):
         lo_res_vals_cropped = cropped_sample_vals[0]['lo_res_inputs'].numpy()
         hi_res_vals_cropped = cropped_sample_vals[0]['hi_res_inputs'].numpy()
         output_vals_cropped = cropped_sample_vals[1]['output'].numpy()
-        self.assertEqual(lo_res_vals_cropped.shape, (crop_size, crop_size, len(all_era5_fields)))
-        self.assertEqual(hi_res_vals_cropped.shape, (crop_size, crop_size, 2))
+        self.assertEqual(lo_res_vals_cropped.shape, (crop_size, crop_size, len(data_config.input_fields)))
+        self.assertEqual(hi_res_vals_cropped.shape, (crop_size, crop_size, len(data_config.constant_fields)))
         self.assertEqual(output_vals_cropped.shape, (crop_size, crop_size, 1))
         
         (x_ixs, y_ixs) = np.where(lo_res_vals[:,:,0] == lo_res_vals_cropped[0,0,0])
@@ -294,6 +282,34 @@ class TestTfrecordsGenerator(unittest.TestCase):
         self.assertTrue(hires_match_found)
         self.assertTrue(output_match_found)
         
+        
+        #############################
+        # with rotation
+        seed=(2,1)
+        ds  = create_dataset(data_label='train',
+                   clss=0,
+                   fcst_shape=(height, width, len(data_config.input_fields)),
+                   con_shape=(height, width, len(data_config.constant_fields)),
+                   out_shape=(height, width, 1),
+                   folder=hash_dir,
+                   shuffle_size=1024,
+                   crop_size=None,
+                   repeat=True,
+                   seed=seed,
+                   rotate=True
+                   )
+        
+        element_spec = ds.element_spec
+        
+        rng = np.random.default_rng(seed=seed[0])
+        angle = rng.choice([0,180],1)[0]
+
+        cropped_sample_vals = list(ds.take(1))[0]
+        lo_res_vals_cropped = cropped_sample_vals[0]['lo_res_inputs'].numpy()
+        hi_res_vals_cropped = cropped_sample_vals[0]['hi_res_inputs'].numpy()
+        output_vals_cropped = cropped_sample_vals[1]['output'].numpy()
+        
+        t=1
 
         
 if __name__ == '__main__':

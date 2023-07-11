@@ -34,7 +34,8 @@ constants_path = str(data_folder / 'constants')
 era5_path = str(data_folder / 'ERA5')
 imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 
-def create_dummy_stats_data(year=2017, fields=all_ifs_fields):
+def create_dummy_stats_data(year=2017, fields=all_ifs_fields, constants_path=constants_path, 
+                            lat_range=[0,1], lon_range=[33,34]):
     
     for field in fields:
         fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, ifs_path)
@@ -48,12 +49,7 @@ def create_dummy_stats_data(year=2017, fields=all_ifs_fields):
             'std': ds[var_name].std().values}
         
         # Saving it as 2017 since that's the defualt 
-        output_fp = f'{constants_path}/IFS_norm_{field}_{year}_lat0-1lon33-34.pkl'
-        with open(output_fp, 'wb') as f:
-            pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
-        
-        # Save for another different lat / lon range
-        output_fp = f'{constants_path}/IFS_norm_{field}_{year}_lat0-0lon33-33.pkl'
+        output_fp = f'{constants_path}/IFS_norm_{field}_{year}_lat{lat_range[0]}-{lat_range[-1]}lon{lon_range[0]}-{lon_range[-1]}.pkl'
         with open(output_fp, 'wb') as f:
             pickle.dump(stats, f, pickle.HIGHEST_PROTOCOL)
     
@@ -69,6 +65,7 @@ class TestLoad(unittest.TestCase):
         if not os.path.isdir(os.path.join(constants_path, 'tp')):
         
             create_dummy_stats_data()
+            create_dummy_stats_data(lon_range=[33,33], lat_range=[0,0])
             
             for field in all_ifs_fields:
                 fp = get_ifs_filepath(field, datetime(2017, 7, 4), 12, ifs_path)

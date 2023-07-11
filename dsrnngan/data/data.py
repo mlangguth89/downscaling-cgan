@@ -1047,9 +1047,11 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
 
     """
     dt = datetime.strptime(date, '%Y%m%d')
+
     ds = load_era5_day_raw(variable=ifield, year=dt.year, month=dt.month, day=dt.day,
-                           latitude_vals=latitude_vals, longitude_vals=longitude_vals,
-                           era_data_dir=fcst_dir)
+                        latitude_vals=latitude_vals, longitude_vals=longitude_vals,
+                        era_data_dir=fcst_dir)
+
 
     stats_dict = get_era5_stats(ifield, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
                                 use_cached=True, era_data_dir=fcst_dir,
