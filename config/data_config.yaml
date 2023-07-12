@@ -35,8 +35,8 @@ input_fields:
     - w500
     - w700
 constant_fields:
-    - lsm
     - orography
+    - lsm
 input_normalisation_strategy:
     tp:
       negative_vals: False

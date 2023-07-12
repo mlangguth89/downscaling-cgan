@@ -21,8 +21,8 @@ constants_path = str(data_folder / 'constants')
 era5_path = str(data_folder / 'ERA5')
 imerg_folder = str(data_folder / 'IMERG/half_hourly/final')
 
-longitude_vals = [33, 34]
-latitude_vals = [0, 1]
+longitude_vals = [33.05, 34.05]
+latitude_vals = [0.05, 1.05]
 
 data_paths = copy.deepcopy(data.DATA_PATHS)
 data_paths['GENERAL']['CONSTANTS'] = constants_path
@@ -42,7 +42,7 @@ class TestDataGenerator(unittest.TestCase):
         
         data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                    shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
+                                    shuffle=False, constant_fields=['lsm', 'orography'], hour=17, longitude_range=longitude_vals,
                                     latitude_range=latitude_vals, normalise=True,
                                     downsample=False, seed=None)
         

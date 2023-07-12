@@ -148,7 +148,7 @@ def main(restart: bool,
     
     # For backwards compatability
     if isinstance(data_config.constant_fields, int):
-        data_config.constant_fields = ['lsm', 'orography']
+        data_config.constant_fields = ['orography', 'lsm']
     num_constant_fields = len(data_config.constant_fields)
             
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)

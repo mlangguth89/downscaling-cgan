@@ -66,6 +66,7 @@ class TestPlots(unittest.TestCase):
                                     'cultural', 'admin_0_boundary_lines_land',
                                      auto_scaler, border_to_remove=border_to_remove, edgecolor='black', facecolor='never')
         self.assertEqual(len([item for item in list(feature.geometries()) if border_removal_poly.contains(item)]), 0)
+        
 
     def test_plot_precipitation(self):
         

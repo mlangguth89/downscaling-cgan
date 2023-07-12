@@ -12,7 +12,7 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
     def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, fields: list=None, data_paths: dict=DATA_PATHS,
-                 shuffle: bool=True, constant_fields: bool=True, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
+                 shuffle: bool=True, constant_fields: list=None, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
                  latitude_range: Iterable[float]=None, normalise: bool=True,
                  downsample: bool=False, repeat_data: bool=False, seed: int=None):
         
@@ -104,6 +104,7 @@ class DataGenerator(Sequence):
             fcst_dir=self.data_paths['GENERAL'][self.forecast_data_source.upper()],
             obs_data_dir=self.data_paths['GENERAL'][self.observational_data_source.upper()],
             constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
+            constant_fields=None, # These are already loaded separately
             fcst_fields=self.fcst_fields,
             fcst_data_source=self.forecast_data_source,
             obs_data_source=self.observational_data_source,
@@ -115,7 +116,6 @@ class DataGenerator(Sequence):
         if self.downsample:
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
-
 
         return {"lo_res_inputs": data_x_batch,
                 "hi_res_inputs": self.constants,

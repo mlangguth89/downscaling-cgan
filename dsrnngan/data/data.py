@@ -297,8 +297,10 @@ def filter_by_lat_lon(ds: xr.Dataset,
     all_lat_vals = ds[lat_var_name].values
     all_lon_vals = ds[lon_var_name].values
     
-    overlapping_lat_vals = all_lat_vals[all_lat_vals >= min(lat_range)][all_lat_vals <= max(lat_range)]
-    overlapping_lon_vals = all_lon_vals[all_lon_vals >= min(lon_range)][all_lon_vals <= max(lon_range)]
+    overlapping_lat_vals = all_lat_vals[all_lat_vals >= min(lat_range)]
+    overlapping_lat_vals = overlapping_lat_vals[overlapping_lat_vals <= max(lat_range)]
+    overlapping_lon_vals = overlapping_lat_vals[overlapping_lat_vals >= min(lon_range)]
+    overlapping_lat_vals = overlapping_lat_vals[overlapping_lat_vals <= max(lon_range)]
         
     ds = ds.sel({lat_var_name: overlapping_lat_vals})
     ds = ds.sel({lon_var_name: overlapping_lon_vals})
@@ -581,7 +583,9 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           latitude_range: Iterable[float]=None,
                           longitude_range: Iterable[float]=None,
                           constants_dir: str=CONSTANTS_PATH,
-                          constants: bool=False, hour: int=0, norm: bool=False):
+                          constant_fields: list=None, 
+                          hour: int=0, 
+                          norm: dict=None):
     batch_x = []
     batch_y = []
 
@@ -606,10 +610,10 @@ def load_fcst_radar_batch(batch_dates: Iterable,
             batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=norm,
                                                 latitude_vals=latitude_range, longitude_vals=longitude_range,
                                                 data_dir=obs_data_dir))
-    if (not constants):
+    if constant_fields is None:
         return np.array(batch_x), np.array(batch_y)
     else:
-        return [np.array(batch_x), load_hires_constants(batch_size=len(batch_dates))], np.array(batch_y)
+        return [np.array(batch_x), load_hires_constants(batch_size=len(batch_dates), fields=constant_fields)], np.array(batch_y)
 
 def get_ifs_filepath(field: str, loaddate: datetime, 
                      loadtime: int, fcst_dir: str=IFS_PATH):
@@ -759,7 +763,8 @@ def load_ifs_raw(field: str,
     return ds
 
 def load_ifs(field: str, 
-             date, hour: int, norm: bool=False, 
+             date, hour: int, 
+             norm: bool=False, 
              fcst_dir: str=IFS_PATH, 
              var_name_lookup: dict=VAR_LOOKUP_IFS,
              latitude_vals: list=None, 
