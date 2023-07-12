@@ -15,7 +15,7 @@ from matplotlib import colorbar, colors, gridspec
 from metpy import plots as metpy_plots
 import cartopy.feature as cfeature
 from cartopy.feature import NaturalEarthFeature, auto_scaler, AdaptiveScaler
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 
 # See https://matplotlib.org/stable/gallery/color/named_colors.html for edge colour options
 lake_feature = cfeature.NaturalEarthFeature(
@@ -33,7 +33,19 @@ class EABorderFeature(NaturalEarthFeature):
     def geometries(self):
         geoms =  list(super().geometries())
 
-        return iter([item for item in geoms if not self.removed_borders_poly.contains(item)])
+        borders = [item for item in geoms if not self.removed_borders_poly.contains(item)]
+
+        return iter(borders)
+    
+class DisputedBorders(NaturalEarthFeature):
+    
+    def __init__(self, *args, **kwargs):
+        
+        super().__init__(*args, **kwargs)
+    
+    def geometries(self):
+        borders = [LineString([[34.37, 4.63], [35.94, 4.59]]), LineString([[34.37, 4.63], [35.30, 5.47]])]
+        return iter(borders)
     
 border_feature = EABorderFeature(
                                     'cultural', 
@@ -43,6 +55,12 @@ border_feature = EABorderFeature(
                                      edgecolor='black', 
                                      facecolor='never')
 
+disputed_border_feature = DisputedBorders('cultural', 
+                                    'admin_0_boundary_lines_land',
+                                     auto_scaler, 
+                                     edgecolor='black', 
+                                     facecolor='never',
+                                     linestyle='--')
 
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data import data
@@ -110,6 +128,7 @@ def plot_contourf( data, title, ax=None, value_range=None, lon_range=default_lon
     
     if add_borders:
         ax.add_feature(border_feature)
+        ax.add_feature(disputed_border_feature)
     ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     
@@ -280,6 +299,7 @@ def plot_precipitation(ax: plt.Axes,
             transform=ccrs.PlateCarree(),
             alpha=0.8)
     ax.add_feature(border_feature)
+    ax.add_feature(disputed_border_feature)
     ax.add_feature(lake_feature, alpha=0.4)
     ax.set_title(title)
     
