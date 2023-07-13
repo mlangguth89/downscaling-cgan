@@ -62,15 +62,8 @@ def calculate_roc(*,
     pooling_methods = ['no_pooling', 'max_4', 'max_16', 'avg_4', 'avg_16']
 
     # initialise model
-    model = setupmodel.setup_model(mode=mode,
-                                   arch=arch,
-                                   downscaling_steps=downscaling_steps,
-                                   input_channels=input_channels,
-                                   filters_gen=filters_gen,
-                                   filters_disc=filters_disc,
-                                   noise_channels=noise_channels,
-                                   latent_variables=latent_variables,
-                                   padding=padding)
+    model = setupmodel.setup_model(model_config=model_config,
+                                   data_config=data_config)
 
     # load appropriate dataset
     if predict_full_image:
@@ -78,7 +71,7 @@ def calculate_roc(*,
         data_predict = DataGeneratorFull(dates=dates,
                                          fcst_fields=all_fcst_fields,
                                          batch_size=batch_size,
-                                         normalise=True,
+                                         normalise_inputs=True,
                                          shuffle=True,
                                          constant_fields=True,
                                          hour='random',
@@ -96,7 +89,7 @@ def calculate_roc(*,
         data_benchmarks = DataGeneratorFull(dates=dates,
                                             fcst_fields=all_fcst_fields,
                                             batch_size=batch_size,
-                                            normalise=False,
+                                            normalise_inputs=False,
                                             shuffle=True,
                                             constant_fields=True,
                                             hour="random")

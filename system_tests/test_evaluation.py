@@ -49,9 +49,6 @@ class TestEvaluation(unittest.TestCase):
         self.temp_dir_name = self.temp_dir.name
         self.tmp_data_folder = test_data_paths['TFRecords']['tfrecords_path']
         
-        self.config['VAL']['val_range'] = ['201707']
-        self.config['VAL']['val_size'] = 5
-        self.config['VAL']['ensemble_size'] = 2
         
         if not os.path.isdir(self.tmp_data_folder):
             # Create a dummy model if one doesn't already exist
@@ -88,25 +85,10 @@ class TestEvaluation(unittest.TestCase):
         most_recent_model = sorted(glob(os.path.join(self.model_folder, '*.h5')))[-1]
         
         print('setting up inputs')
-        gen, batch_gen_valid = setup_inputs(mode=model_config.mode,
-                                        arch=model_config.architecture,
+        gen, batch_gen_valid = setup_inputs(model_config=model_config,
+                                            data_config=data_config,
                                         records_folder=self.records_folder,
-                                        fcst_data_source=data_config.fcst_data_source,
-                                        obs_data_source=data_config.obs_data_source,
-                                        latitude_range=lat_range,
-                                        longitude_range=lon_range,
                                         hour=18,
-                                        downscaling_steps=model_config.downscaling_steps,
-                                        validation_range=model_config.val.val_range,
-                                        downsample=model_config.downsample,
-                                        input_channels=data_config.input_channels,
-                                        constant_fields=data_config.constant_fields,
-                                        filters_gen=model_config.generator.filters_gen,
-                                        filters_disc=model_config.discriminator.filters_disc,
-                                        noise_channels=model_config.generator.noise_channels,
-                                        latent_variables=model_config.generator.latent_variables,
-                                        padding=model_config.padding,
-                                        data_paths=DATA_PATHS,
                                         shuffle=True)
 
         print('loading weights')
@@ -195,39 +177,21 @@ class TestEvaluation(unittest.TestCase):
         
     def test_eval_multiple_checkpoints(self):
         
-        records_folder = '/user/work/uz22147/tfrecords/d34d309eb0e00b04/'
-        config = read_config.read_config(os.path.join(records_folder, 'local_config.yaml'))
-        latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
-        
-        _, _, _, data_config, gen_config, dis_config, train_config, _ = read_config.get_config_objects(test_config)
-
+        weights_dir = '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000'
+        data_config = read_config.read_data_config(config_folder=weights_dir)
+        model_config = read_config.read_model_config(config_folder=weights_dir)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            log_file = os.path.join(temp_dir, 'eval.txt')
-            evaluate_multiple_checkpoints(model_config.mode='GAN',
-                                        model_config.architecture='forceconv',
-                                        fcst_data_source=data_config.fcst_data_source,
-                                        obs_data_source=data_config.obs_data_source,
-                                        latitude_range=latitude_range,
-                                        longitude_range=longitude_range,
-                                    model_config.val.val_range=['201902', '201902'],
-                                    log_folder=temp_dir,
-                                    weights_dir='/user/work/uz22147/logs/cgan/d34d309eb0e00b04/models',
-                                    records_folder=records_folder,
-                                    downsample=False,
-                                    noise_factor=1e-3,
-                                    model_numbers=[38400, 6400],
-                                    ranks_to_save=[38400, 6400],
-                                    num_images=2,
-                                    filters_gen=gen_config.filters_gen,
-                                    filters_disc=dis_config.filters_disc,
-                                    input_channels=data_config.input_channels,
-                                    latent_variables=gen_config.latent_variables,
-                                    noise_channels=gen_config.noise_channels,
-                                    padding='reflect',
-                                    ensemble_size=train_config.ensemble_size,
-                                    constant_fields=data_config.constant_fields,
-                                    data_paths=DATA_PATHS)
+            evaluate_multiple_checkpoints(model_config=model_config,
+                                        data_config=data_config,
+                                        log_folder=temp_dir,
+                                        weights_dir=os.path.join(weights_dir, 'models'),
+                                        records_folder=None,
+                                        noise_factor=1e-3,
+                                        model_numbers=[38400, 6400],
+                                        num_images=2,
+                                        ensemble_size=2,
+                                        shuffle=True)
             
 
         

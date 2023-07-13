@@ -585,7 +585,8 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           constants_dir: str=CONSTANTS_PATH,
                           constant_fields: list=None, 
                           hour: int=0, 
-                          norm: dict=None):
+                          normalise_inputs: bool=False,
+                          normalise_outputs: bool=False):
     batch_x = []
     batch_y = []
 
@@ -604,10 +605,10 @@ def load_fcst_radar_batch(batch_dates: Iterable,
         h = hours[i]
         batch_x.append(load_fcst_stack(fcst_data_source, fcst_fields, date, h,
                                        latitude_vals=latitude_range, longitude_vals=longitude_range, fcst_dir=fcst_dir,
-                                       norm=norm, constants_dir=constants_dir))
+                                       norm=normalise_inputs, constants_dir=constants_dir))
         
         if obs_data_source is not None:
-            batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=norm,
+            batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=normalise_outputs,
                                                 latitude_vals=latitude_range, longitude_vals=longitude_range,
                                                 data_dir=obs_data_dir))
     if constant_fields is None:

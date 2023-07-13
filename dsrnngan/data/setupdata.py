@@ -23,7 +23,6 @@ def setup_batch_gen(records_folder: str,
                     downsample: bool=False,
                     weights=None,
                     crop_size: int=None,
-                    rotate: bool=False,
                     seed: int=None,
                     val=False,
                     val_fixed=False,
@@ -39,7 +38,6 @@ def setup_batch_gen(records_folder: str,
                            downsample=downsample, 
                            weights=weights, 
                            crop_size=crop_size,
-                           rotate=rotate,
                            records_folder=records_folder,
                            seed=seed)
 
@@ -59,72 +57,51 @@ def setup_batch_gen(records_folder: str,
     return train, None
 
 
-def setup_full_image_dataset(year_month_range,
-                             fcst_data_source,
-                             obs_data_source,
-                             fcst_fields,
-                             constant_fields,
-                             data_paths,
-                             latitude_range,
-                             longitude_range,
+def setup_full_image_dataset(
+                             data_config,
+                             year_month_range,
                              batch_size=2,
                              downsample=False,
                              hour='random',
-                             shuffle=True
+                             shuffle=True,
                              ):
 
     from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
     from dsrnngan.data.data import get_obs_dates
 
     date_range = date_range_from_year_month_range(year_month_range)
-    dates = get_obs_dates(date_range[0], date_range[-1], 
-                          obs_data_source=obs_data_source, data_paths=data_paths, hour=hour)
+    dates = get_obs_dates(date_range[0], 
+                          date_range[-1], 
+                          obs_data_source=data_config.obs_data_source, 
+                          data_paths=read_config.get_data_paths(data_config=data_config),
+                          hour=hour)
+
     data_full = DataGeneratorFull(dates=dates,
-                                  forecast_data_source=fcst_data_source, 
-                                  observational_data_source=obs_data_source,
-                                  fields=fcst_fields,
-                                  latitude_range=latitude_range,
-                                  longitude_range=longitude_range,
+                                  data_config=data_config,
                                   batch_size=batch_size,
                                   shuffle=shuffle,
-                                  constant_fields=constant_fields,
-                                  normalise=True,
                                   downsample=downsample,
-                                  data_paths=data_paths,
                                   hour=hour)
     return data_full
 
-
-def setup_data(fcst_data_source: str,
-               obs_data_source: str,
-               latitude_range: list[float],
-               longitude_range: list[float],
+def setup_data(data_config,
+               model_config,
                training_range: list[float]=None,
-               validation_range: list[float]=None,
-               fcst_fields: list=None,
                records_folder: str=None,
                hour: str='random',
-               downsample: bool=False,
                fcst_shape: tuple[int]=(20, 20, 9),
                con_shape: tuple[int]=(200, 200, 1),
                out_shape: tuple[int]=(200, 200, 1),
-               constant_fields: list=None, # If True will load constants data
                weights: Iterable=None,
-               batch_size: int=None,
                load_full_image: bool=False,
                seed: int=None,
-               data_paths: dict=DATA_PATHS,
-               crop_size: int=None,
-               rotate: bool=False,
-               shuffle: bool=True) -> tuple[Generator]:
+               shuffle: bool=True,
+               full_image_batch_size: int=1) -> tuple[Generator]:
     """
         Setup data for training or validation; if load_ful
 
     Args:
-        fcst_data_source (str): Forecast data source, e.g. ifs
-        obs_data_source (str): Observation data source e.g. imerg
-        latitude_range (list[float]): Latitude range 
-        longitude_range (list[float]): Longitude range
+        TODO: update
         training_range (list[float], optional): Range of training dates, list of YYYYMM format (just the start and end required). Defaults to None.
         validation_range (list[float], optional): Range of validation dates, list of YYYYMM format (just the start and end required). Defaults to None.
         fcst_fields (list, optional): List of fcst fields, for creating full image dataset. Defaults to None for which case the default local config is used
@@ -140,42 +117,30 @@ def setup_data(fcst_data_source: str,
         seed (int, optional): _description_. Defaults to None.
         data_paths (dict, optional): _description_. Defaults to DATA_PATHS.
         crop_size (int, optional): _description_. Defaults to None.
-        rotate (bool, optional): If True, images are randomly rotated by 180 degrees during training.
         permute_var_index (int, optional): _description_. Defaults to None.
         shuffle (bool, optional): _description_. Defaults to True.
 
     Returns:
         tuple[Generator]: Tuple containing training data generator and validation data generator
     """
+
     if load_full_image:
         if training_range is None:
             batch_gen_train = None
         else:
-            batch_gen_train = setup_full_image_dataset(training_range,
-                                          fcst_data_source=fcst_data_source,
-                                          obs_data_source=obs_data_source,
-                                          fcst_fields=fcst_fields,
-                                          latitude_range=latitude_range,
-                                          longitude_range=longitude_range,
-                                          batch_size=batch_size,
-                                          downsample=downsample,
-                                          constant_fields=constant_fields,
-                                          data_paths=data_paths,
+            batch_gen_train = setup_full_image_dataset(data_config=data_config,
+                                          year_month_range=training_range,
+                                          batch_size=full_image_batch_size,
+                                          downsample=model_config.downsample,
                                           hour=hour,
                                           shuffle=shuffle)
-        if validation_range is None:
+        if model_config.val.val_range is None:
             batch_gen_valid = None
         else:
-            batch_gen_valid = setup_full_image_dataset(validation_range,
-                                          fcst_data_source=fcst_data_source,
-                                          obs_data_source=obs_data_source,
-                                          fcst_fields=fcst_fields,
-                                          latitude_range=latitude_range,
-                                          longitude_range=longitude_range,
-                                          batch_size=batch_size,
-                                          downsample=downsample,
-                                          constant_fields=constant_fields,
-                                          data_paths=data_paths,
+            batch_gen_valid = setup_full_image_dataset(data_config=data_config,
+                                          year_month_range=model_config.val.val_range,
+                                          batch_size=full_image_batch_size,
+                                          downsample=model_config.downsample,
                                           hour=hour,
                                           shuffle=shuffle)
 
@@ -188,11 +153,10 @@ def setup_data(fcst_data_source: str,
             fcst_shape=fcst_shape,
             con_shape=con_shape,
             out_shape=out_shape,
-            batch_size=batch_size,
-            downsample=downsample,
+            batch_size=model_config.train.batch_size,
+            downsample=model_config.downsample,
             weights=weights,
-            crop_size=crop_size,
-            rotate=rotate,
+            crop_size=model_config.train.crop_size,
             seed=seed)
 
     gc.collect()
@@ -225,16 +189,10 @@ def load_data_from_config(config: dict, records_folder: str=None,
     
     data_gen_train, data_gen_valid = setupdata.setup_data(
         records_folder=records_folder,
-        fcst_data_source=data_config.fcst_data_source,
-        obs_data_source=data_config.obs_data_source,
-        fcst_fields=fcst_fields,
-        latitude_range=latitude_range,
-        longitude_range=longitude_range,
+        data_config=data_config,
+        model_config=model_config,
         load_full_image=load_full_image,
-        validation_range=val_config.val_range,
         training_range=train_config.training_range,
-        batch_size=batch_size,
-        downsample=model_config.downsample,
         data_paths=data_paths,
         hour=hour)
     
@@ -264,7 +222,8 @@ def load_data_from_folder(records_folder: str=None,
 def generate_prediction(data_iterator, generator, 
                         noise_channels, ensemble_size=1, 
                         batch_size=1, denormalise_data=False):
-        
+    
+    raise NotImplementedError()
     inputs, outputs = next(data_iterator)
     cond = inputs['lo_res_inputs']
     const = inputs['hi_res_inputs']

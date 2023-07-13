@@ -1,7 +1,6 @@
 import gc
 import os
 from glob import glob
-
 from tensorflow.keras.optimizers import Adam
 
 from dsrnngan.model import deterministic, setupmodel
@@ -11,86 +10,77 @@ from dsrnngan.model.vaegantrain import VAE
 from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file
 
+            # lr_disc=model_config.discriminator.learning_rate_disc,
+            # lr_gen=model_config.generator.learning_rate_gen,
+            # kl_weight=model_config.train.kl_weight,
+            # ensemble_size=model_config.train.ensemble_size,
+            # CLtype=model_config.train.CL_type,
+            # content_loss_weight=model_config.train.content_loss_weight
 
 def setup_model(*,
-                mode,
-                architecture,
-                downscaling_steps,
-                input_channels,
-                filters_gen,
-                filters_disc,
-                noise_channels,
-                num_constant_fields,
-                latent_variables=None,
-                padding=None,
-                kl_weight=None,
-                ensemble_size=None,
-                CLtype=None,
-                content_loss_weight=None,
-                lr_disc=None,
-                lr_gen=None,
-                rotate=False):
-
-    if mode in ("GAN", "VAEGAN"):
+                model_config,
+                data_config):
+                                   
+    if model_config.mode in ("GAN", "VAEGAN"):
         gen_to_use = {"normal": models.generator,
                       "forceconv": models.generator,
-                      "forceconv-long": models.generator}[architecture]
+                      "forceconv-long": models.generator}[model_config.architecture]
         disc_to_use = {"normal": models.discriminator,
                        "forceconv": models.discriminator,
-                       "forceconv-long": models.discriminator}[architecture]
-    elif mode == "det":
+                       "forceconv-long": models.discriminator}[model_config.architecture]
+    elif model_config.mode == "det":
         gen_to_use = {"normal": models.generator,
-                      "forceconv": models.generator}[architecture]
+                      "forceconv": models.generator}[model_config.architecture]
 
-    if mode == 'GAN':
-        gen = gen_to_use(mode=mode,
-                         arch=architecture,
-                         downscaling_steps=downscaling_steps,
-                         input_channels=input_channels,
-                         num_constant_fields=num_constant_fields,
-                         noise_channels=noise_channels,
-                         filters_gen=filters_gen,
-                         padding=padding,
-                         rotate=rotate)
-        disc = disc_to_use(arch=architecture,
-                           downscaling_steps=downscaling_steps,
-                           input_channels=input_channels,
-                           num_constant_fields=num_constant_fields,
-                           filters_disc=filters_disc,
-                           padding=padding,
-                           rotate=rotate)
-        model = gan.WGANGP(gen, disc, mode, lr_disc=lr_disc, lr_gen=lr_gen,
-                           ensemble_size=ensemble_size,
-                           CLtype=CLtype,
-                           content_loss_weight=content_loss_weight)
-    elif mode == 'VAEGAN':
-        (encoder, decoder) = gen_to_use(mode=mode,
-                                        arch=architecture,
-                                        downscaling_steps=downscaling_steps,
-                                        input_channels=input_channels,
-                                        latent_variables=latent_variables,
-                                        filters_gen=filters_gen,
-                                        padding=padding)
-        disc = disc_to_use(arch=architecture,
-                           downscaling_steps=downscaling_steps,
-                           input_channels=input_channels,
-                           filters_disc=filters_disc,
-                           padding=padding)
+    if model_config.mode == 'GAN':
+        gen = gen_to_use(mode=model_config.mode,
+                         arch=model_config.architecture,
+                         downscaling_steps=model_config.downscaling_steps,
+                         input_channels=data_config.input_channels,
+                         num_constant_fields=len(data_config.constant_fields),
+                         noise_channels=model_config.generator.noise_channels,
+                         filters_gen=model_config.generator.filters_gen,
+                         padding=model_config.padding,
+                         rotate=model_config.train.rotate)
+        disc = disc_to_use(arch=model_config.architecture,
+                           downscaling_steps=model_config.downscaling_steps,
+                           input_channels=data_config.input_channels,
+                           num_constant_fields=len(data_config.constant_fields),
+                           filters_disc=model_config.discriminator.filters_disc,
+                           padding=model_config.padding,
+                           rotate=model_config.train.rotate)
+        model = gan.WGANGP(gen, disc, model_config.mode, lr_disc=model_config.discriminator.learning_rate_disc, lr_gen=model_config.generator.learning_rate_gen,
+                           ensemble_size=model_config.train.ensemble_size,
+                           CLtype=model_config.train.CL_type,
+                           content_loss_weight=model_config.train.content_loss_weight)
+    elif model_config.mode == 'VAEGAN':
+        (encoder, decoder) = gen_to_use(mode=model_config.mode,
+                                        arch=model_config.architecture,
+                                        downscaling_steps=model_config.downscaling_steps,
+                                        input_channels=data_config.input_channels,
+                                        latent_variables=model_config.generator.latent_variables,
+                                        filters_gen=model_config.generator.filters_gen,
+                                        padding=model_config.padding)
+        disc = disc_to_use(arch=model_config.architecture,
+                           downscaling_steps=model_config.downscaling_steps,
+                           input_channels=data_config.input_channels,
+                           filters_disc=model_config.discriminator.filters_disc,
+                           padding=model_config.padding)
         gen = VAE(encoder, decoder)
-        model = gan.WGANGP(gen, disc, mode, lr_disc=lr_disc,
-                           lr_gen=lr_gen, kl_weight=kl_weight,
-                           ensemble_size=ensemble_size,
-                           CLtype=CLtype,
-                           content_loss_weight=content_loss_weight)
-    elif mode == 'det':
-        gen = gen_to_use(mode=mode,
-                         arch=architecture,
-                         downscaling_steps=downscaling_steps,
-                         input_channels=input_channels,
-                         filters_gen=filters_gen,
-                         padding=padding)
+        model = gan.WGANGP(gen, disc, model_config.mode, lr_disc=model_config.discriminator.learning_rate_disc,
+                           lr_gen=model_config.generator.learning_rate_gen, kl_weight=model_config.train.kl_weight,
+                           ensemble_size=model_config.train.ensemble_size,
+                           CLtype=model_config.train.CL_type,
+                           content_loss_weight=model_config.train.content_loss_weight)
+    elif model_config.mode == 'det':
+        gen = gen_to_use(mode=model_config.mode,
+                         arch=model_config.architecture,
+                         downscaling_steps=model_config.downscaling_steps,
+                         input_channels=data_config.input_channels,
+                         filters_gen=model_config.generator.filters_gen,
+                         padding=model_config.padding)
         model = deterministic.Deterministic(gen,
-                                            lr=lr_gen,
+                                            lr=model_config.generator.learning_rate_gen,
                                             loss='mse',
                                             optimizer=Adam)
 
@@ -112,17 +102,7 @@ def load_model_from_folder(model_folder, model_number=None):
     model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(setup_params)
 
     print('setting up inputs')
-    model = setupmodel.setup_model(mode=model_config.mode,
-                                   architecture=model_config.architecture,
-                                   downscaling_steps=ds_config.steps,
-                                   input_channels=data_config.input_channels,
-                                   filters_gen=gen_config.filters_gen,
-                                   filters_disc=dis_config.filters_disc,
-                                   noise_channels=gen_config.noise_channels,
-                                   latent_variables=gen_config.latent_variables,
-                                   padding=model_config.padding,
-                                   num_constant_fields=len(data_config.constant_fields),
-                                   rotate=model_config.train.rotate)
+    model = setupmodel.setup_model(model_config, data_config)
 
     gen = model.gen
 

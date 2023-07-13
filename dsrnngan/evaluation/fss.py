@@ -91,22 +91,15 @@ def plot_fss_curves(*,
     spatial_scales = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
     # initialise model
-    model = setupmodel.setup_model(mode=mode,
-                                   arch=arch,
-                                   downscaling_steps=downscaling_steps,
-                                   input_channels=input_channels,
-                                   filters_gen=filters_gen,
-                                   filters_disc=filters_disc,
-                                   noise_channels=noise_channels,
-                                   latent_variables=latent_variables,
-                                   padding=padding)
+    model = setupmodel.setup_model(model_config=model_config,
+                                   data_config=data_config)
 
     # load appropriate dataset
     if predict_full_image:
         dates = get_dates(predict_year)
         data_predict = DataGeneratorFull(dates=dates,
                                          batch_size=batch_size,
-                                         normalise=True,
+                                         normalise_inputs=True,
                                          shuffle=True,
                                          constant_fields=True,
                                          hour='random',
@@ -123,7 +116,7 @@ def plot_fss_curves(*,
         # requires a different data generator with different fields and no fcst_norm
         data_benchmarks = DataGeneratorFull(dates=dates,
                                             batch_size=batch_size,
-                                            normalise=False,
+                                            normalise_inputs=False,
                                             shuffle=True,
                                             constant_fields=True,
                                             hour="random")

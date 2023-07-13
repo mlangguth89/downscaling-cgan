@@ -375,18 +375,11 @@ def write_data(year_month_range: list,
         for hour in hours:
             print('Hour = ', hour)
             start_time = time.time()
-            dgc = DataGenerator(dates=[item.strftime('%Y%m%d') for item in dates],
-                                forecast_data_source=data_config.fcst_data_source, 
-                                observational_data_source=data_config.obs_data_source,
-                                data_paths=data_paths,
+            dgc = DataGenerator(data_config=data_config,
+                                dates=[item.strftime('%Y%m%d') for item in dates],
                                 batch_size=1,
                                 shuffle=False,
-                                constant_fields=data_config.constant_fields,
-                                fields=data_config.input_fields,
-                                hour=hour,
-                                normalise=data_config.normalise,
-                                longitude_range=longitude_range,
-                                latitude_range=latitude_range)
+                                hour=hour)
             print(f'Data generator initialization took {time.time() - start_time}')
             
             start_time = time.time()
@@ -461,7 +454,11 @@ def write_data(year_month_range: list,
                             if data_config.class_bin_boundaries is not None:
                                                         
                                 threshold = 0.1
-                                rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                                if data_config.normalise_outputs:
+                                    rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                                else:
+                                    rainy_pixel_fraction = (observations > threshold).mean()
+
                                 boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
                                 if any(boundary_comparison):
                                     clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)

@@ -117,16 +117,8 @@ elif problem_type == "superresolution":
 _, data_predict = setupdata.load_data_from_folder(log_folder)
 
 # initialise model
-model = setup_model(mode=mode,
-                    arch=arch,
-                    downscaling_steps=downscaling_steps,
-                    input_channels=input_channels,
-                    filters_gen=filters_gen,
-                    filters_disc=filters_disc,
-                    noise_channels=noise_channels,
-                    latent_variables=latent_variables,
-                    padding=padding,
-                    lr_gen=lr_gen)
+model = setup_model(model_config=model_config,
+                                   data_config=data_config)
 gen = model.gen
 if mode == "VAEGAN":
     _init_VAEGAN(gen, data_predict, args.predict_full_image, batch_size, latent_variables)
@@ -136,7 +128,7 @@ gen.load_weights(weights_fn)
 data_benchmarks = DataGeneratorFull(dates=dates,
                                     fcst_fields=data.all_fcst_fields,
                                     batch_size=batch_size,
-                                    normalise=False,
+                                    normalise_inputs=False,
                                     shuffle=True,
                                     hour='random',
                                     downsample=model_config.downsample)

@@ -2,23 +2,26 @@
 import random
 import numpy as np
 import tensorflow as tf
+from types import SimpleNamespace
 from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
 from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, input_fields
-from dsrnngan.utils.read_config import read_model_config
+from dsrnngan.utils.read_config import read_model_config, get_data_paths, get_lat_lon_range_from_config
 
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
-    def __init__(self, dates: list, batch_size: int, forecast_data_source: str, observational_data_source: str, fields: list=None, data_paths: dict=DATA_PATHS,
-                 shuffle: bool=True, constant_fields: list=None, hour: Union[int, str, list, np.ndarray]='random', longitude_range: Iterable[float]=None,
-                 latitude_range: Iterable[float]=None, normalise: bool=True,
+    def __init__(self, dates: list, batch_size: int, data_config: SimpleNamespace,
+                 shuffle: bool=True, hour: Union[int, str, list, np.ndarray]='random',
                  downsample: bool=False, repeat_data: bool=False, seed: int=None):
         
         if seed is not None:
             random.seed(seed)
         self.dates = dates
+        self.forecast_data_source = data_config.fcst_data_source
+        self.observational_data_source = data_config.obs_data_source
+        self.data_paths = get_data_paths(data_config=data_config)
 
         if isinstance(hour, str):
             if hour == 'random':
@@ -39,7 +42,7 @@ class DataGenerator(Sequence):
                 self.hours = np.repeat(hour, len(self.dates))
                 self.dates = np.tile(self.dates, len(hour))
 
-            if forecast_data_source == 'era5':
+            if self.constant_fieldsforecast_data_source == 'era5':
                 raise ValueError('ERA5 data only supports daily')
 
         else:
@@ -50,24 +53,22 @@ class DataGenerator(Sequence):
             np.random.seed(seed)
             self.shuffle_data()
 
-        self.forecast_data_source = forecast_data_source
-        self.observational_data_source = observational_data_source
-        self.data_paths = data_paths
         self.batch_size = batch_size
         self.repeat_data = repeat_data
 
-        self.fcst_fields = input_fields if fields is None else fields
-        self.constant_fields = constant_fields
+        self.fcst_fields = data_config.input_fields
+        self.constant_fields = data_config.constant_fields
         self.shuffle = shuffle
         self.hour = hour
-        self.normalise = normalise
+        self.normalise_inputs = data_config.normalise_inputs
+        self.normalise_outputs = data_config.normalise_outputs
+
         self.downsample = downsample
-        self.latitude_range = latitude_range
-        self.longitude_range = longitude_range
+        self.latitude_range, self.longitude_range = get_lat_lon_range_from_config(data_config)
                
         if self.downsample:
             # read downscaling factor from file
-                self.ds_factor = read_model_config().downscaling_factor
+            self.ds_factor = read_model_config().downscaling_factor
         
         if self.constant_fields is None:
             # Dummy constants
@@ -75,9 +76,9 @@ class DataGenerator(Sequence):
         else:
             self.constants = load_hires_constants(
                                                   fields=self.constant_fields,
-                                                  data_paths=data_paths['GENERAL'],
+                                                  data_paths=self.data_paths['GENERAL'],
                                                   batch_size=self.batch_size,
-                                                  latitude_vals=latitude_range, longitude_vals=longitude_range)
+                                                  latitude_vals=self.latitude_range, longitude_vals=self.longitude_range)
     def __len__(self):
         # Number of batches in dataset
         return len(self.dates) // self.batch_size
@@ -109,7 +110,8 @@ class DataGenerator(Sequence):
             fcst_data_source=self.forecast_data_source,
             obs_data_source=self.observational_data_source,
             hour=hours_batch,
-            norm=self.normalise,
+            normalise_inputs=self.normalise_inputs,
+            normalise_outputs=self.normalise_outputs,
             latitude_range=self.latitude_range,
             longitude_range=self.longitude_range)
         

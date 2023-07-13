@@ -22,6 +22,8 @@ from system_tests.test_data import create_dummy_stats_data
 
 data_folder = HOME / 'system_tests' / 'data'
 
+data_paths = get_data_paths()
+
 ifs_path = str(data_folder / 'IFS')
 nimrod_path = str(data_folder / 'NIMROD')
 constants_path = str(data_folder / 'constants')
@@ -33,9 +35,7 @@ test_data_dir = HOME / 'system_tests' / 'data'
 class TestTfrecordsGenerator(unittest.TestCase):
     
     def setUp(self) -> None:
-        
-
-        
+  
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir_name = self.temp_dir.name
         self.data_config_dict = {'data_paths': 'BLUE_PEBBLE', 
@@ -56,11 +56,11 @@ class TestTfrecordsGenerator(unittest.TestCase):
                             'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
                             'constant_fields': ['lakes', 'sea', 'orography'], 
                             'paths': {'BLUE_PEBBLE':
-                                {'GENERAL': {'IMERG': str(test_data_dir/ 'IMERG/half_hourly/final'),
-                                                'IFS': str(test_data_dir/  'IFS'),
-                                                'ERA5': str(test_data_dir/ 'ERA5'),
-                                                'OROGRAPHY': str(test_data_dir/ 'constants/h_HRES_EAfrica.nc'),
-                                                'LSM': str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
+                                {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
+                                                'IFS': str(test_data_dir /  'IFS'),
+                                                'ERA5': str(test_data_dir / 'ERA5'),
+                                                'OROGRAPHY': str(test_data_dir / 'constants/h_HRES_EAfrica.nc'),
+                                                'LSM': str(test_data_dir / 'constants/lsm_HRES_EAfrica.nc'),
                                                 'LAKES': str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
                                                 'SEA':  str(test_data_dir/ 'constants/lsm_HRES_EAfrica.nc'),
                                                 'CONSTANTS': os.path.join(self.temp_dir.name, 'constants')},
@@ -194,6 +194,7 @@ class TestTfrecordsGenerator(unittest.TestCase):
         Note that the tfrecords have been created using the test_write_era5_data function, so 
         the forecast and output shapes will be the same as for them
         '''
+        
         data_config = copy.copy(self.data_config)
         data_config.paths['BLUE_PEBBLE'] = DATA_PATHS
         data_config.paths['BLUE_PEBBLE']['TFRecords']['tfrecords_path'] = self.temp_dir_name

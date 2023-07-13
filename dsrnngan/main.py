@@ -145,12 +145,9 @@ def main(restart: bool,
                 'gpu_devices': tf_config.list_physical_devices('GPU')
             }
         )
-    
-    # For backwards compatability
-    if isinstance(data_config.constant_fields, int):
-        data_config.constant_fields = ['orography', 'lsm']
+
     num_constant_fields = len(data_config.constant_fields)
-            
+
     input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
     constants_image_shape = (data_config.input_image_width, data_config.input_image_width, num_constant_fields)
@@ -163,7 +160,6 @@ def main(restart: bool,
     if val_end:
         model_config.val.val_range[1] = val_end
     
-    latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
     noise_factor = float(noise_factor)
     evaluate = (eval_model_numbers or evalnum)
     
@@ -203,40 +199,17 @@ def main(restart: bool,
         logger.debug('Starting training')
         # initialize GAN
         model = setupmodel.setup_model(
-            mode=model_config.mode,
-            architecture=model_config.architecture,
-            downscaling_steps=model_config.downscaling_steps,
-            input_channels=data_config.input_channels,
-            num_constant_fields=num_constant_fields,
-            latent_variables=model_config.generator.latent_variables,
-            filters_gen=model_config.generator.filters_gen,
-            filters_disc=model_config.discriminator.filters_disc,
-            noise_channels=model_config.generator.noise_channels,
-            padding=model_config.padding,
-            lr_disc=model_config.discriminator.learning_rate_disc,
-            lr_gen=model_config.generator.learning_rate_gen,
-            kl_weight=model_config.train.kl_weight,
-            ensemble_size=model_config.train.ensemble_size,
-            CLtype=model_config.train.CL_type,
-            content_loss_weight=model_config.train.content_loss_weight,
-            rotate=model_config.train.rotate)
+            model_config=model_config,
+            data_config=data_config)
 
         batch_gen_train, batch_gen_valid = setupdata.setup_data(
-            training_range=model_config.train.training_range,
-            validation_range=model_config.val.val_range,
-            fcst_data_source=data_config.fcst_data_source,
-            obs_data_source=data_config.obs_data_source,
-            fcst_fields=data_config.input_fields,
-            latitude_range=latitude_range,
-            longitude_range=longitude_range,
+            data_config=data_config,
+            model_config=model_config,
             records_folder=records_folder,
-            downsample=model_config.downsample,
             fcst_shape=input_image_shape,
             con_shape=constants_image_shape,
             out_shape=output_image_shape,
             weights=training_weights,
-            crop_size=model_config.train.crop_size,
-            batch_size=model_config.train.batch_size,
             load_full_image=False,
             seed=seed)
 
@@ -342,8 +315,6 @@ def main(restart: bool,
         logger.debug('Performing evaluation')
         evaluation.evaluate_multiple_checkpoints(model_config=model_config,
                                                  data_config=data_config,
-                                                 latitude_range=latitude_range,
-                                                 longitude_range=longitude_range,
                                                  log_folder=log_folder,
                                                  weights_dir=model_weights_root,
                                                  records_folder=records_folder,
@@ -352,7 +323,6 @@ def main(restart: bool,
                                                  ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
                                                  ensemble_size=eval_ensemble_size,
-                                                 data_paths=data_paths,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
                                                  batch_size=10)

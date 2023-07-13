@@ -92,17 +92,11 @@ class TestSetupData(unittest.TestCase):
         
         # Check the basic version runs
         data_gen_train, data_gen_valid = setupdata.setup_data(
+            data_config=data_config,
+            model_config=model_config,
             records_folder=None, # Use case of permuted features is currently using full image dataset
-            fcst_data_source=data_config.fcst_data_source,
-            obs_data_source=data_config.obs_data_source,
-            latitude_range=lat_range,
-            longitude_range=lon_range,
             load_full_image=True,
-            validation_range=model_config.val.val_range,
             training_range=model_config.train.training_range,
-            batch_size=1,
-            downsample=False,
-            data_paths=data_paths,
             hour=17)
         
         normal_inputs = []

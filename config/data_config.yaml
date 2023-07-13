@@ -5,7 +5,8 @@ normalisation_year: 2017
 input_image_width: 264 # Assumes a square image
 num_samples: 320000
 num_samples_per_image: 1
-normalise: True
+normalise_inputs: True
+normalise_outputs: True
 num_classes: 4 # Number of bins to split data into
 min_latitude: -11.95
 max_latitude: 15.05

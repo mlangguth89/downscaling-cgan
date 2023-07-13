@@ -32,60 +32,32 @@ ds_fac = model_config.downscaling_factor
 
 metrics = {'correlation': calculate_pearsonr, 'mae': mae, 'mse': mse,
            }
-def setup_inputs(*,
-                 mode,
-                 arch,
+
+def setup_inputs(
+                 model_config,
+                 data_config,
                  records_folder,
-                 fcst_data_source,
-                 obs_data_source,
-                 latitude_range,
-                 longitude_range,
-                 downscaling_steps,
-                 validation_range,
                  hour,
-                 downsample,
-                 input_channels,
-                 filters_gen,
-                 filters_disc,
-                 noise_channels,
-                 latent_variables,
-                 padding,
-                 constant_fields,
-                 data_paths,
                  shuffle,
-                 fcst_fields=None):
+                 batch_size):
 
     # initialise model
-    model = setupmodel.setup_model(mode=mode,
-                                   architecture=arch,
-                                   downscaling_steps=downscaling_steps,
-                                   input_channels=input_channels,
-                                   filters_gen=filters_gen,
-                                   filters_disc=filters_disc,
-                                   noise_channels=noise_channels,
-                                   latent_variables=latent_variables,
-                                   padding=padding,
-                                   num_constant_fields=len(constant_fields))
+    model = setupmodel.setup_model(model_config=model_config,
+                                   data_config=data_config)
 
     gen = model.gen
+    
 
     # always uses full-sized images
     print('Loading full sized image dataset')
     _, data_gen_valid = setupdata.setup_data(
-        fcst_data_source,
-        obs_data_source,
-        fcst_fields=fcst_fields,
-        constant_fields=constant_fields,
+        data_config,
+        model_config,
         records_folder=records_folder,
-        latitude_range=latitude_range,
-        longitude_range=longitude_range,
         load_full_image=True,
-        validation_range=validation_range,
-        batch_size=1,
-        downsample=downsample,
-        data_paths=data_paths,
         shuffle=shuffle,
-        hour=hour)
+        hour=hour,
+        full_image_batch_size=batch_size)
     
     return gen, data_gen_valid
 
@@ -213,13 +185,13 @@ def eval_one_chkpt(*,
                    data_gen,
                    num_images,
                    noise_factor,
-                   latitude_range,
-                   longitude_range,
                    ensemble_size,
-                   denormalise_data=True,
                    normalize_ranks=True,
                    show_progress=True,
                    batch_size: int=1):
+    
+    latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
+    denormalise_data = data_config.normalise_outputs
     
     if num_images < 5:
         Warning('These scores are best performed with more images')
@@ -281,7 +253,8 @@ def eval_one_chkpt(*,
                         latitude_range=latitude_range,
                         longitude_range=longitude_range,
                         ensemble_size=ensemble_size,
-                        denormalise_data=denormalise_data)
+                        denormalise_data=denormalise_data,
+                        )
                 success = True
                 data_idx += 1
                 
@@ -435,48 +408,25 @@ def log_line(log_fname, line):
 def evaluate_multiple_checkpoints(
                                   model_config,
                                   data_config,
-                                  latitude_range,
-                                  longitude_range,
                                   weights_dir,
                                   records_folder,
                                   model_numbers,
                                   log_folder,
                                   noise_factor,
-                                  ranks_to_save,
                                   num_images,
                                   ensemble_size,
-                                  data_paths,
                                   shuffle,
                                   save_generated_samples=False,
-                                  batch_size: int=1
+                                  batch_size: int=1,
                                   ):
-    #TODO: pass args via model and data configs
-    #TODO: this should be an input argument
 
-    gen, data_gen_valid = setup_inputs(mode=model_config.mode,
-                                       arch=model_config.architecture,
+    gen, data_gen_valid = setup_inputs(model_config=model_config,
+                                       data_config=data_config,
                                        records_folder=records_folder,
-                                       fcst_data_source=data_config.fcst_data_source,
-                                       obs_data_source=data_config.obs_data_source,
-                                       fcst_fields=data_config.input_fields,
-                                       latitude_range=latitude_range,
-                                       longitude_range=longitude_range,
-                                       downscaling_steps=model_config.downscaling_steps,
-                                       validation_range=model_config.val.val_range,
                                        hour='random',
-                                       downsample=model_config.downsample,
-                                       input_channels=data_config.input_channels,
-                                       filters_gen=model_config.generator.filters_gen,
-                                       filters_disc=model_config.discriminator.filters_disc,
-                                       noise_channels=model_config.generator.noise_channels,
-                                       latent_variables=model_config.generator.latent_variables,
-                                       padding=model_config.padding,
-                                       constant_fields=data_config.constant_fields,
-                                       data_paths=data_paths,
-                                       shuffle=shuffle)
-
+                                       shuffle=shuffle,
+                                       batch_size=batch_size)
     header = True
-    
 
     for model_number in model_numbers:
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -498,8 +448,6 @@ def evaluate_multiple_checkpoints(
                                              num_images=num_images,
                                              ensemble_size=ensemble_size,
                                              noise_factor=noise_factor,
-                                             latitude_range=latitude_range,
-                                             longitude_range=longitude_range,
                                              batch_size=batch_size)
         ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)

@@ -77,6 +77,18 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
     data_config_ns.input_channels = len(data_config_ns.input_fields)
     data_config_ns.class_bin_boundaries = data_config_dict.get('class_bin_boundaries')
     
+    # For backwards compatability
+    if isinstance(data_config_ns.constant_fields, int):
+        data_config_ns.constant_fields = ['orography', 'lsm']
+    
+    data_config_ns.normalise_inputs = data_config_dict.get('normalise_inputs', False)
+    data_config_ns.normalise_outputs = data_config_dict.get('normalise_outputs', False)
+    
+    if (not data_config_ns.normalise_inputs or not data_config_ns.normalise_outputs) and data_config_dict.get('normalise', False):
+        # backwards compatability
+        data_config_ns.normalise_inputs = True
+        data_config_ns.normalise_outputs = True
+
     return data_config_ns
 
 def get_data_paths(config_folder: str=CONFIG_FOLDER, data_config: types.SimpleNamespace=None):

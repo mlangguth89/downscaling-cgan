@@ -1,6 +1,7 @@
 import os
 import unittest
 import copy
+import tempfile
 import numpy as np
 
 from datetime import datetime
@@ -14,6 +15,7 @@ data_folder = HOME / 'system_tests' / 'data'
 from dsrnngan.data.data_generator import DataGenerator, PermutedDataGenerator
 from dsrnngan.data import data
 from system_tests.test_data import create_dummy_stats_data
+from dsrnngan.utils.read_config import read_data_config, get_lat_lon_range_from_config
 
 ifs_path = str(data_folder / 'IFS')
 nimrod_path = str(data_folder / 'NIMROD')
@@ -31,50 +33,88 @@ class TestDataGenerator(unittest.TestCase):
     
     def setUp(self) -> None:
         
-        create_dummy_stats_data()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_dir_name = self.temp_dir.name
+        
+        self.constants_path = os.path.join(self.temp_dir_name, 'constants')
+        os.mkdir(self.constants_path)
+        
+        create_dummy_stats_data(constants_path=self.constants_path, lat_range=[-1,1], lon_range=[32,34])
+                                
+        self.data_config_dict = {'data_paths': 'BLUE_PEBBLE', 
+                            'fcst_data_source': 'ifs', 
+                            'obs_data_source': 'imerg', 
+                            'normalisation_year': 2017, 
+                            'input_image_width': 10, 
+                            'num_samples': 3, 
+                            'num_samples_per_image': 1, 
+                            'normalise': True,
+                            'num_classes': 1, 
+                            'min_latitude': -1.95, 
+                            'max_latitude': 1.95, 
+                            'latitude_step_size': 0.1, 
+                            'min_longitude': 32.05, 
+                            'max_longitude': 34.95, 
+                            'longitude_step_size': 0.1, 
+                            'normalisation_strategy': data.IFS_NORMALISATION_STRATEGY,
+                            'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
+                            'constant_fields': ['lakes', 'sea', 'orography'], 
+                            'paths': {'BLUE_PEBBLE':
+                                {'GENERAL': {'IMERG': str(data_folder/ 'IMERG/half_hourly/final'),
+                                                'IFS': str(data_folder/  'IFS'),
+                                                'ERA5': str(data_folder/ 'ERA5'),
+                                                'OROGRAPHY': str(data_folder/ 'constants/h_HRES_EAfrica.nc'),
+                                                'LSM': str(data_folder/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'LAKES': str(data_folder/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'SEA':  str(data_folder/ 'constants/lsm_HRES_EAfrica.nc'),
+                                                'CONSTANTS': os.path.join(self.temp_dir.name, 'constants')},
+                                        'TFRecords': {'tfrecords_path': self.temp_dir.name}}}}
+        self.data_config = read_data_config(data_config_dict=self.data_config_dict)
+        self.latitude_range, self.longitude_range = get_lat_lon_range_from_config(self.data_config)
+
         return super().setUp()
     
     
     def test_basic_generator(self):
-        
-        date_range = [datetime(2017,7,4), datetime(2017,7,5)]
+
+        date_range = [datetime(2017,7,4), datetime(2017,7,4)]
         batch_size = 2
         
-        data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], batch_size=batch_size, 
-                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                    shuffle=False, constant_fields=['lsm', 'orography'], hour=17, longitude_range=longitude_vals,
-                                    latitude_range=latitude_vals, normalise=True,
-                                    downsample=False, seed=None)
+        data_gen = DataGenerator(date_range, batch_size=batch_size,
+                                 data_config=self.data_config,
+                                shuffle=False, hour=17,
+                                downsample=False, seed=None,
+                                repeat_data=True)
         
-        
+
         data = [data_gen[n] for n in range(len(date_range))]
         self.assertEqual(set(data[0][0].keys()), {'lo_res_inputs', 'hi_res_inputs', 'dates', 'hours'})
         self.assertEqual(set(data[0][1].keys()), {'output'})
         
-        self.assertEqual(data[0][0]['lo_res_inputs'].shape, (batch_size, 2, 2, 20))
-        self.assertEqual(data[0][0]['hi_res_inputs'].shape, (batch_size, 2, 2, 2))
+        self.assertEqual(data[0][0]['lo_res_inputs'].shape, (batch_size, len(self.latitude_range), len(self.longitude_range), (len(self.data_config.input_fields))))
+        self.assertEqual(data[0][0]['hi_res_inputs'].shape, (batch_size, len(self.latitude_range), len(self.longitude_range), len(self.data_config.constant_fields)))
         self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
         self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
 
-        self.assertEqual(data[0][1]['output'].shape, (batch_size, 2, 2))
+        self.assertEqual(data[0][1]['output'].shape, (batch_size, len(self.latitude_range), len(self.longitude_range)))
     
     def test_repeat_data(self):
         # Test that generator keeps producing if repeat_data is True
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]
         batch_size = 1
         
-        data_gen = DataGenerator(date_range, batch_size=batch_size, 
-                                 forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
-                                 shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
-                                 latitude_range=latitude_vals, normalise=True,
-                                    downsample=False, seed=None, repeat_data=False)
+        data_gen = DataGenerator(date_range, batch_size=batch_size,
+                                 data_config=self.data_config,
+                                shuffle=False, hour=17,
+                                downsample=False, seed=None,
+                                repeat_data=False)
         
         self.assertEqual(data_gen[2][0]['lo_res_inputs'].size, 0)
         
         repeat_data_gen = DataGenerator(date_range, batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
                                  shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
-                                 latitude_range=latitude_vals, normalise=True,
+                                 latitude_range=latitude_vals, normalise_inputs=True,
                                     downsample=False, seed=None, repeat_data=True)
         
         self.assertGreater(repeat_data_gen[2][0]['lo_res_inputs'].size, 0)
@@ -89,7 +129,7 @@ class TestDataGenerator(unittest.TestCase):
         data_gen = DataGenerator(date_range, batch_size=batch_size, 
                                  forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
                                  shuffle=False, constant_fields=True, hour=hours, longitude_range=longitude_vals,
-                                 latitude_range=latitude_vals, normalise=True,
+                                 latitude_range=latitude_vals, normalise_inputs=True,
                                     downsample=False, seed=None, repeat_data=False)
         
         data = [data_gen[n] for n in range(len(date_range)+1)]
@@ -102,7 +142,7 @@ class TestDataGenerator(unittest.TestCase):
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]
         data_gen = DataGenerator([datetime(2017,7,4), datetime(2017,7,5)], 1, forecast_data_source='ifs', observational_data_source='imerg', data_paths=data_paths,
                                     shuffle=False, constant_fields=True, hour=17, longitude_range=longitude_vals,
-                                    latitude_range=latitude_vals, normalise=True,
+                                    latitude_range=latitude_vals, normalise_inputs=True,
                                     downsample=False, seed=5)
         
         data = [data_gen[n] for n in range(len(date_range))]

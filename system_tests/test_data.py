@@ -529,7 +529,7 @@ class TestLoad(unittest.TestCase):
         ifs_input_batch, imerg_batch = load_fcst_radar_batch(ifs_batch_dates, fcst_data_source='ifs', obs_data_source='imerg', fcst_fields=all_ifs_fields, 
                                           fcst_dir=ifs_path, obs_data_dir=imerg_folder, latitude_range=latitude_vals,
                                           longitude_range=longitude_vals, constants_dir=constants_path,
-                                          constants=True, hour=17, norm=False)
+                                          constants=True, hour=17, normalise_inputs=False)
         self.assertEqual(len(ifs_input_batch), 2)
         self.assertEqual(len(ifs_input_batch[0]), len(ifs_batch_dates))
         self.assertEqual(len(ifs_input_batch[1]), len(ifs_batch_dates))
