@@ -224,41 +224,45 @@ def get_spread_error_data(n_samples: int, observation_array: np.ndarray, ensembl
     Returns:
         list(tuple): List of tuples, where each tuple is (average variance in bin, mse of corresponding observation points relative to ensemble mean)
     """
-    (n_sample_total, _, _) = observation_array.shape
-
-    # Sample the data
+    (n_sample_total, _, _, ensemble_size) = ensemble_array.shape
     ensmean_array = np.mean(ensemble_array, axis=-1)
-    sample_indexes = np.random.choice(n_sample_total, n_samples)
-    ensemble_array = ensemble_array[sample_indexes, :,:,:].copy()
-    ensmean_array = ensmean_array[sample_indexes, :,:]
 
+    if n_samples < n_sample_total:
+        # Sample the data
+        sample_indexes = np.random.choice(n_sample_total, n_samples)
+        ensemble_array = ensemble_array[sample_indexes, :,:,:].copy()
+        ensmean_array = ensmean_array[sample_indexes, :,:]
+        observation_array = observation_array[sample_indexes, :, :].copy()
+    else:
+        ensemble_array = ensemble_array.copy()
+        observation_array = observation_array.copy()
+        
     # cap data at large value
     if upper_limit is not None:
         ensemble_array = np.clip(ensemble_array, 0, upper_limit)
         ensmean_array = np.clip(ensmean_array, 0, upper_limit)
 
-    observation_array = observation_array[sample_indexes, :, :].copy()
-
-    # First calculate the ensemble variances for each sample point
-    sample_variances = np.var(ensemble_array, axis=-1)
+    # First calculate the spread values of the ensemble
+    spreads = np.var(ensemble_array, axis=-1)
+    # Apply correction factor; see e.g. Leutbecker and Palmer, 2008
+    spreads = ((ensemble_size+1) / (ensemble_size-1)) * spreads
 
     # find percentiles of the variances
-    variance_boundaries = np.quantile(sample_variances, np.arange(0, 1, quantile_step_size))
-    
-    binned_variances = np.digitize(sample_variances, variance_boundaries, right=False)
+    spread_boundaries = np.quantile(spreads, np.arange(0, 1, quantile_step_size))
+    binned_spreads = np.digitize(spreads, spread_boundaries, right=False)
 
     # Calculate bin centres
-    variance_bin_centres = [0.5*(variance_boundaries[n]+variance_boundaries[n+1]) for n in range(len(variance_boundaries) -1)] + [0.5*(variance_boundaries[-1] + sample_variances.max())]
+    spread_bin_centres = [0.5*(spread_boundaries[n]+spread_boundaries[n+1]) for n in range(len(spread_boundaries) -1)] + [0.5*(spread_boundaries[-1] + spreads.max())]
 
     variance_mse_pairs = []
-    for bin_num in tqdm(set(binned_variances.flatten())):
+    for bin_num in tqdm(set(binned_spreads.flatten())):
         
-        relevant_truth_data = observation_array[binned_variances ==bin_num]
-        relevant_ensmean_data = ensmean_array[binned_variances == bin_num]
+        relevant_truth_data = observation_array[binned_spreads ==bin_num]
+        relevant_ensmean_data = ensmean_array[binned_spreads == bin_num]
         
         tmp_mse = np.power(relevant_truth_data - relevant_ensmean_data, 2).mean()
         
-        variance_mse_pairs.append((variance_bin_centres[bin_num-1], tmp_mse))
+        variance_mse_pairs.append((spread_bin_centres[bin_num-1], tmp_mse))
         
     return variance_mse_pairs
 
