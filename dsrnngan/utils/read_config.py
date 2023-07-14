@@ -50,6 +50,8 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")
     
     model_config.generator.learning_rate_gen = float(model_config.generator.learning_rate_gen)
+    model_config.generator.output_activation = model_config_dict['generator'].get('output_activation', 'softplus')
+    
     model_config.discriminator.learning_rate_disc = float(model_config.discriminator.learning_rate_disc)
     
     if model_config.mode not in ['GAN', 'VAEGAN', 'det']:

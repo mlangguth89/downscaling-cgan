@@ -40,7 +40,8 @@ def setup_model(*,
                          num_constant_fields=len(data_config.constant_fields),
                          noise_channels=model_config.generator.noise_channels,
                          filters_gen=model_config.generator.filters_gen,
-                         padding=model_config.padding)
+                         padding=model_config.padding,
+                         output_activation=model_config.generator.output_activation)
         disc = disc_to_use(arch=model_config.architecture,
                            downscaling_steps=model_config.downscaling_steps,
                            input_channels=data_config.input_channels,

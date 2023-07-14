@@ -1,12 +1,24 @@
 import tensorflow as tf
-import numpy as np
+
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import concatenate, Conv2D, Dense, GlobalAveragePooling2D
-from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation, Lambda
+from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation, Lambda, Layer
 
 from dsrnngan.model.blocks import residual_block, const_upscale_block
 
 identity_layer = Lambda(lambda x: x)
+
+class ParameterisedSoftplus(Layer):
+    def __init__(self):
+        super().__init__()
+        self.alpha = self.add_weight(
+            shape=(1,), initializer="random_normal", trainable=True)
+
+    def call(self, inputs):
+        return tf.nn.softplus( tf.math.divide(inputs, self.alpha))
+    
+activation_lookup = {'psoftplus': ParameterisedSoftplus,
+                     'softplus': tf.keras.layers.Softplus}
 
 def generator(mode,
               arch,
@@ -20,8 +32,8 @@ def generator(mode,
               padding=None,
               stride=1,
               relu_alpha=0.2,
-              norm=None,
-              rotate=False):
+              output_activation='softplus',
+              norm=None):
 
     forceconv = True if arch in ("forceconv", "forceconv-long") else False
     # Network inputs
@@ -105,6 +117,12 @@ def generator(mode,
 
     # Output layer
     generator_output = Conv2D(filters=1, kernel_size=(1, 1), activation='softplus', name="output")(generator_output)
+    
+    # activation_layer = activation_lookup[output_activation]
+    # generator_output = Conv2D(filters=1, kernel_size=(1, 1))(generator_output)
+    # generator_output = activation_layer(name='output)(generator_output)
+
+
     print(f"Output shape: {generator_output.shape}")
     
     if mode == 'VAEGAN':
@@ -127,8 +145,7 @@ def discriminator(arch,
                   padding=None,
                   stride=1,
                   relu_alpha=0.2,
-                  norm=None,
-                  rotate=False):
+                  norm=None):
 
     forceconv = True if arch in ("forceconv", "forceconv-long") else False
     # Network inputs

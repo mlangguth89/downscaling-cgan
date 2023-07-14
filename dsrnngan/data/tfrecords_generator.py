@@ -179,10 +179,8 @@ def _dataset_rotater_list(lores_inputs, hires_inputs, outputs, seed=None):
 
 def _dataset_rotater_dict(inputs, outputs, seed=None):
     '''
-    Random crop of inputs and outputs
-    
-    Note: this currently only works when inputs and outputs are all the same dimensions (i.e not downscaling)
-    
+    Random rotation of inputs and outputs
+        
     '''
     outputs = outputs['output']
     hires_inputs = inputs['hi_res_inputs']
