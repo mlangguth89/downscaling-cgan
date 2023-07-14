@@ -2,10 +2,11 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import concatenate, Conv2D, Dense, GlobalAveragePooling2D
-from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation
+from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation, Lambda
 
 from dsrnngan.model.blocks import residual_block, const_upscale_block
 
+identity_layer = Lambda(lambda x: x)
 
 def generator(mode,
               arch,
@@ -31,13 +32,16 @@ def generator(mode,
     const_input = Input(shape=(None, None, num_constant_fields), name="hi_res_inputs")
     print(f"constants_input shape: {const_input.shape}")
     
-    if rotate:
-        # Data augmentation by rotation
-        rng = np.random.default_rng()
-        seed = rng.integers(low=0, high=None, size=1)[0]
-        generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
-        const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
-
+    # if rotate:
+    #     # Data augmentation by rotation
+    #     rng = np.random.default_rng()
+    #     seed = rng.integers(low=0, high=1e6, size=1)[0]
+    #     rotated_generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
+    #     rotated_const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
+    # else:
+    #     rotated_generator_input = identity_layer(generator_input)
+    #     rotated_const_input = identity_layer(const_input)
+        
     # Convolve constant fields down to match other input dimensions
     upscaled_const_input = const_upscale_block(const_input, steps=downscaling_steps, filters=filters_gen)
     print(f"upscaled constants shape: {upscaled_const_input.shape}")
@@ -138,13 +142,17 @@ def discriminator(arch,
     generator_output = Input(shape=(None, None, 1), name="output")
     print(f"generator_output shape: {generator_output.shape}")
     
-    if rotate:
-        # Data augmentation by rotation. Choose seed to be consistent
-        rng = np.random.default_rng()
-        seed = rng.integers(low=0, high=None, size=1)[0]
-        generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
-        const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
-        generator_output = RandomRotation(factor=0.5, seed=seed)(generator_output)
+    # if rotate:
+    #     # Data augmentation by rotation. Choose seed to be consistent
+    #     rng = np.random.default_rng()
+    #     seed = rng.integers(low=0, high=1e6, size=1)[0]
+    #     rotated_generator_input = RandomRotation(factor=0.5, seed=seed)(generator_input)
+    #     rotated_const_input = RandomRotation(factor=0.5, seed=seed)(const_input)
+    #     rotated_generator_output = RandomRotation(factor=0.5, seed=seed)(generator_output)
+    # else:
+    #     rotated_generator_input = identity_layer(generator_input)
+    #     rotated_const_input = identity_layer(const_input)
+    #     rotated_generator_output = identity_layer(generator_output)
 
     # convolve down constant fields to match dimensions
     lo_res_const_input = const_upscale_block(const_input, steps=downscaling_steps, filters=filters_disc)

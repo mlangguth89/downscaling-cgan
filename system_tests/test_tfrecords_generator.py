@@ -286,7 +286,6 @@ class TestTfrecordsGenerator(unittest.TestCase):
         
         #############################
         # with rotation
-        seed=(2,1)
         ds  = create_dataset(data_label='train',
                    clss=0,
                    fcst_shape=(height, width, len(data_config.input_fields)),
@@ -296,21 +295,21 @@ class TestTfrecordsGenerator(unittest.TestCase):
                    shuffle_size=1024,
                    crop_size=None,
                    repeat=True,
-                   seed=seed,
+                   seed=(1,2),
                    rotate=True
                    )
         
         element_spec = ds.element_spec
-        
-        rng = np.random.default_rng(seed=seed[0])
-        angle = rng.choice([0,180],1)[0]
 
-        cropped_sample_vals = list(ds.take(1))[0]
-        lo_res_vals_cropped = cropped_sample_vals[0]['lo_res_inputs'].numpy()
-        hi_res_vals_cropped = cropped_sample_vals[0]['hi_res_inputs'].numpy()
-        output_vals_cropped = cropped_sample_vals[1]['output'].numpy()
-        
-        t=1
+        rotated_sample_vals = list(ds.take(1))[0]
+        lo_res_vals_rotated = rotated_sample_vals[0]['lo_res_inputs'].numpy()
+        hi_res_vals_rotated = rotated_sample_vals[0]['hi_res_inputs'].numpy()
+        output_vals_rotated = rotated_sample_vals[1]['output'].numpy()
+
+        self.assertTrue(np.array_equal(lo_res_vals, np.rot90(lo_res_vals_rotated, k=2)))
+        self.assertTrue(np.array_equal(hi_res_vals, np.rot90(hi_res_vals_rotated, k=2)))
+        self.assertTrue(np.array_equal(output_vals, np.rot90(output_vals_rotated, k=2)))
+
 
         
 if __name__ == '__main__':

@@ -23,6 +23,7 @@ def setup_batch_gen(records_folder: str,
                     downsample: bool=False,
                     weights=None,
                     crop_size: int=None,
+                    rotate: bool=False,
                     seed: int=None,
                     val=False,
                     val_fixed=False,
@@ -38,6 +39,7 @@ def setup_batch_gen(records_folder: str,
                            downsample=downsample, 
                            weights=weights, 
                            crop_size=crop_size,
+                           rotate=rotate,
                            records_folder=records_folder,
                            seed=seed)
 
@@ -157,6 +159,7 @@ def setup_data(data_config,
             downsample=model_config.downsample,
             weights=weights,
             crop_size=model_config.train.crop_size,
+            rotate=model_config.train.rotate,
             seed=seed)
 
     gc.collect()

@@ -154,34 +154,67 @@ def get_lat_lon_range_from_config(data_config=None):
 def get_config_objects(config: dict):
 
     # Convert old style config into namespace objects; soon to be replaced 
-    # once legacy model runs are no longer in use    
-    local_config = types.SimpleNamespace(**config['LOCAL'])
-    model_config = types.SimpleNamespace(**config['MODEL'])
-    ds_config =  types.SimpleNamespace(**config['DOWNSCALING'])    
-    data_config = types.SimpleNamespace(**config['DATA'])
-    gen_config = types.SimpleNamespace(**config['GENERATOR'])
-    dis_config = types.SimpleNamespace(**config['DISCRIMINATOR'])
-    train_config = types.SimpleNamespace(**config['TRAIN'])
-    val_config = types.SimpleNamespace(**config['VAL'])
+    # once legacy model runs are no longer in use  
+    model_config = config['MODEL']
+    data_config = config['DATA']
+
+    model_config['train'] = config['TRAIN']
+    model_config['generator'] = config['GENERATOR']
+    model_config['discriminator'] = config['DISCRIMINATOR']
+    model_config['val'] = config['VAL']
+
+
+
+    for k, lp in config['LOCAL'].items():
+        model_config[k] = lp
     
-    train_config.num_epochs = config["TRAIN"].get("num_epochs")
-    train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
-    train_config.crop_size = config['TRAIN'].get('img_chunk_width')
+    for k, dp in config['DOWNSCALING'].items():
+        model_config[k] = dp
     
-    val_config.val_range = config['VAL'].get('val_range')
-    val_config.val_size = config.get("VAL", {}).get("val_size")
+    model_config['downscaling_steps'] = model_config['steps']
+        
+    model_config = read_model_config(model_config_dict=model_config)
+    data_config = read_data_config(data_config_dict=data_config)
+        
+    # assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
+    # ds_properties = [item for item in dir(ds_config) if not item.startswith('_')]
+    # for dp in ds_properties:
+    #     model_config.__setattr__(dp, ds_config.__getattribute__(dp))
+    # model_config.downscaling_steps = model_config.steps
+    # train_config.num_epochs = config["TRAIN"].get("num_epochs")
+    # train_config.num_samples = config['TRAIN'].get('num_samples') # leaving this in while we transition to using epochs    
+    # train_config.crop_size = config['TRAIN'].get('img_chunk_width')
     
-    data_config.load_constants = config['DATA'].get('load_constants', True)
-    data_config.input_fields = config['DATA'].get('input_fields')
+    # val_config.val_range = config['VAL'].get('val_range')
+    # val_config.val_size = config.get("VAL", {}).get("val_size")
     
-    model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
-    model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 
+    # data_config.load_constants = config['DATA'].get('load_constants', True)
+    # data_config.input_fields = config['DATA'].get('input_fields')
     
-    gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
-    dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
-    train_config.kl_weight = float(train_config.kl_weight)
-    train_config.content_loss_weight = float(train_config.content_loss_weight)
+    # model_config.mode = config["MODEL"].get("mode", False) or config['GENERAL']['mode']
+    # model_config.downsample = config["MODEL"].get("downsample", False) or config.get('GENERAL', {}).get('downsample', False) 
     
-    assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
+    # gen_config.learning_rate_gen = float(gen_config.learning_rate_gen)
+    # dis_config.learning_rate_disc = float(dis_config.learning_rate_disc)
+    # train_config.kl_weight = float(train_config.kl_weight)
+    # train_config.content_loss_weight = float(train_config.content_loss_weight)
     
-    return model_config, local_config, ds_config, data_config, gen_config, dis_config, train_config, val_config
+    # model_config.train = train_config
+    # model_config.generator = gen_config
+    # model_config.discriminator = dis_config
+    # model_config.val = val_config
+
+    # local_properties = [item for item in dir(local_config) if not item.startswith('_')]
+    # for lp in local_properties:
+    #     model_config.__setattr__(lp, local_config.__getattribute__(lp))
+        
+    # assert math.prod(ds_config.steps) == ds_config.downscaling_factor, "downscaling factor steps do not multiply to total downscaling factor!"
+    # ds_properties = [item for item in dir(ds_config) if not item.startswith('_')]
+    # for dp in ds_properties:
+    #     model_config.__setattr__(dp, ds_config.__getattribute__(dp))
+    # model_config.downscaling_steps = model_config.steps
+    
+    # if isinstance(data_config.constant_fields, int):
+    #     data_config.constant_fields = ['orography', 'lsm']
+
+    return model_config, data_config

@@ -40,15 +40,13 @@ def setup_model(*,
                          num_constant_fields=len(data_config.constant_fields),
                          noise_channels=model_config.generator.noise_channels,
                          filters_gen=model_config.generator.filters_gen,
-                         padding=model_config.padding,
-                         rotate=model_config.train.rotate)
+                         padding=model_config.padding)
         disc = disc_to_use(arch=model_config.architecture,
                            downscaling_steps=model_config.downscaling_steps,
                            input_channels=data_config.input_channels,
                            num_constant_fields=len(data_config.constant_fields),
                            filters_disc=model_config.discriminator.filters_disc,
-                           padding=model_config.padding,
-                           rotate=model_config.train.rotate)
+                           padding=model_config.padding)
         model = gan.WGANGP(gen, disc, model_config.mode, lr_disc=model_config.discriminator.learning_rate_disc, lr_gen=model_config.generator.learning_rate_gen,
                            ensemble_size=model_config.train.ensemble_size,
                            CLtype=model_config.train.CL_type,
@@ -99,10 +97,10 @@ def load_model_from_folder(model_folder, model_number=None):
         model_fp = os.path.join(model_weights_root, f'gen_weights-{model_number:07d}.h5')
 
     setup_params = load_yaml_file(config_path)
-    model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(setup_params)
+    model_config, data_config = read_config.get_config_objects(setup_params)
 
     print('setting up inputs')
-    model = setupmodel.setup_model(model_config, data_config)
+    model = setupmodel.setup_model(model_config=model_config, data_config=data_config)
 
     gen = model.gen
 

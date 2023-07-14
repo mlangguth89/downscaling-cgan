@@ -31,7 +31,7 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 def DataGenerator(data_label, batch_size, fcst_shape, con_shape, 
                   out_shape, repeat=True, 
-                  downsample=False, weights=None, crop_size=None, 
+                  downsample=False, weights=None, crop_size=None, rotate=False,
                   records_folder=records_folder, seed=None):
     return create_mixed_dataset(data_label, 
                                 batch_size,
@@ -42,6 +42,7 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 downsample=downsample, 
                                 weights=weights, 
                                 crop_size=crop_size,
+                                rotate=rotate,
                                 folder=records_folder, 
                                 seed=seed)
 
@@ -57,6 +58,7 @@ def create_mixed_dataset(data_label: str,
                          shuffle_size: int=1024,
                          weights: list=None,
                          crop_size: int=None,
+                         rotate: bool=False,
                          seed: int=None):
     """_summary_
 
@@ -72,6 +74,7 @@ def create_mixed_dataset(data_label: str,
         shuffle_size (int, optional): buffer size of shuffling. Defaults to 1024.
         weights (list, optional): list of floats, weights of classes when sampling. Defaults to None.
         crop_size (int, optional): Size to crop randomly crop images to.
+        rotate (bool, optional): If true then data is agumented by random rotation.
         seed (int, optional): seed for shuffling and sampling. Defaults to None.
 
     Returns:
@@ -90,6 +93,7 @@ def create_mixed_dataset(data_label: str,
                                shuffle_size=shuffle_size,
                                repeat=repeat,
                                crop_size=crop_size,
+                               rotate=rotate,
                                seed=seed)
                 for i in range(classes)]
     
@@ -160,6 +164,38 @@ def _dataset_cropper_list(lores_inputs, hires_inputs, outputs, crop_size, seed=N
     
     return cropped_lores_input, cropped_hires_input, cropped_output
 
+
+def _dataset_rotater_list(lores_inputs, hires_inputs, outputs, seed=None):
+    
+    if seed is not None:
+        np.random.seed(seed=seed[0])
+    k = np.random.choice([0,2],1)[0]
+
+    rotated_output = tf.image.rot90(outputs, k=k)
+    rotated_hires_input = tf.image.rot90(hires_inputs, k=k)
+    rotated_lores_input = tf.image.rot90(lores_inputs, k=k)
+    
+    return rotated_lores_input, rotated_hires_input, rotated_output
+
+def _dataset_rotater_dict(inputs, outputs, seed=None):
+    '''
+    Random crop of inputs and outputs
+    
+    Note: this currently only works when inputs and outputs are all the same dimensions (i.e not downscaling)
+    
+    '''
+    outputs = outputs['output']
+    hires_inputs = inputs['hi_res_inputs']
+    lores_inputs = inputs['lo_res_inputs']
+    
+    rotated_lores_input, rotated_hires_input, rotated_output = _dataset_rotater_list(lores_inputs, hires_inputs, outputs, seed=seed)
+    
+    rotated_outputs = {'output': rotated_output}
+    rotated_inputs = {'hi_res_inputs': rotated_hires_input,
+                      'lo_res_inputs': rotated_lores_input}
+    
+    return rotated_inputs, rotated_outputs
+
 def _parse_batch(record_batch,
                  insize=(20, 20, 9),
                  consize=(200, 200, 2),
@@ -206,6 +242,7 @@ def create_dataset(data_label: str,
                    shuffle_size: int=1024,
                    repeat: bool=True,
                    crop_size: int=None,
+                   rotate: bool=False,
                    seed: int=None):
     """
     Load tfrecords and parse into appropriate shapes
@@ -219,6 +256,7 @@ def create_dataset(data_label: str,
         folder (_type_, optional): folder containing tf records. Defaults to records_folder.
         shuffle_size (int, optional): buffer size for shuffling. Defaults to 1024.
         crop_size (int, optional): Size to crop randomly crop images to.
+        rotate (bool, optional): whether to apply random rotations or not
         repeat (bool, optional): create repeat dataset or not. Defaults to True.
 
     Returns:
@@ -253,7 +291,16 @@ def create_dataset(data_label: str,
         else:
             ds = ds.map(lambda x,y,z: _dataset_cropper_list(x, y, z, crop_size=crop_size, seed=seed), 
                                                             num_parallel_calls=AUTOTUNE)
-    
+            
+    if rotate:
+        if return_dic:
+            ds = ds.map(lambda x,y: _dataset_rotater_dict(x, y, seed=seed), 
+                                                          num_parallel_calls=AUTOTUNE)
+        else:
+            ds = ds.map(lambda x,y,z: _dataset_rotater_list(x, y, z, seed=seed), 
+                                                            num_parallel_calls=AUTOTUNE)
+            
+        
     if repeat:
         return ds.repeat()
     else:
