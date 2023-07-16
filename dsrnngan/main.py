@@ -320,12 +320,11 @@ def main(restart: bool,
                                                  records_folder=records_folder,
                                                  noise_factor=noise_factor,
                                                  model_numbers=eval_model_numbers,
-                                                 ranks_to_save=ranks_to_save,
                                                  num_images=num_images,
                                                  ensemble_size=eval_ensemble_size,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
-                                                 batch_size=10)
+                                                 batch_size=1)
     
     return log_folder
 

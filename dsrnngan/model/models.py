@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import concatenate, Conv2D, Dense, GlobalAveragePooling2D
-from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation, Lambda, Layer
+from tensorflow.keras.layers import Input, LeakyReLU, UpSampling2D, RandomRotation, Lambda, Layer, Activation
 
 from dsrnngan.model.blocks import residual_block, const_upscale_block
 
@@ -18,7 +18,7 @@ class ParameterisedSoftplus(Layer):
         return tf.nn.softplus( tf.math.divide(inputs, self.alpha))
     
 activation_lookup = {'psoftplus': ParameterisedSoftplus,
-                     'softplus': tf.keras.layers.Softplus}
+                     'softplus': Activation(tf.keras.activations.softplus)}
 
 def generator(mode,
               arch,
