@@ -360,13 +360,25 @@ if __name__ == "__main__":
         output_suffix = args.output_suffix
         
     elif args.model_folder is not None:
-        model_config = read_config.read_model_config(config_folder=args.model_folder)
-        data_config = read_config.read_data_config(config_folder=args.model_folder)
-        log_folder = '_'.join(args.model_folder.split('_')[:-1])
-        output_suffix = args.model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
+        if os.path.isfile(os.path.join(args.model_folder, 'setup_params.yaml')):
+            # Retained for backwards compatability
+            config_dict = read_config.read_config(config_filename='setup_params.yaml', config_folder=args.model_folder)
+            model_config, data_config = read_config.get_config_objects(config=config_dict)
+            
+            data_config.paths = {'BLUE_PEBBLE': data.DATA_PATHS}
+        else:
+            model_config = read_config.read_model_config(config_folder=args.model_folder)
+            data_config = read_config.read_data_config(config_folder=args.model_folder)
+        
+        if '_' in args.model_folder:
+            log_folder = '_'.join(args.model_folder.split('_')[:-1])
+            output_suffix = args.model_folder.split('_')[-1] # If model folder specified then output suffix is redundant
+        else:
+            log_folder = args.model_folder
+            output_suffix = None
         
         if args.records_folder is None:
-            data_paths = read_config.get_data_paths()
+            data_paths = read_config.get_data_paths(data_config=data_config)
         else:
             data_paths = read_config.get_data_paths(config_folder=args.records_folder)
     else:
@@ -392,23 +404,23 @@ if __name__ == "__main__":
         log_folder = os.path.join(log_folder, args.records_folder.split('/')[-1])
 
     main(
-         model_config=model_config,
-         data_config=data_config,
-         data_paths=data_paths,
-         records_folder=args.records_folder,
-         restart=args.restart, 
-         do_training=args.do_training, 
-        evalnum=args.evalnum,
-        noise_factor=args.noise_factor,
-        num_samples_override=args.num_samples,
-        num_images=args.num_images,
-        eval_model_numbers=eval_model_numbers,
-        val_start=args.val_ym_start,
-        val_end=args.val_ym_end,
-        eval_ensemble_size=args.eval_ensemble_size,
-        shuffle_eval=not args.no_shuffle_eval,
-        save_generated_samples=args.save_generated_samples,
-        training_weights=args.training_weights,
-        output_suffix=output_suffix,
-        log_folder=log_folder,
-        debug=args.debug)
+            model_config=model_config,
+            data_config=data_config,
+            data_paths=data_paths,
+            records_folder=args.records_folder,
+            restart=args.restart, 
+            do_training=args.do_training, 
+            evalnum=args.evalnum,
+            noise_factor=args.noise_factor,
+            num_samples_override=args.num_samples,
+            num_images=args.num_images,
+            eval_model_numbers=eval_model_numbers,
+            val_start=args.val_ym_start,
+            val_end=args.val_ym_end,
+            eval_ensemble_size=args.eval_ensemble_size,
+            shuffle_eval=not args.no_shuffle_eval,
+            save_generated_samples=args.save_generated_samples,
+            training_weights=args.training_weights,
+            output_suffix=output_suffix,
+            log_folder=log_folder,
+            debug=args.debug)

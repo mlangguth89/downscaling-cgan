@@ -318,7 +318,8 @@ class QuantileMapper():
                 
                 weighted_fcst_quantiles[q_pos, ...] = uniform_filter(quantiles_for_time_period['fcst_quantiles'][q_pos, ...], size=filter_size, mode='reflect')
                 weighted_obs_quantiles[q_pos, ...] = uniform_filter(quantiles_for_time_period['obs_quantiles'][q_pos, ...], size=filter_size, mode='reflect')
-    
+
+            # TODO: Use apply_along_axis to speed this up
             # Use smoothed quantiles to transform forecast values
             for lat_index in range(lat_dim):
                 for lon_index in range(lon_dim):

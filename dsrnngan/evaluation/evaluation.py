@@ -110,7 +110,8 @@ def create_single_sample(*,
                    latitude_range: Iterable,
                    longitude_range: Iterable,
                    ensemble_size: int,
-                   denormalise_data: bool=True,
+                   denormalise_outputs: bool=True,
+                   denormalise_inputs: bool=True,
                    seed: int=None
                    ):
     
@@ -133,14 +134,16 @@ def create_single_sample(*,
     
     # Get observations 24hrs before
     imerg_persisted_fcst = data.load_imerg(date[0] - timedelta(days=1), hour=hour[0], latitude_vals=latitude_range, 
-                                            longitude_vals=longitude_range, log_precip=not denormalise_data)
+                                            longitude_vals=longitude_range, log_precip=not denormalise_outputs)
     
     assert imerg_persisted_fcst.shape == obs.shape, ValueError('Shape mismatch in iMERG persistent and truth')
     assert len(date) == 1, ValueError('Currently must be run with a batch size of 1')
     assert len(date) == len(hour), ValueError('This is strange, why are they different sizes?')
         
-    if denormalise_data:
+    if denormalise_outputs:
         obs = data.denormalise(obs)
+    
+    if denormalise_inputs:
         fcst = data.denormalise(fcst)
             
     if model_config.mode == "GAN":
@@ -171,7 +174,7 @@ def create_single_sample(*,
         sample_gen = samples_gen[ii][0, :, :, 0]
         
         # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
-        if denormalise_data:
+        if denormalise_outputs:
             sample_gen = data.denormalise(sample_gen)
 
         samples_gen[ii] = sample_gen
@@ -191,7 +194,8 @@ def eval_one_chkpt(*,
                    batch_size: int=1):
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
-    denormalise_data = data_config.normalise_outputs
+    denormalise_outputs = data_config.normalise_outputs
+    denormalise_inputs = data_config.normalise_inputs
     
     if num_images < 5:
         Warning('These scores are best performed with more images')
@@ -213,11 +217,14 @@ def eval_one_chkpt(*,
     emmse_all = []
     fcst_mse_all = []
     ralsd_rmse_all = []
+    ralsd_rmse_fcst_all = []
     corr_all = []
     correlation_fcst_all = []
     csi_fcst_all = []
     csi_all = []
     max_bias_all = []
+    max_bias_fcst_all = []
+    fcst_mae_all = []
 
     tpidx = data_config.input_fields.index('tp')
     
@@ -253,7 +260,8 @@ def eval_one_chkpt(*,
                         latitude_range=latitude_range,
                         longitude_range=longitude_range,
                         ensemble_size=ensemble_size,
-                        denormalise_data=denormalise_data,
+                        denormalise_outputs=denormalise_outputs,
+                        denormalise_inputs=denormalise_inputs
                         )
                 success = True
                 data_idx += 1
@@ -279,6 +287,8 @@ def eval_one_chkpt(*,
     
         ralsd_rmse = calculate_ralsd_rmse(obs, samples_gen)
         ralsd_rmse_all.append(ralsd_rmse.flatten())
+        
+        ralsd_rmse_fcst_all.append(calculate_ralsd_rmse(obs, [fcst]).flatten())
                
         # turn list of predictions into array, for CRPS/rank calculations
         samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
@@ -286,7 +296,8 @@ def eval_one_chkpt(*,
         mse_all.append(mse(samples_gen[:,:,0], obs))
         emmse_all.append(mse(np.mean(samples_gen, axis=-1), obs))
         fcst_mse_all.append(mse(obs, fcst))
-
+        fcst_mae_all.append(mae(obs,fcst))
+        
         corr_all.append(calculate_pearsonr(obs, samples_gen[:, :, 0]))
         correlation_fcst_all.append(calculate_pearsonr(obs, fcst))
         
@@ -296,6 +307,7 @@ def eval_one_chkpt(*,
         
         # Max difference
         max_bias_all.append((samples_gen - np.stack([obs]*ensemble_size, axis=-1)).max())
+        max_bias_fcst_all.append((fcst -obs).max())
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(obs)
@@ -371,11 +383,15 @@ def eval_one_chkpt(*,
     point_metrics['rmse'] = np.sqrt(np.mean(mse_all))
     point_metrics['emmse'] = np.sqrt(np.mean(emmse_all))
     point_metrics['mse_fcst'] = np.sqrt(np.mean(fcst_mse_all))
+    point_metrics['mae_fcst'] = np.sqrt(np.mean(fcst_mse_all))
     point_metrics['ralsd'] = np.nanmean(ralsd_rmse_all)
+    point_metrics['ralsd_fcst'] = np.nanmean(ralsd_rmse_fcst_all)
     point_metrics['corr'] = np.mean(corr_all)
     point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
     point_metrics['csi'] = np.mean(csi_all)
+    point_metrics['csi_fcst'] = np.mean(csi_fcst_all)
     point_metrics['max_bias'] = np.mean(max_bias_all)
+    point_metrics['max_bias_fcst'] = np.mean(max_bias_fcst_all)
     
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)

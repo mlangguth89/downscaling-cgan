@@ -169,7 +169,7 @@ def _dataset_rotater_list(lores_inputs, hires_inputs, outputs, seed=None):
     
     if seed is not None:
         np.random.seed(seed=seed[0])
-    k = np.random.choice([0,2],1)[0]
+    k = np.random.choice([0,1,2,3],1)[0]
 
     rotated_output = tf.image.rot90(outputs, k=k)
     rotated_hires_input = tf.image.rot90(hires_inputs, k=k)
@@ -180,7 +180,6 @@ def _dataset_rotater_list(lores_inputs, hires_inputs, outputs, seed=None):
 def _dataset_rotater_dict(inputs, outputs, seed=None):
     '''
     Random rotation of inputs and outputs
-        
     '''
     outputs = outputs['output']
     hires_inputs = inputs['hi_res_inputs']
