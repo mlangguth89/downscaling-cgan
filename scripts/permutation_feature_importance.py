@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from properscoring import crps_ensemble
 from random import shuffle
-
+from types import SimpleNamespace
 HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
@@ -43,8 +43,8 @@ best_model_number = int(utils.get_best_model_number(log_folder=log_folder))
 base_folder = '/'.join(log_folder.split('/')[:-1])
 config = utils.load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
 
-model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
-latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(config)
+model_config, data_config = read_config.get_config_objects(config)
+latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config=data_config)
 
 all_model_numbers = utils.get_checkpoint_model_numbers(log_folder=log_folders[model_type])
 other_model_distances = sorted([(mn,np.abs(mn-best_model_number)) for mn in all_model_numbers if mn != best_model_number], key=lambda x: x[1])
@@ -60,7 +60,7 @@ ensemble_size = 30
 if args.debug:
     n_samples = 2
 
-read_config.set_gpu_mode({'gpu_mem_incr': True, 'use_gpu': True, 'disable_tf32': False})
+read_config.set_gpu_mode(SimpleNamespace(**{'gpu_mem_incr': True, 'use_gpu': True, 'disable_tf32': False}))
 
 for model_number in model_numbers:
 
@@ -70,7 +70,7 @@ for model_number in model_numbers:
 
     gen = setupmodel.load_model_from_folder(str(Path(log_folder).parents[0]), model_number=model_number)
 
-    index_max_lookup = {'lo_res_inputs': len(data_config.input_fields), 'hi_res_inputs': data_config.constant_fields}
+    index_max_lookup = {'lo_res_inputs': len(data_config.input_fields), 'hi_res_inputs': len(data_config.constant_fields)}
 
     if args.debug:
         index_max_lookup['lo_res_inputs'] = 2
@@ -92,32 +92,14 @@ for model_number in model_numbers:
             ##############################################################
 
             data_gen = DataGenerator(dates=dates,
-                                    forecast_data_source=data_config.fcst_data_source,
-                                    observational_data_source=data_config.obs_data_source,
-                                    fields=data_config.input_fields,
-                                    latitude_range=latitude_range,
-                                    longitude_range=longitude_range,
                                     batch_size=1,
                                     shuffle=False,
-                                    constant_fields=True,
-                                    normalise=True,
-                                    downsample=model_config.downsample,
-                                    data_paths=DATA_PATHS,
                                     hour=hours)
             
             # Same date/hour combination but with shuffle=True
             permuted_data_gen = DataGenerator(dates=dates,
-                                    forecast_data_source=data_config.fcst_data_source,
-                                    observational_data_source=data_config.obs_data_source,
-                                    fields=data_config.input_fields,
-                                    latitude_range=latitude_range,
-                                    longitude_range=longitude_range,
                                     batch_size=1,
                                     shuffle=True,
-                                    constant_fields=True,
-                                    normalise=True,
-                                    downsample=model_config.downsample,
-                                    data_paths=DATA_PATHS,
                                     hour=hours)
 
             crps_scores = []

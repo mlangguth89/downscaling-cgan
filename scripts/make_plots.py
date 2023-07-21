@@ -46,14 +46,14 @@ metric_dict = {'examples': False,
                'scatter': False,
                'rank_hist': False,
                'spread_error': False,
-               'rapsd': False,
-               'quantiles': False,
-               'hist': False,
+               'rapsd': True,
+               'quantiles': True,
+               'hist': True,
                'crps': False,
-               'fss': True,
-               'diurnal': False,
+               'fss': False,
+               'diurnal': True,
                'confusion_matrix': False,
-               'csi': False
+               'csi': True
                }
 
 plot_persistence = False
@@ -79,14 +79,20 @@ args = parser.parse_args()
 model_type = args.model_type
 
 log_folders = {'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
-               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
+               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10',
+               'nologs': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1',
+               'small_cl1000': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000/n1000_201806-201905_e1',
+               'modified_lr': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000-modifiedlr/n1000_201806-201905_e1',
+               'small_cl2000': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl2000/n1000_201806-201905_e1',
+               }
 
 # If in debug mode, then don't overwrite existing plots
 if args.debug:
     temp_stats_dir = tempfile.TemporaryDirectory()
     args.output_dir = temp_stats_dir.name
 
-model_number = get_best_model_number(log_folder=log_folders[model_type])
+# model_number = get_best_model_number(log_folder=log_folders[model_type])
+model_number = 64000
 
 if model_type not in log_folders:
     raise ValueError('Model type not found')
@@ -125,12 +131,14 @@ n_extreme_days = 10
 wet_day_indexes = [item[0] for item in sorted_means[-10:]]
 dry_day_indexes = [item[0] for item in sorted_means[:10]]
 
-
 # Get lat/lon range from log folder
 base_folder = '/'.join(log_folder.split('/')[:-1])
-config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
+try:
+    config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
 
-model_config, _, ds_config, data_config, gen_config, dis_config, train_config, val_config = read_config.get_config_objects(config)
+    model_config, data_config = read_config.get_config_objects(config)
+except FileNotFoundError:
+    data_config = read_config.read_data_config(config_folder=base_folder)
 
 # Locations
 latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
@@ -160,16 +168,20 @@ for k, v in special_areas.items():
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
 
-with open(os.path.join(log_folder, f'fcst_qmap_20.pkl'), 'rb') as ifh:
-    fcst_corrected = pickle.load(ifh)
+try:
+    with open(os.path.join(log_folder, f'fcst_qmap_20.pkl'), 'rb') as ifh:
+        fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(log_folder, f'cgan_qmap_6.pkl'), 'rb') as ifh:
-    cgan_corrected = pickle.load(ifh)
+    with open(os.path.join(log_folder, f'cgan_qmap_6.pkl'), 'rb') as ifh:
+        cgan_corrected = pickle.load(ifh)
+        
+    # clip values at 200mm/hr
+
+    cgan_corrected = np.clip(cgan_corrected, 0, 200)
+except:
+    fcst_corrected = fcst_array.copy()
+    cgan_corrected = samples_gen_array.copy()
     
-# clip values at 200mm/hr
-
-cgan_corrected = np.clip(cgan_corrected, 0, 200)
-
 data_dict = {
                         'GAN': samples_gen_array[:, :, :, 0],
                         'Obs (IMERG)': truth_array,
@@ -378,10 +390,9 @@ if metric_dict['spread_error']:
 
         ax.plot(ens_spread, rmse_err, label=v['label'])
     ax.plot(np.linspace(0,max(ens_spread),10), np.linspace(0,max(ens_spread),10), '--')
-    ax.set_ylabel('RMSE')
-    ax.set_xlabel('Ensemble spread')
+    ax.set_ylabel('RMSE (mm/hr)')
+    ax.set_xlabel('Ensemble spread (mm/hr)')
     ax.legend()
-    ax.set_title(f'Spread error up to {100*(1-quantile_step_size)}th percentile')
     plt.savefig(f'plots/spread_error_{model_type}_{model_number}.pdf', format='pdf')
 
 #################################################################################
@@ -430,9 +441,15 @@ if metric_dict['quantiles']:
                     'Fcst': {'color': 'r', 'marker': '+', 'alpha': 1},
                     'Fcst + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
                     'GAN + qmap': {'color': 'b', 'marker': 'o', 'alpha': 0.7}}
-
+    quantile_data_dict = {
+                        'GAN': samples_gen_array[:, :, :, 0],
+                        'Obs (IMERG)': truth_array,
+                        'Fcst': fcst_array,
+                        'Fcst + qmap':fcst_corrected,
+                        'GAN + qmap': cgan_corrected[:,:,:,0]}
+          
     fig, ax = plt.subplots(1,1)
-    plot_quantiles(quantile_data_dict=data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
+    plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
                    save_path=f'plots/quantiles_total_{model_type}_{model_number}.pdf')
 
     # Quantiles for different areas

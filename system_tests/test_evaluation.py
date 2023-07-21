@@ -131,7 +131,7 @@ class TestEvaluation(unittest.TestCase):
                     latitude_range=lat_range,
                     longitude_range=lon_range,
                     ensemble_size=2,
-                    denormalise_data=True,
+                    denormalise_outputs=True,
                     seed=1)
         
         
@@ -147,7 +147,7 @@ class TestEvaluation(unittest.TestCase):
                     latitude_range=lat_range,
                     longitude_range=lon_range,
                     ensemble_size=2,
-                    denormalise_data=True,
+                    denormalise_outputs=True,
                     input_shuffle_config=input_shuffle_config,
                     seed=1)
         

@@ -175,12 +175,13 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
                                                                                 obs_train_data=imerg_train_data, 
                                                                                 quantiles=ifs_quantile_locs,
                                                                                 extrapolate='constant')
+    fcst_corrected_train = [] # Not yet implemented for this, as not currently required
 else:
     
     qmapper.train(fcst_data=ifs_train_data, obs_data=imerg_train_data, training_dates=training_dates, training_hours=training_hours)
     quantile_data_dicts['test']['Fcst + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
 
-    
+    fcst_corrected_train = qmapper.get_quantile_mapped_forecast(fcst=ifs_train_data, dates=training_dates, hours=training_hours)
 
 ###########################
 print('## Quantile mapping for GAN', flush=True)
@@ -261,7 +262,12 @@ if args.save_data:
     with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap']['data'].shape)
         pickle.dump(quantile_data_dicts['test']['Fcst + qmap']['data'], ofh)
-   
+    
+    if len(fcst_corrected_train) > 0:
+        # Save trained quantile mapper for experiment
+        with open(os.path.join(log_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+            pickle.dump(qmapper, ofh)
+    
     with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
 
