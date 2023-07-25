@@ -97,7 +97,7 @@ def create_example_model(model_config: SimpleNamespace,
     Returns:
     """
             
-    hash_dir = write_data(year_month_range=['201707', '201708'],
+    hash_dir = write_data(year_month_ranges=['201707', '201708'],
         data_label='train',
         forecast_data_source='ifs', 
         observational_data_source='imerg',

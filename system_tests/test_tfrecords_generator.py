@@ -90,7 +90,15 @@ class TestTfrecordsGenerator(unittest.TestCase):
                 debug=True)
         files_0 = glob(os.path.join(output_dir, '*train*'))
         self.assertGreater(len(files_0), 0)
-            
+        
+        # Test with list of list of ranges
+        output_dir = write_data([['201707', '201707'], ['201711', '201712']],
+                        data_label='train',
+                        hours=[18],
+                        data_config=self.data_config,
+                        debug=True)
+        files_0 = glob(os.path.join(output_dir, '*train*'))
+        self.assertGreater(len(files_0), 0)
             
     def test_write_era5_data(self):
         
