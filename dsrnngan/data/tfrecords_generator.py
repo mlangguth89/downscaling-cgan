@@ -337,7 +337,7 @@ def create_fixed_dataset(year: int=None,
 def _float_feature(list_of_floats: list):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-def write_data(year_month_range: list,
+def write_data(year_month_ranges: list,
                data_label: str,
                hours: list,
                data_config: dict=None,
@@ -347,7 +347,7 @@ def write_data(year_month_range: list,
     Function to write training data to TF records
 
     Args:
-        year_month_range (list): List of date strings in YYYYMM format. The code will take all dates between the maximum and minimum year months (inclusive)
+        year_month_range (list): List of date strings in YYYYMM format, or a list of lists of date strings for non contiguous date ranges. The code will take all dates between the maximum and minimum year months (inclusive)
         data_label (str): Label to assign to data (e.g. train, validate)
         forecast_data_source (str): Source of forecast data (e.g. ifs)
         observational_data_source (str): Source of observational data (e.g. imerg)
@@ -371,64 +371,58 @@ def write_data(year_month_range: list,
 
     data_paths=get_data_paths(data_config=data_config)
     records_folder = data_paths['TFRecords']["tfrecords_path"]
+    if not os.path.isdir(records_folder):
+        os.makedirs(records_folder, exist_ok=True)
     
-    latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
-    longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size)
-      
-    dates = date_range_from_year_month_range(year_month_range)
-    start_date = dates[0]
-    dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
-                                                        month=item.month, day=item.day,
-                                                        data_paths=data_paths)]
-    if dates:
-        if not dates[0] == start_date and not debug:
-            # Means there likely isn't forecast data for the day before
-            dates = dates[1:]
-      
+    #  Create directory that is hash of setup params, so that we know it's the right data later on
+    data_config_dict = utils.convert_namespace_to_dict(data_config)
+    hash_dir = os.path.join(records_folder, hash_dict(data_config_dict))
+    
+    if not os.path.isdir(hash_dir):
+        os.makedirs(hash_dir, exist_ok=True)
+    
+    print(f'Output folder will be {hash_dir}')
         
-        if data_config.class_bin_boundaries is not None:
-            print(f'Data will be bundled according to class bin boundaries provided: {data_config.class_bin_boundaries}')
-            num_class = len(data_config.class_bin_boundaries) + 1
-
-        input_image_width = data_config.input_image_width
-        num_samples_per_image = data_config.num_samples_per_image
-
-        if not os.path.isdir(records_folder):
-            os.makedirs(records_folder, exist_ok=True)
+    # Write params in directory
+    write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config_dict)
+    
+    with open(os.path.join(hash_dir, 'git_commit.txt'), 'w+') as ofh:
+        repo = git.Repo(search_parent_directories=True)
+        sha = repo.head.object.hexsha
+        ofh.write(sha)
+    
+    if isinstance(year_month_ranges[0], str):
+        year_month_ranges = [year_month_ranges]
         
-        #  Create directory that is hash of setup params, so that we know it's the right data later on
-        data_config_dict = utils.convert_namespace_to_dict(data_config)
-        hash_dir = os.path.join(records_folder, hash_dict(data_config_dict))
+    
+    
+    for year_month_range in year_month_ranges:  
         
-        if not os.path.isdir(hash_dir):
-            os.makedirs(hash_dir, exist_ok=True)
-        
-        print(f'Output folder will be {hash_dir}')
+        dates = date_range_from_year_month_range(year_month_range)
+        start_date = dates[0]
+        dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
+                                                            month=item.month, day=item.day,
+                                                            data_paths=data_paths)]
+        if dates:
             
-        # Write params in directory
-        write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config_dict)
+                
+            if not dates[0] == start_date and not debug:
+                # Means there likely isn't forecast data for the day before
+                dates = dates[1:]
         
-        with open(os.path.join(hash_dir, 'git_commit.txt'), 'w+') as ofh:
-            repo = git.Repo(search_parent_directories=True)
-            sha = repo.head.object.hexsha
-            ofh.write(sha)
-        
-        if debug:
-            dates = dates[:1]
+            
+            if data_config.class_bin_boundaries is not None:
+                print(f'Data will be bundled according to class bin boundaries provided: {data_config.class_bin_boundaries}')
+                num_class = len(data_config.class_bin_boundaries) + 1
 
-        for hour in hours:
-            print('Hour = ', hour)
-            start_time = time.time()
-            dgc = DataGenerator(data_config=data_config,
-                                dates=[item.strftime('%Y%m%d') for item in dates],
-                                batch_size=1,
-                                shuffle=False,
-                                hour=hour)
-            print(f'Data generator initialization took {time.time() - start_time}')
-            
-            start_time = time.time()
-            
-            if dates:
+            input_image_width = data_config.input_image_width
+            num_samples_per_image = data_config.num_samples_per_image
+
+            if debug:
+                dates = dates[:1]
+
+            for hour in hours:
+                
                 fle_hdles = {}
                 for cl in range(data_config.num_classes):
                     fle_hdles[cl] = []
@@ -436,96 +430,104 @@ def write_data(year_month_range: list,
                         flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
                         fle_hdles[cl].append(tf.io.TFRecordWriter(flename))
             
-            print(f'File initialization took {time.time() - start_time}')
-            print('starting fetching batches')
-            for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
-                
-                logger.debug(f"hour={hour}, batch={batch}")
-                
-                try:
+                print('Hour = ', hour)
+                start_time = time.time()
+                dgc = DataGenerator(data_config=data_config,
+                                    dates=[item.strftime('%Y%m%d') for item in dates],
+                                    batch_size=1,
+                                    shuffle=False,
+                                    hour=hour)
+                print('Fetching batches')
+                for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
                     
-                    sample = dgc.__getitem__(batch)
-                    (depth, width, height) = sample[1]['output'].shape
-                
-                    for k in range(depth):
+                    logger.debug(f"hour={hour}, batch={batch}")
+                    
+                    try:
                         
-                        # NOTE: This kind of random cropping could also be done using Tensorflow during the data loading process. However, our experiments
-                        # found this to be much slower than pre-cropping whilst creating the tensorflow records. The trade-off is that more hard drive space is required to
-                        # store these examples, so the number of samples per image has to be chosen as high as possible to still get the benefit of the random cropping.
-                        for ii in range(num_samples_per_image):
-                            
-                            idx = random.randint(0, width-input_image_width)
-                            idy = random.randint(0, height-input_image_width)
-
-                            observations = sample[1]['output'][k, 
-                                                               idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width)].flatten()
-
-                            forecast = sample[0]['lo_res_inputs'][k, 
-                                                                  idx:(idx+input_image_width), 
-                                                                  idy:(idy+input_image_width), :].flatten()
-                            
-                            const = sample[0]['hi_res_inputs'][k, 
-                                                               idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width), :].flatten()
-                            
-                            if sample[0]['hi_res_inputs'][k, 
-                                                               idx:(idx+input_image_width), 
-                                                               idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, len(data_config.constant_fields)):
-                                raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
-       
-                            # Check no Null values
-                            if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                                raise ValueError('Unexpected NaN values in data')
-                            
-                            # Check for empty data
-                            if forecast.sum() == 0 or const.sum() == 0:
-                                raise ValueError('one or more of arrays is all zeros')
-                            
-                            # Check hi res data has same dimensions
-                                
-                            feature = {
-                                'generator_input': _float_feature(forecast),
-                                'constants': _float_feature(const),
-                                'generator_output': _float_feature(observations)
-                            }
-
-                            features = tf.train.Features(feature=feature)
-                            example = tf.train.Example(features=features)
-                            example_to_string = example.SerializeToString()
-                            
-                            # If provided, bin data according to bin boundaries (typically quartiles)
-                            if data_config.class_bin_boundaries is not None:
-                                                        
-                                threshold = 0.1
-                                if data_config.normalise_outputs:
-                                    rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
-                                else:
-                                    rainy_pixel_fraction = (observations > threshold).mean()
-
-                                boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
-                                if any(boundary_comparison):
-                                    clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
-                                else:
-                                    clss = len(data_config.class_bin_boundaries) 
-                            else:
-                                clss = random.choice(range(data_config.num_classes))
-                                
-                            # Choose random shard
-                            fh = random.choice(fle_hdles[clss])
-
-                            fh.write(example_to_string)
-                
-                except FileNotFoundError as e:
-                    print(f"Error loading hour={hour}, date={date}")
-            
-            for cl, fhs in fle_hdles.items():
-                for fh in fhs:
-                    fh.close()
+                        sample = dgc.__getitem__(batch)
+                        (depth, width, height) = sample[1]['output'].shape
                     
-        return hash_dir
-    else:
-        print('No dates found')
+                        for k in range(depth):
+                            
+                            # NOTE: This kind of random cropping could also be done using Tensorflow during the data loading process. However, our experiments
+                            # found this to be much slower than pre-cropping whilst creating the tensorflow records. The trade-off is that more hard drive space is required to
+                            # store these examples, so the number of samples per image has to be chosen as high as possible to still get the benefit of the random cropping.
+                            for ii in range(num_samples_per_image):
+                                
+                                idx = random.randint(0, width-input_image_width)
+                                idy = random.randint(0, height-input_image_width)
+
+                                observations = sample[1]['output'][k, 
+                                                                idx:(idx+input_image_width), 
+                                                                idy:(idy+input_image_width)].flatten()
+
+                                forecast = sample[0]['lo_res_inputs'][k, 
+                                                                    idx:(idx+input_image_width), 
+                                                                    idy:(idy+input_image_width), :].flatten()
+                                
+                                const = sample[0]['hi_res_inputs'][k, 
+                                                                idx:(idx+input_image_width), 
+                                                                idy:(idy+input_image_width), :].flatten()
+                                
+                                if sample[0]['hi_res_inputs'][k, 
+                                                                idx:(idx+input_image_width), 
+                                                                idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, len(data_config.constant_fields)):
+                                    raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
+        
+                                # Check no Null values
+                                if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                                    raise ValueError('Unexpected NaN values in data')
+                                
+                                # Check for empty data
+                                if forecast.sum() == 0 or const.sum() == 0:
+                                    raise ValueError('one or more of arrays is all zeros')
+                                
+                                # Check hi res data has same dimensions
+                                    
+                                feature = {
+                                    'generator_input': _float_feature(forecast),
+                                    'constants': _float_feature(const),
+                                    'generator_output': _float_feature(observations)
+                                }
+
+                                features = tf.train.Features(feature=feature)
+                                example = tf.train.Example(features=features)
+                                example_to_string = example.SerializeToString()
+                                
+                                # If provided, bin data according to bin boundaries (typically quartiles)
+                                if data_config.class_bin_boundaries is not None:
+                                                            
+                                    threshold = 0.1
+                                    if data_config.normalise_outputs:
+                                        rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                                    else:
+                                        rainy_pixel_fraction = (observations > threshold).mean()
+
+                                    boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
+                                    if any(boundary_comparison):
+                                        clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
+                                    else:
+                                        clss = len(data_config.class_bin_boundaries) 
+                                else:
+                                    clss = random.choice(range(data_config.num_classes))
+                                    
+                                # Choose random shard
+                                fh = random.choice(fle_hdles[clss])
+
+                                fh.write(example_to_string)
+                    
+                    except FileNotFoundError as e:
+                        print(f"Error loading hour={hour}, date={date}")
+                        
+                for cl, fhs in fle_hdles.items():
+                    for fh in fhs:
+                        fh.close()
+        else:
+            print('No dates found')
+    
+    
+                            
+    return hash_dir
 
 def write_train_test_data(*args, training_range,
                           validation_range=None,

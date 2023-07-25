@@ -32,7 +32,7 @@ def empirical_quantile_map(obs_train: np.ndarray, model_train: np.ndarray, s: np
     Args:
         obs_train (np.ndarray): Observational training data to construct the quantiles
         model_train (np.ndarray): Model training data to construct the quantiles
-        s (np.ndarray): 1D series to correct
+        s (np.ndarray): Array to correct
         quantiles (Union[int, ArrayLike], optional): Either the number of quantiles to use, or the locations of quantiles. Defaults to 10.
         extrapolate (str, optional): Type of extrapolation to use. Defaults to constant uplift.
 

@@ -299,8 +299,9 @@ def filter_by_lat_lon(ds: xr.Dataset,
     
     overlapping_lat_vals = all_lat_vals[all_lat_vals >= min(lat_range)]
     overlapping_lat_vals = overlapping_lat_vals[overlapping_lat_vals <= max(lat_range)]
-    overlapping_lon_vals = overlapping_lat_vals[overlapping_lat_vals >= min(lon_range)]
-    overlapping_lat_vals = overlapping_lat_vals[overlapping_lat_vals <= max(lon_range)]
+    
+    overlapping_lon_vals = all_lon_vals[all_lon_vals >= min(lon_range)]
+    overlapping_lon_vals = overlapping_lon_vals[overlapping_lon_vals <= max(lon_range)]
         
     ds = ds.sel({lat_var_name: overlapping_lat_vals})
     ds = ds.sel({lon_var_name: overlapping_lon_vals})
@@ -1191,6 +1192,7 @@ if __name__ == '__main__':
     parser.add_argument('--max-latitude', type=int, required=True)
     parser.add_argument('--min-longitude', type=int, required=True)
     parser.add_argument('--max-longitude', type=int, required=True)
+    parser.add_argument('--input-obs-folder', type=str, default=None)
 
     args = parser.parse_args()
 
@@ -1243,7 +1245,7 @@ if __name__ == '__main__':
 
         year, month, day, hour = date_item
 
-        fps = glob(os.path.join('/bp1/geog-tropical/data/Obs/IMERG/half_hourly/final', 
+        fps = glob(os.path.join(args.input_obs_folder, 
                                 f'3B-HHR.MS.MRG.3IMERG.{year}{month:02d}{day:02d}-S{hour:02d}*'))
         
         if len(fps) == 0:
