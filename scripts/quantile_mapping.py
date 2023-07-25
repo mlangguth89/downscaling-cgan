@@ -164,7 +164,7 @@ qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_rang
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 
 # Get auto spaced quantiles, up to one data point per quantile
-ifs_quantile_locs = qmapper.update_quantile_locations(input_data=fcst_array, max_step_size=0.01)
+ifs_quantile_locs = qmapper.update_quantile_locations(input_data=ifs_train_data, max_step_size=0.01)
 
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
@@ -218,7 +218,7 @@ qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_rang
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 
 # Get auto spaced quantiles, up to one data point per quantile
-cgan_quantile_locs = qmapper.update_quantile_locations(input_data=fcst_array, max_step_size=0.01)
+cgan_quantile_locs = qmapper.update_quantile_locations(input_data=cgan_training_data, max_step_size=0.01)
 
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
