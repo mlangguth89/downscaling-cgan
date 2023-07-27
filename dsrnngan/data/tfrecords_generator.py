@@ -393,8 +393,16 @@ def write_data(year_month_ranges: list,
     
     if isinstance(year_month_ranges[0], str):
         year_month_ranges = [year_month_ranges]
-        
     
+    # Create file handles
+    fle_hdles = {}
+    for hour in hours:
+        fle_hdles[hour] = {}
+        for cl in range(data_config.num_classes):
+            fle_hdles[hour][cl] = []
+            for shard in range(num_shards):
+                flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
+                fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename))
     
     for year_month_range in year_month_ranges:  
         
@@ -420,18 +428,9 @@ def write_data(year_month_ranges: list,
 
             if debug:
                 dates = dates[:1]
-
-            for hour in hours:
                 
-                fle_hdles = {}
-                for cl in range(data_config.num_classes):
-                    fle_hdles[cl] = []
-                    for shard in range(num_shards):
-                        flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
-                        fle_hdles[cl].append(tf.io.TFRecordWriter(flename))
-            
                 print('Hour = ', hour)
-                start_time = time.time()
+
                 dgc = DataGenerator(data_config=data_config,
                                     dates=[item.strftime('%Y%m%d') for item in dates],
                                     batch_size=1,
@@ -512,19 +511,21 @@ def write_data(year_month_ranges: list,
                                     clss = random.choice(range(data_config.num_classes))
                                     
                                 # Choose random shard
-                                fh = random.choice(fle_hdles[clss])
+                                fh = random.choice(fle_hdles[hour][clss])
 
                                 fh.write(example_to_string)
                     
                     except FileNotFoundError as e:
                         print(f"Error loading hour={hour}, date={date}")
                         
-                for cl, fhs in fle_hdles.items():
-                    for fh in fhs:
-                        fh.close()
+                
         else:
             print('No dates found')
-    
+            
+    for hour in hours:
+        for cl, fhs in fle_hdles[hour].items():
+            for fh in fhs:
+                fh.close()
     
                             
     return hash_dir
@@ -582,6 +583,7 @@ if __name__ == '__main__':
                     help='Hour(s) to process (space separated)')
     parser.add_argument('--records-folder', type=str, default=None)
     parser.add_argument('--data-config-path', type=str, default=None)
+    parser.add_argument('--model-config-path', type=str, default=None)
     parser.add_argument('--debug',action='store_true')
     args = parser.parse_args()
     
@@ -592,8 +594,13 @@ if __name__ == '__main__':
                                                      config_folder=path_split[0])
     else:
         data_config = read_config.read_data_config()
-        
-    model_config = read_config.read_model_config()
+    
+    if args.data_config_path:
+        path_split = os.path.split(args.model_config_path)
+        model_config = read_config.read_model_config(config_filename=path_split[-1],
+                                                     config_folder=path_split[0])
+    else:
+        model_config = read_config.read_model_config()
     
     val_range = None
     eval_range = None
@@ -601,14 +608,14 @@ if __name__ == '__main__':
     if args.debug:
         training_range = ['201701']
     else:
-        training_range = [str(item) for item in model_config.train.training_range]
+        training_range = model_config.train.training_range
         
         if hasattr(model_config.val, 'val_range'):
-            val_range = [str(item) for item in model_config.val.val_range]
+            val_range = model_config.val.val_range
         
         if hasattr(model_config, 'eval'):
             if hasattr(model_config.eval, 'eval_range'):
-                eval_range =  [str(item) for item in model_config.eval.eval_range]
+                eval_range =  model_config.eval.eval_range
     
     write_train_test_data(training_range=training_range,
                             validation_range=val_range,
