@@ -429,95 +429,95 @@ def write_data(year_month_ranges: list,
             if debug:
                 dates = dates[:1]
                 
-                print('Hour = ', hour)
+            print('Hour = ', hour)
 
-                dgc = DataGenerator(data_config=data_config,
-                                    dates=[item.strftime('%Y%m%d') for item in dates],
-                                    batch_size=1,
-                                    shuffle=False,
-                                    hour=hour)
-                print('Fetching batches')
-                for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
+            dgc = DataGenerator(data_config=data_config,
+                                dates=[item.strftime('%Y%m%d') for item in dates],
+                                batch_size=1,
+                                shuffle=False,
+                                hour=hour)
+            print('Fetching batches')
+            for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
+                
+                logger.debug(f"hour={hour}, batch={batch}")
+                
+                try:
                     
-                    logger.debug(f"hour={hour}, batch={batch}")
-                    
-                    try:
+                    sample = dgc.__getitem__(batch)
+                    (depth, width, height) = sample[1]['output'].shape
+                
+                    for k in range(depth):
                         
-                        sample = dgc.__getitem__(batch)
-                        (depth, width, height) = sample[1]['output'].shape
-                    
-                        for k in range(depth):
+                        # NOTE: This kind of random cropping could also be done using Tensorflow during the data loading process. However, our experiments
+                        # found this to be much slower than pre-cropping whilst creating the tensorflow records. The trade-off is that more hard drive space is required to
+                        # store these examples, so the number of samples per image has to be chosen as high as possible to still get the benefit of the random cropping.
+                        for ii in range(num_samples_per_image):
                             
-                            # NOTE: This kind of random cropping could also be done using Tensorflow during the data loading process. However, our experiments
-                            # found this to be much slower than pre-cropping whilst creating the tensorflow records. The trade-off is that more hard drive space is required to
-                            # store these examples, so the number of samples per image has to be chosen as high as possible to still get the benefit of the random cropping.
-                            for ii in range(num_samples_per_image):
-                                
-                                idx = random.randint(0, width-input_image_width)
-                                idy = random.randint(0, height-input_image_width)
+                            idx = random.randint(0, width-input_image_width)
+                            idy = random.randint(0, height-input_image_width)
 
-                                observations = sample[1]['output'][k, 
-                                                                idx:(idx+input_image_width), 
-                                                                idy:(idy+input_image_width)].flatten()
+                            observations = sample[1]['output'][k, 
+                                                            idx:(idx+input_image_width), 
+                                                            idy:(idy+input_image_width)].flatten()
 
-                                forecast = sample[0]['lo_res_inputs'][k, 
-                                                                    idx:(idx+input_image_width), 
-                                                                    idy:(idy+input_image_width), :].flatten()
-                                
-                                const = sample[0]['hi_res_inputs'][k, 
+                            forecast = sample[0]['lo_res_inputs'][k, 
                                                                 idx:(idx+input_image_width), 
                                                                 idy:(idy+input_image_width), :].flatten()
+                            
+                            const = sample[0]['hi_res_inputs'][k, 
+                                                            idx:(idx+input_image_width), 
+                                                            idy:(idy+input_image_width), :].flatten()
+                            
+                            if sample[0]['hi_res_inputs'][k, 
+                                                            idx:(idx+input_image_width), 
+                                                            idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, len(data_config.constant_fields)):
+                                raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
+    
+                            # Check no Null values
+                            if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                                raise ValueError('Unexpected NaN values in data')
+                            
+                            # Check for empty data
+                            if forecast.sum() == 0 or const.sum() == 0:
+                                raise ValueError('one or more of arrays is all zeros')
+                            
+                            # Check hi res data has same dimensions
                                 
-                                if sample[0]['hi_res_inputs'][k, 
-                                                                idx:(idx+input_image_width), 
-                                                                idy:(idy+input_image_width), :].shape != (input_image_width, input_image_width, len(data_config.constant_fields)):
-                                    raise ValueError(f'Wrong constants dimensions for k == {k}, ii={ii}, date = {str(date)}, idx={idx}, idy={idy}')
-        
-                                # Check no Null values
-                                if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                                    raise ValueError('Unexpected NaN values in data')
-                                
-                                # Check for empty data
-                                if forecast.sum() == 0 or const.sum() == 0:
-                                    raise ValueError('one or more of arrays is all zeros')
-                                
-                                # Check hi res data has same dimensions
-                                    
-                                feature = {
-                                    'generator_input': _float_feature(forecast),
-                                    'constants': _float_feature(const),
-                                    'generator_output': _float_feature(observations)
-                                }
+                            feature = {
+                                'generator_input': _float_feature(forecast),
+                                'constants': _float_feature(const),
+                                'generator_output': _float_feature(observations)
+                            }
 
-                                features = tf.train.Features(feature=feature)
-                                example = tf.train.Example(features=features)
-                                example_to_string = example.SerializeToString()
-                                
-                                # If provided, bin data according to bin boundaries (typically quartiles)
-                                if data_config.class_bin_boundaries is not None:
-                                                            
-                                    threshold = 0.1
-                                    if data_config.normalise_outputs:
-                                        rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
-                                    else:
-                                        rainy_pixel_fraction = (observations > threshold).mean()
-
-                                    boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
-                                    if any(boundary_comparison):
-                                        clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
-                                    else:
-                                        clss = len(data_config.class_bin_boundaries) 
+                            features = tf.train.Features(feature=feature)
+                            example = tf.train.Example(features=features)
+                            example_to_string = example.SerializeToString()
+                            
+                            # If provided, bin data according to bin boundaries (typically quartiles)
+                            if data_config.class_bin_boundaries is not None:
+                                                        
+                                threshold = 0.1
+                                if data_config.normalise_outputs:
+                                    rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
                                 else:
-                                    clss = random.choice(range(data_config.num_classes))
-                                    
-                                # Choose random shard
-                                fh = random.choice(fle_hdles[hour][clss])
+                                    rainy_pixel_fraction = (observations > threshold).mean()
 
-                                fh.write(example_to_string)
+                                boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
+                                if any(boundary_comparison):
+                                    clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
+                                else:
+                                    clss = len(data_config.class_bin_boundaries) 
+                            else:
+                                clss = random.choice(range(data_config.num_classes))
+                                
+                            # Choose random shard
+                            fh = random.choice(fle_hdles[hour][clss])
+
+                            fh.write(example_to_string)
+                
+                except FileNotFoundError as e:
+                    print(f"Error loading hour={hour}, date={date}")
                     
-                    except FileNotFoundError as e:
-                        print(f"Error loading hour={hour}, date={date}")
-                        
                 
         else:
             print('No dates found')
