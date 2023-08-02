@@ -51,7 +51,7 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 # 'cin', Left out for the moment as contains a lot of nulls
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
-                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
+                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin',  'tpq']
 input_fields = data_config.input_fields
 constant_fields = data_config.constant_fields
 all_fcst_hours = np.array(range(24))
@@ -165,24 +165,20 @@ def make_dataset_consistent(ds: xr.Dataset):
     
     return ds
 
-def get_obs_dates(start_date: datetime,
-                  end_date: datetime,  hour: int, obs_data_source: str, 
+def get_obs_dates(date_range: list,  hour: int, obs_data_source: str, 
                   data_paths=DATA_PATHS,
                   ):
     """
     Get dates for which there is observational data available
     Args:
-        start_date (datetime): Start date (hourly level)
-        end_date (datetime): End date (hourly level)
+        date_range (list): list of candidate dates
         obs_data_source (str): Name of data source
         data_paths (dict, optional): Dict containing data paths. Defaults to DATA_PATHS.
 
     Returns:
         list: list of dates
     """
-    date_range = pd.date_range(start=start_date, end=end_date)
-    date_range = [item.date() for item in date_range]
-    
+
     obs_dates = set([item for item in date_range if file_exists(data_source=obs_data_source, year=item.year,
                                                     month=item.month, day=item.day,
                                                     data_paths=data_paths, hour=hour)])

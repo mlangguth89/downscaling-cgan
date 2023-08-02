@@ -61,7 +61,7 @@ def setup_batch_gen(records_folder: str,
 
 def setup_full_image_dataset(
                              data_config,
-                             year_month_range,
+                             year_month_ranges,
                              batch_size=2,
                              downsample=False,
                              hour='random',
@@ -71,9 +71,8 @@ def setup_full_image_dataset(
     from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
     from dsrnngan.data.data import get_obs_dates
 
-    date_range = date_range_from_year_month_range(year_month_range)
-    dates = get_obs_dates(date_range[0], 
-                          date_range[-1], 
+    date_range = date_range_from_year_month_range(year_month_ranges)
+    dates = get_obs_dates(date_range,
                           obs_data_source=data_config.obs_data_source, 
                           data_paths=read_config.get_data_paths(data_config=data_config),
                           hour=hour)
@@ -131,7 +130,7 @@ def setup_data(data_config,
             batch_gen_train = None
         else:
             batch_gen_train = setup_full_image_dataset(data_config=data_config,
-                                          year_month_range=training_range,
+                                          year_month_ranges=training_range,
                                           batch_size=full_image_batch_size,
                                           downsample=model_config.downsample,
                                           hour=hour,
@@ -140,7 +139,7 @@ def setup_data(data_config,
             batch_gen_valid = None
         else:
             batch_gen_valid = setup_full_image_dataset(data_config=data_config,
-                                          year_month_range=model_config.val.val_range,
+                                          year_month_ranges=model_config.val.val_range,
                                           batch_size=full_image_batch_size,
                                           downsample=model_config.downsample,
                                           hour=hour,

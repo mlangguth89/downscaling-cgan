@@ -3,6 +3,7 @@ import os
 import warnings
 from datetime import datetime, timedelta
 import pickle
+import hashlib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -115,7 +116,11 @@ def create_single_sample(*,
                    seed: int=None
                    ):
     
-    tpidx = data_config.input_fields.index('tp')
+    if 'tp' in data_config.input_fields:
+        tpidx = data_config.input_fields.index('tp')
+    else:
+        # Temporary fix to allow testing of other tp variants
+        tpidx = data_config.input_fields.index('tpq')
     
     batch_size = 1  # do one full-size image at a time
 
@@ -225,8 +230,13 @@ def eval_one_chkpt(*,
     max_bias_all = []
     max_bias_fcst_all = []
     fcst_mae_all = []
+    max_quantile_diff = []
 
-    tpidx = data_config.input_fields.index('tp')
+    if 'tp' in data_config.input_fields:
+        tpidx = data_config.input_fields.index('tp')
+    else:
+        # Temporary fix to allow testing of other tp variants
+        tpidx = data_config.input_fields.index('tpq')
     
     batch_size = 1  # do one full-size image at a time
 
@@ -308,6 +318,9 @@ def eval_one_chkpt(*,
         # Max difference
         max_bias_all.append((samples_gen - np.stack([obs]*ensemble_size, axis=-1)).max())
         max_bias_fcst_all.append((fcst -obs).max())
+        
+        # Max difference at 99.99th quantile
+        max_quantile_diff.append( np.abs(np.quantile(samples_gen[:,:,0], 0.99999) - np.quantile(obs, 0.99999)).max() )
         
         # Store these values for e.g. correlation on the grid
         truth_vals.append(obs)
@@ -392,6 +405,7 @@ def eval_one_chkpt(*,
     point_metrics['csi_fcst'] = np.mean(csi_fcst_all)
     point_metrics['max_bias'] = np.mean(max_bias_all)
     point_metrics['max_bias_fcst'] = np.mean(max_bias_fcst_all)
+    point_metrics['max_quantile_diff'] = np.mean(max_quantile_diff)
     
     ranks = np.concatenate(ranks)
     lowress = np.concatenate(lowress)
@@ -469,10 +483,15 @@ def evaluate_multiple_checkpoints(
         OP = rank_OP(ranks)
         
         # save one directory up from model weights, in same dir as logfile
-        output_folder = os.path.join(log_folder, f"n{num_images}_{'-'.join(model_config.val.val_range)}_e{ensemble_size}")
+        # Assuming that it is very unlikely to have the same start and end of the range and have a collision on this hash
+        range_hash = hashlib.sha256(str(model_config.val.val_range).encode('utf-8')).hexdigest()[:5]
+        output_folder = os.path.join(log_folder, f"n{num_images}_{model_config.val.val_range[0][0]}-{model_config.val.val_range[-1][-1]}_{range_hash}_e{ensemble_size}")
         
-        if not os.path.isdir(output_folder):
-            os.mkdir(output_folder)
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Save exact validation range
+        with open(os.path.join(output_folder, 'val_range.pkl'), 'wb+') as ofh:
+            pickle.dump(model_config.val.val_range, ofh)
         
         # Create a dataframe of all the data (to ensure scores are recorded in the right column)
         df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))

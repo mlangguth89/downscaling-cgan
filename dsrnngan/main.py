@@ -125,7 +125,6 @@ def main(restart: bool,
                 
     if not output_suffix:
         # Attach model_config as suffix
-        
         output_suffix = '_' + utils.hash_dict(model_config_dict)
     else:
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
@@ -155,10 +154,11 @@ def main(restart: bool,
     if training_weights is None:
         training_weights = model_config.train.training_weights
 
-    if val_start:
-        model_config.val.val_range[0] = val_start
-    if val_end:
-        model_config.val.val_range[1] = val_end
+    if (val_start is not None) and (val_end is not None):
+        model_config.val.val_range = [[val_start, val_end]]
+    elif val_start is not None or val_end is not None:
+        raise ValueError('Must specify both val_start and val_end or neither.')
+
     
     noise_factor = float(noise_factor)
     evaluate = (eval_model_numbers or evalnum)
