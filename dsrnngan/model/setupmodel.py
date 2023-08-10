@@ -41,13 +41,15 @@ def setup_model(*,
                          noise_channels=model_config.generator.noise_channels,
                          filters_gen=model_config.generator.filters_gen,
                          padding=model_config.padding,
-                         output_activation=model_config.generator.output_activation)
+                         output_activation=model_config.generator.output_activation,
+                         norm=model_config.generator.normalisation)
         disc = disc_to_use(arch=model_config.architecture,
                            downscaling_steps=model_config.downscaling_steps,
                            input_channels=data_config.input_channels,
                            num_constant_fields=len(data_config.constant_fields),
                            filters_disc=model_config.discriminator.filters_disc,
-                           padding=model_config.padding)
+                           padding=model_config.padding,
+                           norm=model_config.discriminator.normalisation)
         model = gan.WGANGP(gen, disc, model_config.mode, lr_disc=model_config.discriminator.learning_rate_disc, lr_gen=model_config.generator.learning_rate_gen,
                            ensemble_size=model_config.train.ensemble_size,
                            CLtype=model_config.train.CL_type,

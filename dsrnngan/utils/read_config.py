@@ -51,8 +51,10 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     
     model_config.generator.learning_rate_gen = float(model_config.generator.learning_rate_gen)
     model_config.generator.output_activation = model_config_dict['generator'].get('output_activation', 'softplus')
+    model_config.generator.normalisation =  model_config_dict['generator'].get('normalisation')
     
     model_config.discriminator.learning_rate_disc = float(model_config.discriminator.learning_rate_disc)
+    model_config.discriminator.normalisation = model_config_dict['discriminator'].get('normalisation')
     
     if model_config.mode not in ['GAN', 'VAEGAN', 'det']:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
