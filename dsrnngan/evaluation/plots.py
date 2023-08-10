@@ -205,14 +205,14 @@ def plot_quantiles(quantile_data_dict: dict,
 
             if min_data_points_per_quantile is not None:
                 # check minimum number of points per quantile
-                boundaries = utils.get_valid_quantiles(data_size=d['data'].size, raw_quantile_locations=boundaries, 
+                boundaries = utils.get_valid_quantiles(data_size=d.size, raw_quantile_locations=boundaries, 
                                                         min_data_points_per_quantile=min_data_points_per_quantile)
             
             quantile_boundaries[data_name].append(boundaries)
             intervals[data_name].append(v['interval']/100)
             
             if len(boundaries) > 0:
-                quantile_results[data_name][k] = np.quantile(d['data'], boundaries)
+                quantile_results[data_name][k] = np.quantile(d, boundaries)
                 
                 if np.max(boundaries) > max_quantile:
                     max_quantile = np.max(boundaries)
@@ -232,7 +232,7 @@ def plot_quantiles(quantile_data_dict: dict,
     marker_handles = None
 
     # Quantiles for annotating plot
-    quantile_annotation_dict = {str(np.round(q, 11)): np.quantile(quantile_data_dict[obs_key]['data'], q) for q in [1 - 10**(-n) for n in range(3, 6)] if q <=max_quantile}
+    quantile_annotation_dict = {str(np.round(q, 11)): np.quantile(quantile_data_dict[obs_key], q) for q in [1 - 10**(-n) for n in range(3, 6)] if q <=max_quantile}
         
     for k, v in tqdm(range_dict.items()):
         
@@ -246,7 +246,12 @@ def plot_quantiles(quantile_data_dict: dict,
             marker_hndl_list = []
             for data_name, res in quantile_results.items():
                 if data_name != obs_key:
-                    s = ax.scatter(quantile_results[obs_key][k], res[k], c=format_lookup[data_name]['color'], marker=format_lookup[data_name]['marker'], label=data_name, s=size, 
+                    s = ax.scatter(quantile_results[obs_key][k], 
+                                   res[k], 
+                                   c=format_lookup[data_name]['color'],
+                                   marker=format_lookup[data_name]['marker'], 
+                                   label=data_name, 
+                                   s=size, 
                                 cmap=cmap, alpha=format_lookup[data_name].get('alpha', 1))
                     marker_hndl_list.append(s)
             

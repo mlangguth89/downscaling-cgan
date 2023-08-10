@@ -55,7 +55,7 @@ def create_mixed_dataset(data_label: str,
                          repeat: bool=True,
                          downsample: bool=False,
                          folder: str=records_folder,
-                         shuffle_size: int=1024,
+                         shuffle_size: int=256,
                          weights: list=None,
                          crop_size: int=None,
                          rotate: bool=False,
@@ -71,7 +71,7 @@ def create_mixed_dataset(data_label: str,
         repeat (bool, optional): repeat dataset or not. Defaults to True.
         downsample (bool, optional): whether to downsample or not. Defaults to False.
         folder (str, optional): folder containing tf records. Defaults to records_folder.
-        shuffle_size (int, optional): buffer size of shuffling. Defaults to 1024.
+        shuffle_size (int, optional): buffer size of shuffling. Defaults to 256.
         weights (list, optional): list of floats, weights of classes when sampling. Defaults to None.
         crop_size (int, optional): Size to crop randomly crop images to.
         rotate (bool, optional): If true then data is agumented by random rotation.
@@ -236,7 +236,7 @@ def create_dataset(data_label: str,
                    con_shape=(200, 200, 2),
                    out_shape=(200, 200, 1),
                    folder: str=records_folder,
-                   shuffle_size: int=1024,
+                   shuffle_size: int=256,
                    repeat: bool=True,
                    crop_size: int=None,
                    rotate: bool=False,

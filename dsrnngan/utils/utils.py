@@ -74,7 +74,7 @@ def get_checkpoint_model_numbers(log_folder: str) -> List[int]:
     return model_numbers
     
 
-def get_best_model_number(log_folder: str, metric_column_name: str='CRPS_no_pooling'):
+def get_best_model_number(log_folder: str):
     """
     Get model number that has lowest value according to metric specified (defaults to CRPS)
 

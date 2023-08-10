@@ -48,7 +48,8 @@ class TestDataGenerator(unittest.TestCase):
                             'input_image_width': 10, 
                             'num_samples': 3, 
                             'num_samples_per_image': 1, 
-                            'normalise': True,
+                            'normalise_inputs': True,
+                            'output_normalisation': "log",
                             'num_classes': 1, 
                             'min_latitude': -1.95, 
                             'max_latitude': 1.95, 
@@ -97,7 +98,47 @@ class TestDataGenerator(unittest.TestCase):
         self.assertEqual(data[0][0]['dates'].shape, (batch_size,))
 
         self.assertEqual(data[0][1]['output'].shape, (batch_size, len(self.latitude_range), len(self.longitude_range)))
-    
+        
+    def test_output_normalisation(self):
+
+        date_range = [datetime(2017,7,4), datetime(2017,7,4)]
+        batch_size = 2
+        
+        data_gen_norm = DataGenerator(date_range, batch_size=batch_size,
+                                 data_config=self.data_config,
+                                shuffle=False, hour=17,
+                                downsample=False, seed=None,
+                                repeat_data=True)
+        
+
+        data_norm = [data_gen_norm[n] for n in range(len(date_range))]
+
+        no_norm_data_config = copy.deepcopy(self.data_config)
+        no_norm_data_config.output_normalisation=None
+        data_gen_no_norm = DataGenerator(date_range, batch_size=batch_size,
+                            data_config=no_norm_data_config,
+                        shuffle=False, hour=17,
+                        downsample=False, seed=None,
+                        repeat_data=True)
+        
+
+        data_no_norm = [data_gen_no_norm[n] for n in range(len(date_range))]
+        np.testing.assert_allclose(data.denormalise(data_norm[0][1]['output'], 'log'), data_no_norm[0][1]['output'], atol=1e-6)
+        np.testing.assert_allclose(10**data_norm[0][1]['output']-1, data_no_norm[0][1]['output'], atol=1e-6)
+        # Check Square root normalisation
+        sqrt_norm_data_config = copy.deepcopy(self.data_config)
+        sqrt_norm_data_config.output_normalisation="sqrt"
+        data_gen_sqrt_norm = DataGenerator(date_range, batch_size=batch_size,
+                            data_config=sqrt_norm_data_config,
+                        shuffle=False, hour=17,
+                        downsample=False, seed=None,
+                        repeat_data=True)
+        
+
+        data_sqrt_norm = [data_gen_sqrt_norm[n] for n in range(len(date_range))]
+        np.testing.assert_allclose(data.denormalise(data_sqrt_norm[0][1]['output'], 'sqrt'), data_no_norm[0][1]['output'], atol=1e-5)
+        np.testing.assert_allclose(np.power(data_sqrt_norm[0][1]['output'], 2), data_no_norm[0][1]['output'], atol=1e-5)
+        
     def test_repeat_data(self):
         # Test that generator keeps producing if repeat_data is True
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]

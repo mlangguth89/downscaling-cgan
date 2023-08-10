@@ -103,7 +103,6 @@ class TestLoad(unittest.TestCase):
     
     def test_load_ifs_raw(self):
 
-
         year = 2017
         month = 7
         day = 5
@@ -115,7 +114,6 @@ class TestLoad(unittest.TestCase):
         lat_coords = []
         lon_coords = []
         
-        # for field in all_ifs_fields:
         for field in all_ifs_fields:
             
             ds = load_ifs_raw(field, year, month, day, hour, ifs_data_dir=str(ifs_path),

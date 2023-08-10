@@ -111,8 +111,8 @@ def create_single_sample(*,
                    latitude_range: Iterable,
                    longitude_range: Iterable,
                    ensemble_size: int,
-                   denormalise_outputs: bool=True,
-                   denormalise_inputs: bool=True,
+                   output_normalisation: str,
+                   input_normalisation: str,
                    seed: int=None
                    ):
     
@@ -139,17 +139,17 @@ def create_single_sample(*,
     
     # Get observations 24hrs before
     imerg_persisted_fcst = data.load_imerg(date[0] - timedelta(days=1), hour=hour[0], latitude_vals=latitude_range, 
-                                            longitude_vals=longitude_range, log_precip=not denormalise_outputs)
+                                            longitude_vals=longitude_range, normalisation_type=output_normalisation)
     
     assert imerg_persisted_fcst.shape == obs.shape, ValueError('Shape mismatch in iMERG persistent and truth')
     assert len(date) == 1, ValueError('Currently must be run with a batch size of 1')
     assert len(date) == len(hour), ValueError('This is strange, why are they different sizes?')
         
-    if denormalise_outputs:
-        obs = data.denormalise(obs)
+    if output_normalisation is not None:
+        obs = data.denormalise(obs, normalisation_type=output_normalisation)
     
-    if denormalise_inputs:
-        fcst = data.denormalise(fcst)
+    if input_normalisation is not None:
+        fcst = data.denormalise(fcst, normalisation_type=input_normalisation)
             
     if model_config.mode == "GAN":
         
@@ -179,8 +179,8 @@ def create_single_sample(*,
         sample_gen = samples_gen[ii][0, :, :, 0]
         
         # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
-        if denormalise_outputs:
-            sample_gen = data.denormalise(sample_gen)
+        if output_normalisation is not None:
+            sample_gen = data.denormalise(sample_gen, normalisation_type=output_normalisation)
 
         samples_gen[ii] = sample_gen
 
@@ -199,9 +199,13 @@ def eval_one_chkpt(*,
                    batch_size: int=1):
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
-    denormalise_outputs = data_config.normalise_outputs
-    denormalise_inputs = data_config.normalise_inputs
+    output_normalisation = data_config.output_normalisation
     
+    if data_config.normalise_inputs:
+        input_normalisation = data_config.input_normalisation_strategy['tp']['normalisation']
+    else:
+        input_normalisation = None
+        
     if num_images < 5:
         Warning('These scores are best performed with more images')
     
@@ -270,13 +274,17 @@ def eval_one_chkpt(*,
                         latitude_range=latitude_range,
                         longitude_range=longitude_range,
                         ensemble_size=ensemble_size,
-                        denormalise_outputs=denormalise_outputs,
-                        denormalise_inputs=denormalise_inputs
+                        output_normalisation=output_normalisation,
+                        input_normalisation=input_normalisation
                         )
                 success = True
                 data_idx += 1
                 
-            except FileNotFoundError:
+            # except FileNotFoundError:
+            except Exception as e:
+                print(dates[-1])
+                print(hours[-1])
+                raise(e)
                 print('Could not load file, attempting retries')
                 success = False
                 data_idx += 1
@@ -286,6 +294,8 @@ def eval_one_chkpt(*,
                 break 
 
         if not success:
+            print(dates[-1])
+            print(hours[-1])
             raise FileNotFoundError
         
         dates.append(date)
@@ -378,8 +388,6 @@ def eval_one_chkpt(*,
             losses = [("EM-MSE", emmse_so_far), ("CRPS", crps_mean)]
             progbar.add(1, values=losses)
             
-        # This is crucial to get different data!
-        data_idx += 1
 
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)

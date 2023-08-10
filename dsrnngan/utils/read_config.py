@@ -85,12 +85,7 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
         data_config_ns.constant_fields = ['orography', 'lsm']
     
     data_config_ns.normalise_inputs = data_config_dict.get('normalise_inputs', False)
-    data_config_ns.normalise_outputs = data_config_dict.get('normalise_outputs', False)
-    
-    if (not data_config_ns.normalise_inputs or not data_config_ns.normalise_outputs) and data_config_dict.get('normalise', False):
-        # backwards compatability
-        data_config_ns.normalise_inputs = True
-        data_config_ns.normalise_outputs = True
+    data_config_ns.output_normalisation = data_config_dict.get('output_normalisation', "log")
 
     return data_config_ns
 

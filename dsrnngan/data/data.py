@@ -51,7 +51,7 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 # 'cin', Left out for the moment as contains a lot of nulls
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
                   'sp', 't200', 't700', 'tclw', 'tcwv', 'tisr', 'tp', 
-                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin',  'tpq']
+                  'u200', 'u700', 'v200', 'v700', 'w200', 'w500', 'w700', 'cin']
 input_fields = data_config.input_fields
 constant_fields = data_config.constant_fields
 all_fcst_hours = np.array(range(24))
@@ -85,18 +85,34 @@ DEFAULT_LONGITUDE_RANGE=np.arange(data_config.min_longitude, data_config.max_lon
 
 char_integer_re = re.compile(r'[a-zA-Z]*([0-9]+)')
 
-def denormalise(x: np.float64):
+def denormalise(x: np.float64, normalisation_type: str):
     """
-    Undo log normalisation
+    Undo normalisation
 
     Args:
-        x (np.float64): log normalised float
-
+        x (np.float64): normalised float
+        normalisation_type (str): type of normalisation
     Returns:
         np.float64: denormalised float
     """
-    return 10 ** x - 1
+        
+    if normalisation_type == 'log':
+        return 10 ** x - 1
+    elif normalisation_type == 'sqrt':
+        return np.power(x,2)
+    else:
+        raise NotImplementedError(f'normalisation type {normalisation_type} not recognised')
+    
 
+def normalise_precipitation(data_array: xr.DataArray,
+                            normalisation_type: str):
+    
+    if normalisation_type == 'log':
+        return np.log10(1 + data_array)
+    elif normalisation_type == 'sqrt':
+        return np.sqrt(data_array)
+    else:
+        raise NotImplementedError(f'normalisation type {normalisation_type} not recognised')
 
 def log_plus_1(data_array: xr.DataArray):
     """
@@ -425,7 +441,10 @@ def preprocess(variable: str,
             
         elif normalisation_type == 'max':
             ds[var_name] = ds[var_name] / stats_dict['max']
-        
+            
+        elif normalisation_type == 'sqrt':
+            ds[var_name] = normalise_precipitation(ds[var_name], 'sqrt')
+
         else:
             raise ValueError(f'Unrecognised normalisation type for variable {var_name}')
 
@@ -583,7 +602,7 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           constant_fields: list=None, 
                           hour: int=0, 
                           normalise_inputs: bool=False,
-                          normalise_outputs: bool=False):
+                          output_normalisation: bool=False):
     batch_x = []
     batch_y = []
 
@@ -605,7 +624,7 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                                        norm=normalise_inputs, constants_dir=constants_dir))
         
         if obs_data_source is not None:
-            batch_y.append(load_observational_data(obs_data_source, date, h, log_precip=normalise_outputs,
+            batch_y.append(load_observational_data(obs_data_source, date, h, normalisation_type=output_normalisation,
                                                 latitude_vals=latitude_range, longitude_vals=longitude_range,
                                                 data_dir=obs_data_dir))
     if constant_fields is None:
@@ -1139,7 +1158,7 @@ def load_imerg_raw(year: int, month: int, day: int,
 
 def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
                latitude_vals: list=None, longitude_vals: list=None,
-               log_precip: bool=False):
+               normalisation_type: str=None):
     """
 
      Function to fetch iMERG data, designed to match the structure of the load_radar function, so they can be
@@ -1164,8 +1183,8 @@ def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
     precip = ds['precipitationCal'].values
     ds.close()
     
-    if log_precip:
-        precip = log_plus_1(precip)
+    if normalisation_type is not None:
+        precip = normalise_precipitation(precip, normalisation_type=normalisation_type)
 
     return precip
 

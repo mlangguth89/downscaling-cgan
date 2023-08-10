@@ -61,7 +61,7 @@ class DataGenerator(Sequence):
         self.shuffle = shuffle
         self.hour = hour
         self.normalise_inputs = data_config.normalise_inputs
-        self.normalise_outputs = data_config.normalise_outputs
+        self.output_normalisation = data_config.output_normalisation
 
         self.downsample = downsample
         self.latitude_range, self.longitude_range = get_lat_lon_range_from_config(data_config)
@@ -111,7 +111,7 @@ class DataGenerator(Sequence):
             obs_data_source=self.observational_data_source,
             hour=hours_batch,
             normalise_inputs=self.normalise_inputs,
-            normalise_outputs=self.normalise_outputs,
+            output_normalisation=self.output_normalisation,
             latitude_range=self.latitude_range,
             longitude_range=self.longitude_range)
         
