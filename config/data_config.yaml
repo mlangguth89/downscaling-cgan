@@ -6,7 +6,7 @@ input_image_width: 264 # Assumes a square image
 num_samples: 320000
 num_samples_per_image: 1
 normalise_inputs: True
-normalise_outputs: True
+output_normalisation: "log"
 num_classes: 4 # Number of bins to split data into
 min_latitude: -11.95
 max_latitude: 15.05
@@ -39,6 +39,9 @@ constant_fields:
     - orography
     - lsm
 input_normalisation_strategy:
+    tpq:
+      negative_vals: False
+      normalisation: "log"
     tp:
       negative_vals: False
       normalisation: "log"
