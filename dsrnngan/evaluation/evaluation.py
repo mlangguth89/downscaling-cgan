@@ -376,7 +376,7 @@ def eval_one_chkpt(*,
         ranks.append(rank)
         
         # keep track of input and truth rainfall values, to facilitate further ranks processing
-        cond_exp = np.repeat(np.repeat(data.denormalise(cond[..., tpidx]).astype(np.float32), ds_fac, axis=-1), ds_fac, axis=-2)
+        cond_exp = np.repeat(np.repeat(data.denormalise(cond[..., tpidx], normalisation_type=input_normalisation).astype(np.float32), ds_fac, axis=-1), ds_fac, axis=-2)
         lowress.append(cond_exp.ravel())
         hiress.append(obs.astype(np.float32).ravel())
         del samples_gen_ranks, truth_flat
