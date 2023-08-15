@@ -30,6 +30,7 @@ class TestScoring(unittest.TestCase):
         
         self.ifs_train_data = train_data['ifs_train_data']
         self.imerg_train_data = train_data['imerg_train_data']
+        self.ensemble_fcst_array = train_data['fcst_array']
         self.fcst_array = train_data['fcst_array'][:,:,:,0]
         self.training_dates = train_data['training_dates']
         self.training_hours = train_data['training_hours']
@@ -82,5 +83,14 @@ class TestScoring(unittest.TestCase):
         
         self.assertIsInstance(csi_results, list)
 
+    def test_spread_error(self):
+        
+        ensemble_array=np.stack([self.ifs_train_data]*5, axis=-1)
+        ensemble_array += np.random.normal(size=ensemble_array.shape)
+        scoring.get_spread_error_data(observation_array=self.imerg_train_data, 
+                              ensemble_array=ensemble_array,
+                              n_bins=100)
+        t=1
+    
                 
         

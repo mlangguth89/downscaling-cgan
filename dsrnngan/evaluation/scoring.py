@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, binned_statistic
 from scipy.ndimage import uniform_filter
 from sklearn.metrics import confusion_matrix
 
@@ -211,23 +211,25 @@ def mae_above_threshold(y_true, y_pred, percentile_threshold=0.95):
     
     return mae_95
 
-def get_spread_error_data(n_samples: int, observation_array: np.ndarray, ensemble_array: np.ndarray,
-                          upper_limit: int=None, quantile_step_size: float=0.01):
+def get_spread_error_data(observation_array: np.ndarray, 
+                          ensemble_array: np.ndarray,
+                          n_samples: int=None, 
+                          n_bins: int=100):
     """
     Calculates data for plotting a binned spread-error plot
 
     Args:
-        n_samples (int): Number of samples to use from the dataset
         observation_array (np.ndarray): array of observations
         ensemble_array (np.ndarray): array of ensemble predictions
-        quantile_step_size (float, optional): step size of quantiles for binning, defaults to 0.01
+        n_samples (int, optional): Number of samples to use from the dataset
+        n_bins (int, optional): number of quantiles for binning, defaults to 100
     Returns:
-        list(tuple): List of tuples, where each tuple is (average variance in bin, mse of corresponding observation points relative to ensemble mean)
+        list(tuple): List of tuples, where each tuple is (average spread in bin, mse of corresponding observation points relative to ensemble mean)
     """
     (n_sample_total, _, _, ensemble_size) = ensemble_array.shape
     ensmean_array = np.mean(ensemble_array, axis=-1)
 
-    if n_samples < n_sample_total:
+    if n_samples is not None and n_samples < n_sample_total:
         # Sample the data
         sample_indexes = np.random.choice(n_sample_total, n_samples)
         ensemble_array = ensemble_array[sample_indexes, :,:,:].copy()
@@ -236,35 +238,29 @@ def get_spread_error_data(n_samples: int, observation_array: np.ndarray, ensembl
     else:
         ensemble_array = ensemble_array.copy()
         observation_array = observation_array.copy()
-        
-    # cap data at large value
-    if upper_limit is not None:
-        ensemble_array = np.clip(ensemble_array, 0, upper_limit)
-        ensmean_array = np.clip(ensmean_array, 0, upper_limit)
 
     # First calculate the spread values of the ensemble
-    spreads = np.var(ensemble_array, axis=-1)
+    spreads = np.var(ensemble_array, axis=-1).flatten()
+    
     # Apply correction factor; see e.g. Leutbecker and Palmer, 2008
     spreads = ((ensemble_size+1) / (ensemble_size-1)) * spreads
+    
+    squared_error = np.power(observation_array - ensmean_array, 2).flatten()
 
     # find percentiles of the variances
-    spread_boundaries = np.quantile(spreads, np.arange(0, 1, quantile_step_size))
-    binned_spreads = np.digitize(spreads, spread_boundaries, right=False)
-
-    # Calculate bin centres
-    spread_bin_centres = [0.5*(spread_boundaries[n]+spread_boundaries[n+1]) for n in range(len(spread_boundaries) -1)] + [0.5*(spread_boundaries[-1] + spreads.max())]
-
-    variance_mse_pairs = []
-    for bin_num in tqdm(set(binned_spreads.flatten())):
-        
-        relevant_truth_data = observation_array[binned_spreads ==bin_num]
-        relevant_ensmean_data = ensmean_array[binned_spreads == bin_num]
-        
-        tmp_mse = np.power(relevant_truth_data - relevant_ensmean_data, 2).mean()
-        
-        variance_mse_pairs.append((spread_bin_centres[bin_num-1], tmp_mse))
-        
-    return variance_mse_pairs
+    spread_boundaries = np.array([0.0] + list(np.quantile(spreads, np.linspace(0, 1, n_bins))))
+    
+    # Find average observed variance within each bin
+    binned_mse, _, _ = binned_statistic(
+        spreads, squared_error, statistic="mean", bins=spread_boundaries
+    )
+    
+    # Find average spread within each bin
+    binned_spread, _, _ = binned_statistic(
+        spreads, spreads, statistic="mean", bins=spread_boundaries
+    )
+            
+    return binned_mse, binned_spread
 
 def get_metric_by_hour(metric_fn, obs_array, fcst_array, hours, bin_width=1):
     
