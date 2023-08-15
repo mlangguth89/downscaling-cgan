@@ -1,5 +1,6 @@
 """ Data generator class for full-image evaluation of precipitation downscaling network """
 import random
+import re
 import numpy as np
 import tensorflow as tf
 from types import SimpleNamespace
@@ -61,6 +62,7 @@ class DataGenerator(Sequence):
         self.shuffle = shuffle
         self.hour = hour
         self.normalise_inputs = data_config.normalise_inputs
+        self.normalisation_strategy = {field: data_config.normalisation_strategy[re.sub(r'([0-9]*[a-z]+)[0-9]*', r'\1', field)] for field in self.fcst_fields}
         self.output_normalisation = data_config.output_normalisation
 
         self.downsample = downsample
@@ -111,6 +113,7 @@ class DataGenerator(Sequence):
             obs_data_source=self.observational_data_source,
             hour=hours_batch,
             normalise_inputs=self.normalise_inputs,
+            normalisation_strategy=self.normalisation_strategy,
             output_normalisation=self.output_normalisation,
             latitude_range=self.latitude_range,
             longitude_range=self.longitude_range)

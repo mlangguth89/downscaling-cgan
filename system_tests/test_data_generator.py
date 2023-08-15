@@ -58,7 +58,7 @@ class TestDataGenerator(unittest.TestCase):
                             'max_longitude': 34.95, 
                             'longitude_step_size': 0.1, 
                             'normalisation_strategy': data.IFS_NORMALISATION_STRATEGY,
-                            'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
+                            'input_fields': ['tp', '2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
                             'constant_fields': ['lakes', 'sea', 'orography'], 
                             'paths': {'BLUE_PEBBLE':
                                 {'GENERAL': {'IMERG': str(data_folder/ 'IMERG/half_hourly/final'),
@@ -138,7 +138,48 @@ class TestDataGenerator(unittest.TestCase):
         data_sqrt_norm = [data_gen_sqrt_norm[n] for n in range(len(date_range))]
         np.testing.assert_allclose(data.denormalise(data_sqrt_norm[0][1]['output'], 'sqrt'), data_no_norm[0][1]['output'], atol=1e-5)
         np.testing.assert_allclose(np.power(data_sqrt_norm[0][1]['output'], 2), data_no_norm[0][1]['output'], atol=1e-5)
+  
+    def test_input_normalisation(self):
+
+        date_range = [datetime(2017,7,4), datetime(2017,7,4)]
+        batch_size = 2
+        tpidx = self.data_config.input_fields.index('tp')
         
+        no_norm_data_config = copy.deepcopy(self.data_config)
+        no_norm_data_config.normalise_inputs = False
+        data_gen_no_norm = DataGenerator(date_range, batch_size=batch_size,
+                            data_config=no_norm_data_config,
+                        shuffle=False, hour=17,
+                        downsample=False, seed=None,
+                        repeat_data=True)
+        
+        data_no_norm = [data_gen_no_norm[n] for n in range(len(date_range))]
+
+        log_norm_data_config = copy.deepcopy(self.data_config)
+        log_norm_data_config.normalise_inputs = True
+        log_norm_data_config.normalisation_strategy['tp']['normalisation'] = 'log'
+        data_gen_log_norm = DataGenerator(date_range, batch_size=batch_size,
+                            data_config=log_norm_data_config,
+                        shuffle=False, hour=17,
+                        downsample=False, seed=None,
+                        repeat_data=True)
+        
+        data_log_norm = [data_gen_log_norm[n] for n in range(len(date_range))]
+        np.testing.assert_allclose(data.denormalise(data_log_norm[0][0]['lo_res_inputs'][...,tpidx], 'log'), data_no_norm[0][0]['lo_res_inputs'][...,tpidx], atol=1e-6)
+
+        
+        sqrt_norm_data_config = copy.deepcopy(self.data_config)
+        sqrt_norm_data_config.normalise_inputs = True
+        sqrt_norm_data_config.normalisation_strategy['tp']['normalisation'] = 'sqrt'
+        data_gen_sqrt_norm = DataGenerator(date_range, batch_size=batch_size,
+                            data_config=sqrt_norm_data_config,
+                        shuffle=False, hour=17,
+                        downsample=False, seed=None,
+                        repeat_data=True)
+        data_sqrt_norm = [data_gen_sqrt_norm[n] for n in range(len(date_range))]
+
+        np.testing.assert_allclose(data.denormalise(data_sqrt_norm[0][0]['lo_res_inputs'][...,tpidx], 'sqrt'), data_no_norm[0][0]['lo_res_inputs'][...,tpidx], atol=1e-6)
+      
     def test_repeat_data(self):
         # Test that generator keeps producing if repeat_data is True
         date_range = [datetime(2017,7,4), datetime(2017,7,5)]

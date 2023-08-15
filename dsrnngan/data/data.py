@@ -408,7 +408,7 @@ def load_hdf5_file(fp: str, group_name:str ='Grid'):
 
 def preprocess(variable: str, 
                ds: xr.Dataset, 
-               var_name_lookup: dict, 
+               normalisation_strategy: dict, 
                stats_dict: dict=None):
     """
     Preprocess data
@@ -416,7 +416,7 @@ def preprocess(variable: str,
     Args:
         variable (str): name of variable.
         ds (xr.Dataset): dataset containing data for named variable
-        var_name_lookup (dict): dict containing normalisation strategy for each variable
+        normalisation_strategy (dict): dict containing normalisation strategy for each variable
         stats_dict (dict, optional): dict of values required for normalisation. Defaults to None.
 
     Returns:
@@ -426,7 +426,7 @@ def preprocess(variable: str,
     
     var_name = list(ds.data_vars)[0]
 
-    normalisation_type = var_name_lookup[variable].get('normalisation')
+    normalisation_type = normalisation_strategy[variable].get('normalisation')
 
     if normalisation_type:
 
@@ -596,6 +596,7 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           obs_data_source: str, 
                           fcst_dir: str,
                           obs_data_dir: str,
+                          normalisation_strategy: dict,
                           latitude_range: Iterable[float]=None,
                           longitude_range: Iterable[float]=None,
                           constants_dir: str=CONSTANTS_PATH,
@@ -621,7 +622,8 @@ def load_fcst_radar_batch(batch_dates: Iterable,
         h = hours[i]
         batch_x.append(load_fcst_stack(fcst_data_source, fcst_fields, date, h,
                                        latitude_vals=latitude_range, longitude_vals=longitude_range, fcst_dir=fcst_dir,
-                                       norm=normalise_inputs, constants_dir=constants_dir))
+                                       norm=normalise_inputs, constants_dir=constants_dir,
+                                       normalisation_strategy=normalisation_strategy))
         
         if obs_data_source is not None:
             batch_y.append(load_observational_data(obs_data_source, date, h, normalisation_type=output_normalisation,
@@ -780,10 +782,10 @@ def load_ifs_raw(field: str,
     return ds
 
 def load_ifs(field: str, 
-             date, hour: int, 
+             date, hour: int,
+             normalisation_strategy: dict,
              norm: bool=False, 
-             fcst_dir: str=IFS_PATH, 
-             var_name_lookup: dict=VAR_LOOKUP_IFS,
+             fcst_dir: str=IFS_PATH,
              latitude_vals: list=None, 
              longitude_vals: list=None, 
              constants_path: str=CONSTANTS_PATH):
@@ -796,7 +798,7 @@ def load_ifs(field: str,
         hour (int): hour to forecast
         norm (bool, optional): whether or not to normalise the data. Defaults to False.
         fcst_dir (str, optional): forecast data directory. Defaults to IFS_PATH.
-        var_name_lookup (str, optional): dict with normalisation details for variables. Defaults to VAR_LOOKUP_IFS.
+        normalisation_strategy (str, optional): dict with normalisation details for variables. Defaults to VAR_LOOKUP_IFS.
         latitude_vals (list, optional): latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): longitude_vals to filter/interpolate to. Defaults to None.
         constants_path (str, optional): path to constant data. Defaults to CONSTANTS_PATH.
@@ -813,7 +815,7 @@ def load_ifs(field: str,
     
     var_name = list(ds.data_vars)[0]
     
-    if not var_name_lookup[field].get('negative_vals', True):
+    if not normalisation_strategy[field].get('negative_vals', True):
         # Make sure no negative values
         ds[var_name] = ds[var_name].clip(min=0)
         
@@ -830,7 +832,7 @@ def load_ifs(field: str,
                             use_cached=True, ifs_data_dir=fcst_dir,
                             output_dir=constants_path)
         # Normalisation here      
-        ds = preprocess(field, ds, stats_dict=stats_dict, var_name_lookup=var_name_lookup)
+        ds = preprocess(field, ds, stats_dict=stats_dict, normalisation_strategy=normalisation_strategy)
     
     y = np.array(ds[var_name][:, :])
     
@@ -840,6 +842,7 @@ def load_ifs(field: str,
 def load_fcst_stack(data_source: str, fields: list, 
                     date: str, hour: int, 
                     fcst_dir: str, 
+                    normalisation_strategy: dict,
                     constants_dir:str=CONSTANTS_PATH,
                     norm:bool=False,
                     latitude_vals:list=None, longitude_vals:list=None):
@@ -852,6 +855,7 @@ def load_fcst_stack(data_source: str, fields: list,
         date (str): YYYYMMDD date string to forecast for
         hour (int): hour to forecast for
         fcst_dir (str): folder with forecast data in
+        normalisation_strategy (dict): normalisation strategy
         constants_dir (str, optional): folder with constants data in. Defaults to CONSTANTS_PATH.
         norm (bool, optional): whether or not to normalise the data. Defaults to False.
         latitude_vals (list, optional): list of latitude values. Defaults to None.
@@ -872,7 +876,8 @@ def load_fcst_stack(data_source: str, fields: list,
     for f in fields:
         field_arrays.append(load_function(f, date, hour, fcst_dir=fcst_dir,
                                           latitude_vals=latitude_vals, longitude_vals=longitude_vals,
-                                          constants_path=constants_dir, norm=norm))
+                                          constants_path=constants_dir, norm=norm,
+                                          normalisation_strategy=normalisation_strategy))
     return np.stack(field_arrays, -1)
 
 
