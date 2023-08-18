@@ -3,16 +3,19 @@ import os
 import copy
 import pickle
 import numpy as np
+from pathlib import Path
 from tqdm import tqdm
+from argparse import ArgumentParser
 from typing import Iterable, Generator
 
-from dsrnngan.data import tfrecords_generator
-from dsrnngan.data import setupdata
+from dsrnngan.data import tfrecords_generator, setupdata
 from dsrnngan.data.tfrecords_generator import DataGenerator
 from dsrnngan.data.data import DATA_PATHS, denormalise
 from dsrnngan.utils.utils import date_range_from_year_month_range, load_yaml_file
 from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.utils import read_config
+
+HOME = Path(os.getcwd()).parents[1]
 
 
 def setup_batch_gen(records_folder: str,
@@ -184,10 +187,7 @@ def load_data_from_config(config: dict, records_folder: str=None,
         _type_: _description_
     """
     
-    model_config, _, _, data_config, _, _, train_config, val_config = read_config.get_config_objects(config)
-    
-    latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude + data_config.latitude_step_size, data_config.latitude_step_size)
-    longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude + data_config.latitude_step_size, data_config.longitude_step_size)
+    model_config, _, _, data_config, _, _, train_config, _ = read_config.get_config_objects(config)
     
     data_gen_train, data_gen_valid = setupdata.setup_data(
         records_folder=records_folder,
@@ -253,13 +253,17 @@ def generate_prediction(data_iterator, generator,
 if __name__=='__main__':
     
     from dsrnngan.data.data import DATA_PATHS, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE, input_fields
-
     from dsrnngan.data.data import get_obs_dates
+    
+    parser = ArgumentParser(description='Gather training data for quantile mapping.')
+    parser.add_argument('--nsamples', type=int, help='Number of samples to gather', default='all')
+    parser.add_argument('--output-dir', type=str, help='output directory')
+    args = parser.parse_args()
+
     
     fcst_data_source = 'ifs'
     obs_data_source='imerg'
-    full_ym_range = ['201603', '201803']
-    n_samples = 'all'
+    full_ym_range = ['201603', '202009']
     
     date_range = date_range_from_year_month_range(full_ym_range)
     all_dates = get_obs_dates(date_range[0], date_range[-1], 
@@ -269,11 +273,11 @@ if __name__=='__main__':
     for ym in all_year_months:
         ym_range = [ym]
 
-        if n_samples == 'all':
+        if args.n_samples == 'all':
             ym_date_range = date_range_from_year_month_range(ym_range)
             ym_dates = get_obs_dates(ym_date_range[0], ym_date_range[-1], 
                                 obs_data_source=obs_data_source, data_paths=DATA_PATHS)
-            n_samples = 24*len(ym_dates)
+            args.n_samples = 24*len(ym_dates)
     
         data_gen = setup_full_image_dataset(ym_range,
                                 fcst_data_source=fcst_data_source,
@@ -285,7 +289,7 @@ if __name__=='__main__':
                                 batch_size=1,
                                 downsample=False,
                                 hour='random',
-                                shuffle=False
+                                shuffle=True
                                 )
         
         tpidx = input_fields.index('tp')
@@ -294,7 +298,7 @@ if __name__=='__main__':
         
         data_idx = 0
             
-        for kk in tqdm(range(n_samples)):
+        for kk in tqdm(range(args.n_samples)):
             
             try:
                 inputs, outputs = data_gen[data_idx]
@@ -342,5 +346,5 @@ if __name__=='__main__':
         arrays = {'obs': obs_array, 'fcst_array': fcst_array, 
                 'dates': dates, 'hours': hours}
         
-        with open(f"training_data_{'_'.join(ym_range)}_{n_samples}.pkl", 'wb+') as ofh:
+        with open(os.path.join(args.output_dir, f"training_data_{'_'.join(ym_range)}_{args.n_samples}.pkl"), 'wb+') as ofh:
             pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)

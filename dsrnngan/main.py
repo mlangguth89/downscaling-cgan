@@ -224,6 +224,8 @@ def main(restart: bool,
                 log_file = "{}/log.txt".format(log_folder)
                 log = pd.read_csv(log_file)
                 log_list = [log]
+                
+                print(f'Loading model from previously trained checkpoint: {checkpoint}')
             except FileNotFoundError:
                 # Catch case where folder exists but no model saved yet
                 training_samples = 0

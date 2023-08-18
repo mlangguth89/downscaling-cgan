@@ -282,9 +282,7 @@ def eval_one_chkpt(*,
                 
             # except FileNotFoundError:
             except Exception as e:
-                print(dates[-1])
-                print(hours[-1])
-                raise(e)
+
                 print('Could not load file, attempting retries')
                 success = False
                 data_idx += 1
