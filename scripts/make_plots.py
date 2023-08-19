@@ -25,11 +25,11 @@ sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
-from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, plot_csi
+from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, plot_csi, border_feature, disputed_border_feature
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
-from dsrnngan.evaluation.scoring import fss, get_spread_error_data
+from dsrnngan.evaluation.scoring import fss, get_spread_error_data, get_metric_by_hour
 from dsrnngan.evaluation.evaluation import get_diurnal_cycle
 from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map, quantile_map_grid
 
@@ -42,10 +42,10 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': False,
+metric_dict = {'examples': True,
                'scatter': False,
                'rank_hist': False,
-               'spread_error': False,
+               'spread_error': True,
                'rapsd': True,
                'quantiles': True,
                'hist': True,
@@ -72,33 +72,39 @@ format_lookup = {'GAN': {'color': 'b'},
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
 parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME))
-parser.add_argument('--model-type', type=str, help='Choice of model type', default=str(HOME))
+parser.add_argument('--nickname', type=str, help='Nickname of model', required=True)
+parser.add_argument('--log-folder', type=str, help='model log folder', default=None)
+parser.add_argument('--model-number', type=int, help='model number', default=None)
 parser.add_argument('--debug', action='store_true', help='Debug mode')
 args = parser.parse_args()
 
-model_type = args.model_type
+nickname = args.nickname
 
-log_folders = {'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
-               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10',
-               'nologs': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1',
-               'small_cl1000': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000/n1000_201806-201905_e1',
-               'modified_lr': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000-modifiedlr/n1000_201806-201905_e1',
-               'small_cl2000': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl2000/n1000_201806-201905_e1',
-               }
+log_folders = {'cropped': {'log_folder': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10', 'model_number': 262400},
+               'nologs': {'log_folder': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1', 'model_number': 268800},
+               'final-cl2000': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20', 'model_number': 262400},
+               'final-cl2000-2': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n3000_201806-201905_100a7_e10', 'model_number': 243200},
+               'final-nologs': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2900_201806-201903_42e34_e20', 'model_number': 217600},
+               'sqrt-small': {'log_folder': '/user/work/uz22147/logs/cgan/6baa8b10ec61eaed_small-cl500-sqrt-norm/n2900_201806-201903_42e34_e20', 'model_number': 51200},
+}
 
 # If in debug mode, then don't overwrite existing plots
 if args.debug:
     temp_stats_dir = tempfile.TemporaryDirectory()
     args.output_dir = temp_stats_dir.name
 
-# model_number = get_best_model_number(log_folder=log_folders[model_type])
-model_number = 64000
+if args.log_folder is None:
+    if nickname not in log_folders:
+        raise ValueError('Model type not found')
 
-if model_type not in log_folders:
-    raise ValueError('Model type not found')
+    model_number = log_folders[nickname]['model_number']
+    log_folder = log_folders[nickname]['log_folder']
+else:
+    if args.model_number is None:
+        raise ValueError('Must provide model number')
+    model_number = args.model_number
+    log_folder = args.log_folder
 
-
-log_folder = log_folders[model_type]
 with open(os.path.join(log_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
 
@@ -242,7 +248,7 @@ if metric_dict['examples']:
     units = "Rain rate [mm h$^{-1}$]"
     precip_levels=np.arange(0, 1.5, 0.15)
 
-    indexes = wet_day_indexes[:10] 
+    indexes = wet_day_indexes[:4] + dry_day_indexes[:4]
 
     num_cols = 6
     num_samples = len(indexes)
@@ -289,7 +295,8 @@ if metric_dict['examples']:
                     min(DEFAULT_LATITUDE_RANGE), max(DEFAULT_LATITUDE_RANGE)],
                     transform=ccrs.PlateCarree(),
                     alpha=0.8)
-            ax.add_feature(cfeature.BORDERS)
+            ax.add_feature(border_feature)
+            ax.add_feature(disputed_border_feature)
             ax.set_title(val['title'])
             
     cbar_ax = fig.add_subplot(gs[-1, :])
@@ -298,7 +305,7 @@ if metric_dict['examples']:
     cb.ax.set_xlabel("Precipitation (mm / hr)", loc='center')
 
 
-    plt.savefig(f'plots/cGAN_samples_IFS_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/cGAN_samples_IFS_{nickname}_{model_number}.pdf', format='pdf')
 
 ##################################################################################
 ## Binned scatter plot
@@ -312,7 +319,7 @@ if metric_dict['scatter']:
     bin_centres = [0.5*(bin_edges[n] + bin_edges[n+1]) for n in range(len(bin_edges) - 1)]
 
     mean_data = {}
-    data_dict = {'IFS': fcst_corrected,
+    scat_data_dict = {'IFS': fcst_corrected,
                 'cgan': cgan_corrected[:,:,:,0]}
 
     for name, d in data_dict.items():
@@ -331,7 +338,7 @@ if metric_dict['scatter']:
     ax.set_xlabel('Observations (mm/hr)')
     ax.set_ylabel('Model (mm/hr)')
     ax.legend()
-    plt.savefig(f'plots/scatter_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/scatter_{nickname}_{model_number}.pdf', format='pdf')
 
 
 ##################################################################################
@@ -364,7 +371,7 @@ if metric_dict['rank_hist']:
 
     ax.set_ylim([0, max(h)+0.01])
     ax.set_title('Rank histogram ')
-    plt.savefig(f'plots/rank_hist__{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/rank_hist__{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Spread error
@@ -374,14 +381,14 @@ if metric_dict['spread_error']:
     plt.rcParams.update({'font.size': 20})
     
     upper_percentile = 99
-    quantile_step_size = (100-upper_percentile) / 100
+    num_bins=100
     
-    data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
+    se_data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
                  'cgan_qmap': {'data': cgan_corrected, 'label': 'GAN + qmap'}}
     fig, ax = plt.subplots(1,1)
-    for k, v in data_dict.items():
+    for k, v in se_data_dict.items():
         variance_mse_pairs = get_spread_error_data(n_samples=n_samples, observation_array=truth_array, ensemble_array=v['data'], 
-                                                   quantile_step_size=quantile_step_size)
+                                                   n_bins=num_bins)
 
 
         # Currently leaving out the top one
@@ -393,7 +400,7 @@ if metric_dict['spread_error']:
     ax.set_ylabel('RMSE (mm/hr)')
     ax.set_xlabel('Ensemble spread (mm/hr)')
     ax.legend()
-    plt.savefig(f'plots/spread_error_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/spread_error_{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## RAPSD
@@ -405,14 +412,15 @@ if metric_dict['rapsd']:
     for k, v in data_dict.items():
             rapsd_results[k] = []
             for n in tqdm(range(n_samples)):
-            
-                    fft_freq_pred = rapsd(v[n,:,:], fft_method=np.fft)
-                    rapsd_results[k].append(fft_freq_pred)
+                
+                fft_freq_pred = rapsd(v[n,:,:], fft_method=np.fft)
+                rapsd_results[k].append(fft_freq_pred)
+        
 
             rapsd_results[k] = np.mean(np.stack(rapsd_results[k], axis=-1), axis=-1)
     
     # Save results
-    with open(f'plots/rapsd_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/rapsd_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(rapsd_results, ofh)
 
     # plot
@@ -427,7 +435,7 @@ if metric_dict['rapsd']:
     ax.set_xlabel('Wavenumber')
     ax.legend()
     
-    plt.savefig(f'plots/rapsd_{model_type}_{model_number}.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig(f'plots/rapsd_{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Q-Q plot
@@ -450,7 +458,7 @@ if metric_dict['quantiles']:
           
     fig, ax = plt.subplots(1,1)
     plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
-                   save_path=f'plots/quantiles_total_{model_type}_{model_number}.pdf')
+                   save_path=f'plots/quantiles_total_{nickname}_{model_number}.pdf')
 
     # Quantiles for different areas
 
@@ -466,17 +474,17 @@ if metric_dict['quantiles']:
         lon_range = area_range['lon_index_range']
         
         quantile_data_dict = {
-                    'GAN': {'data': samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0], 'color': 'b', 'marker': '+', 'alpha': 1},
-                    'Obs (IMERG)': {'data': truth_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], 'color': 'k'},
-                    'Fcst': {'data': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], 'color': 'r', 'marker': '+', 'alpha': 1},
-                    'Fcst + qmap': {'data': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]], 'color': 'r', 'marker': 'o', 'alpha': 0.7},
-                    'GAN + qmap': {'data': cgan_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0], 'color': 'b', 'marker': 'o', 'alpha': 0.7}}
+                    'GAN': samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0],
+                    'Obs (IMERG)': truth_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+                    'Fcst': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+                    'Fcst + qmap': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+                    'GAN + qmap': cgan_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0]}
                
-        _, ax[n] = plot_quantiles(quantile_data_dict=quantile_data_dict, ax=ax[n], min_data_points_per_quantile=1)
+        _, ax[n] = plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax[n], min_data_points_per_quantile=1)
 
         
     fig.tight_layout(pad=2.0)
-    plt.savefig(f'plots/quantiles_area_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/quantiles_area_{nickname}_{model_number}.pdf', format='pdf')
 
 
 
@@ -518,7 +526,7 @@ if metric_dict['hist']:
         ax.set_xlabel('Average hourly rainfall in bin (mm/hr)')
         ax.vlines(q_99pt99, 0, 10**8, linestyles='--')
         ax.text(q_99pt99 + 7 , 10**7, '$99.99^{th}$')
-    plt.savefig(f'plots/histograms_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/histograms_{nickname}_{model_number}.pdf', format='pdf')
 
     #################################################################################
     ## Bias and RMSE
@@ -544,17 +552,17 @@ if metric_dict['hist']:
     value_range_2 = list(np.arange(0, 5, 5 / 50))
 
     for n, (k, v) in enumerate(rmse_dict.items()):
-        
-        im = plot_contourf(ax[n,0], v, title=k, value_range=value_range, lat_range=latitude_range, lon_range=longitude_range)
+
+        im = plot_contourf(ax=ax[n,0], data=v, title=k, value_range=value_range, lat_range=latitude_range, lon_range=longitude_range)
         plt.colorbar(im, ax=ax[n,0])
         ax[n,0].set_title(k)
-        im2 = plot_contourf(ax[n,1], v / hourly_historical_std, title=k + ' / truth_std', value_range=value_range_2 , lat_range=latitude_range, lon_range=longitude_range)
+        im2 = plot_contourf(ax=ax[n,1], data=v / hourly_historical_std, title=k + ' / truth_std', value_range=value_range_2 , lat_range=latitude_range, lon_range=longitude_range)
         plt.colorbar(im2, ax=ax[n,1])
 
-    im = plot_contourf(ax[n+1,0], hourly_historical_std, title='truth_std', lat_range=latitude_range, lon_range=longitude_range)
+    im = plot_contourf(ax=ax[n+1,0], data=hourly_historical_std, title='truth_std', lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+1,0])
 
-    plt.savefig(f'plots/rmse_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/rmse_{nickname}_{model_number}.pdf', format='pdf')
     
     # Bias
 
@@ -572,30 +580,30 @@ if metric_dict['hist']:
         # value_range = list(np.arange(-0.5, 0.5, 0.01))
         value_range = None
 
-        im = plot_contourf(ax[n,0], v, title=k, cmap='RdBu', value_range=list(np.arange(-1.5, 1.5, 3 / 50)), lat_range=latitude_range, lon_range=longitude_range)
+        im = plot_contourf(ax=ax[n,0], data=v, title=k, cmap='RdBu', value_range=list(np.arange(-1.5, 1.5, 3 / 50)), lat_range=latitude_range, lon_range=longitude_range)
         plt.colorbar(im, ax=ax[n,0])
         
-        im = plot_contourf(ax[n,1], 100* v / hourly_historical_avg, title=f'100 * {k} / truth_avg', value_range=list(np.arange(-200, 200, 400 / 50)),
+        im = plot_contourf(ax=ax[n,1], data=100* v / hourly_historical_avg, title=f'100 * {k} / truth_avg', value_range=list(np.arange(-200, 200, 400 / 50)),
                         cmap='RdBu', lat_range=latitude_range, lon_range=longitude_range)
         plt.colorbar(im, ax=ax[n,1])
         
-    im = plot_contourf(ax[n+1,0], hourly_historical_avg, title='truth_avg', cmap='Reds',
+    im = plot_contourf(ax=ax[n+1,0], data=hourly_historical_avg, title='truth_avg', cmap='Reds',
                     value_range=list(np.arange(0, 0.6, 0.01)), lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+1,0])
 
-    im = plot_contourf(ax[n+1,1], np.mean(np.mean(samples_gen_array, axis=-1), axis=0), title='samples_avg', cmap='Reds',
+    im = plot_contourf(ax=ax[n+1,1], data=np.mean(np.mean(samples_gen_array, axis=-1), axis=0), title='samples_avg', cmap='Reds',
                     value_range=list(np.arange(0, 0.6, 0.01)), lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+1,1])
 
-    im = plot_contourf(ax[n+2,0], np.mean(fcst_array, axis=0), title='fcst_avg', cmap='Reds',
+    im = plot_contourf(ax=ax[n+2,0], data=np.mean(fcst_array, axis=0), title='fcst_avg', cmap='Reds',
                     value_range=list(np.arange(0, 0.6, 0.01)), lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+2,0])
 
-    im = plot_contourf(ax[n+2,1], np.mean(fcst_array, axis=0), title='', cmap='Reds',
+    im = plot_contourf(ax=ax[n+2,1], data=np.mean(fcst_array, axis=0), title='', cmap='Reds',
                     value_range=list(np.arange(0, 0.6, 0.01)), lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+2,1])
 
-    plt.savefig(f'plots/bias_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/bias_{nickname}_{model_number}.pdf', format='pdf')
     
     # RMSE by hour
     from dsrnngan.evaluation.scoring import mse, get_metric_by_hour
@@ -612,7 +620,7 @@ if metric_dict['hist']:
             ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
             ax.set_xticklabels(hour_bin_edges)
     ax.legend()
-    plt.savefig(f'plots/rmse_hours_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/rmse_hours_{nickname}_{model_number}.pdf', format='pdf')
 
 #################################################################################
 
@@ -640,7 +648,7 @@ if metric_dict['crps']:
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
     ax.add_feature(cfeature.BORDERS)
     plt.colorbar(im, ax=ax)
-    plt.savefig(f'plots/crps_{model_type}_{model_number}.pdf', format='pdf')
+    plt.savefig(f'plots/crps_{nickname}_{model_number}.pdf', format='pdf')
 
 
 #################################################################################
@@ -667,10 +675,10 @@ if metric_dict['fss']:
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
     # Save results
-    with open(f'plots/fss_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/fss_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(fss_results, ofh)
             
-    plot_fss_scores(fss_results=fss_results, output_folder='plots', output_suffix=f'{model_type}_{model_number}')
+    plot_fss_scores(fss_results=fss_results, output_folder='plots', output_suffix=f'{nickname}_{model_number}')
     
     
     # FSS for regions
@@ -692,9 +700,9 @@ if metric_dict['fss']:
                         'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
         fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
         
-        plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{model_type}_{model_number}')
+        plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{nickname}_{model_number}')
     
-    with open(f'plots/fss_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/fss_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(fss_area_results, ofh)
         
     # Save results
@@ -755,7 +763,7 @@ if metric_dict['diurnal']:
     ax.set_ylabel('Average mm/hr')
     ax.legend()
     
-    plt.savefig(f'plots/diurnal_cycle_{model_type}_{model_number}.pdf', bbox_inches='tight')
+    plt.savefig(f'plots/diurnal_cycle_{nickname}_{model_number}.pdf', bbox_inches='tight')
         
     
     # # Seasonal diurnal cycle
@@ -791,64 +799,94 @@ if metric_dict['diurnal']:
     #     pickle.dump(diurnal_data_dict, ofh)
         
     # Diurnal cycles for different areas
-    hourly_area_sums, hourly_area_counts = {}, {}
+    try:
+        hourly_area_sums, hourly_area_counts = {}, {}
 
-    for n, (area, area_range) in enumerate(special_areas.items()):
-        
-        hourly_area_sums[area] = {}
-        hourly_area_counts[area] = {}
-        
-        lat_range_ends = area_range['lat_range']
-        lon_range_ends = area_range['lon_range']
-        lat_range_index = area_range['lat_index_range']
-        lon_range_index = area_range['lon_index_range']
-        lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
-        lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
-        
-        for name, d in diurnal_data_dict.items():
-            hourly_area_sums[area][name], hourly_area_counts[area][name] = get_diurnal_cycle( d[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1], 
-                                                                                        dates, hours, 
-                                                                                        longitude_range=lon_range, 
-                                                                                        latitude_range=lat_range)
-
-    # Plot diurnal cycle for the different areas
-    fig, ax = plt.subplots(len(special_areas),1, figsize=(12,18))
-    fig.tight_layout(pad=3)
-    
-    # TODO: get errorbars on this
-    for n, (area, d) in enumerate(hourly_area_sums.items()):
-        for name, arr in d.items():
-            mean_hourly_data = [np.mean(arr[n] / hourly_area_counts[area][name][n]) for n in range(23)]
+        for n, (area, area_range) in enumerate(special_areas.items()):
             
-            ax[n].plot(mean_hourly_data, '-o', label=name)
+            hourly_area_sums[area] = {}
+            hourly_area_counts[area] = {}
+            
+            lat_range_ends = area_range['lat_range']
+            lon_range_ends = area_range['lon_range']
+            lat_range_index = area_range['lat_index_range']
+            lon_range_index = area_range['lon_index_range']
+            lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
+            lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
+            
+            for name, d in diurnal_data_dict.items():
+                hourly_area_sums[area][name], hourly_area_counts[area][name] = get_diurnal_cycle( d[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1], 
+                                                                                            dates, hours, 
+                                                                                            longitude_range=lon_range, 
+                                                                                            latitude_range=lat_range)
+
+        # Plot diurnal cycle for the different areas
+        fig, ax = plt.subplots(len(special_areas),1, figsize=(12,18))
+        fig.tight_layout(pad=3)
         
-        ax[n].legend()
-        ax[n].set_xlabel('Hour')
-        ax[n].set_ylabel('Average mm/hr')
-        ax[n].set_title(area)
-    plt.savefig(f'plots/diurnal_cycle_area_{model_type}_{model_number}.pdf')
-    
+        # TODO: get errorbars on this
+        for n, (area, d) in enumerate(hourly_area_sums.items()):
+            for name, arr in d.items():
+                mean_hourly_data = [np.mean(arr[n] / hourly_area_counts[area][name][n]) for n in range(23)]
+                
+                ax[n].plot(mean_hourly_data, '-o', label=name)
+            
+            ax[n].legend()
+            ax[n].set_xlabel('Hour')
+            ax[n].set_ylabel('Average mm/hr')
+            ax[n].set_title(area)
+        plt.savefig(f'plots/diurnal_cycle_area_{nickname}_{model_number}.pdf')
+    except:
+        print('Failed to perform diurnal area plots.')
+        
     # Diurnal maximum map
     import xarray as xr
     from datetime import datetime
     from dsrnngan.utils.utils import get_local_hour
+    from scipy.ndimage import uniform_filter
+    import xarray as xr
 
+    hour_bin_edges = np.arange(0, 24, 1)
+    filter_size = 41 # roughly the size of lake victoria region
+    digitized_hours = np.digitize(hours, bins=hour_bin_edges)
 
-    diurnal_data_dict = {'Obs (IMERG)': truth_array,
-                        'GAN': cgan_corrected[:,:,:,0],
-                        'Fcst': fcst_corrected
-                        }
-    max_hour_arrays = {}
-    for name, arr in diurnal_data_dict.items():
-        time_array = [datetime(d.year, d.month, d.day, hours[n]) for n,d in enumerate(dates)]
+    n_samples = truth_array.shape[0]
+    raw_diurnal_data_dict = {'Obs (IMERG)': truth_array,
+                        'cGAN': cgan_corrected[:n_samples,:,:,0],
+                        'IFS': fcst_corrected[:n_samples, :,:]}
 
-        da = xr.DataArray(
-            data=arr,
-            dims=["hour", "lat", "lon"],
+    smoothed_diurnal_data_dict = {}
+    for k, v in raw_diurnal_data_dict.items():
+        smoothed_diurnal_data_dict[k] = np.empty(v.shape)
+        for n in range(v.shape[0]):
+            smoothed_diurnal_data_dict[k][n,...] = uniform_filter(v[n,...].copy(), size=filter_size, mode='reflect')
+
+    peak_dict_smoothed = {}
+    peak_dict = {}
+
+    for name in raw_diurnal_data_dict:
+        smoothed_da = xr.DataArray(
+            data=smoothed_diurnal_data_dict[name],
+            dims=["hour_range", "lat", "lon"],
             coords=dict(
                 lon=(longitude_range),
                 lat=(latitude_range),
-                hour=hours,
+                hour_range=digitized_hours,
+            ),
+            attrs=dict(
+                description="Precipitation.",
+                units="mm/hr",
+            ),
+        )
+        
+        
+        da = xr.DataArray(
+            data=raw_diurnal_data_dict[name],
+            dims=["hour_range", "lat", "lon"],
+            coords=dict(
+                lon=(longitude_range),
+                lat=(latitude_range),
+                hour_range=digitized_hours,
             ),
             attrs=dict(
                 description="Precipitation.",
@@ -856,33 +894,47 @@ if metric_dict['diurnal']:
             ),
         )
 
-        
-        grouped_data = da.groupby('hour').sum().values
 
-        (_, width, height) = grouped_data.shape
+        peak_dict_smoothed[name] = np.argmax(smoothed_da.groupby('hour_range').mean().values, axis=0)
+        peak_dict[name] = np.argmax(da.groupby('hour_range').mean().values, axis=0)
 
-        hourly_sum = {(l, get_local_hour(h, longitude_range[l], np.mean(latitude_range))): grouped_data[h,:,l] for h in range(0,24) for l in range(len(longitude_range))}
+    from dsrnngan.evaluation.plots import get_geoaxes
 
-        
-        max_hour_arrays[name] = np.empty((len(latitude_range), len(longitude_range)))
-        for lt, lat in enumerate(latitude_range):
-            for ln, lon in enumerate(longitude_range):
+    n_cols = len(peak_dict)
+    n_rows = 1
+    fig = plt.figure(constrained_layout=True, figsize=(2.5*n_cols, 3*n_rows))
+    gs = gridspec.GridSpec(n_rows + 1, n_cols, figure=fig, 
+                        width_ratios=[1]*(n_cols ),
+                        height_ratios=[1]*(n_rows) + [0.05],
+                    wspace=0.005) 
 
-                hourly_dict = {hr: hourly_sum[(ln, hr)][lt] for hr in range(0,24)}
-                max_hour_arrays[name][lt,ln] = {v:k for k,v in hourly_dict.items()}[max(hourly_dict.values())]
-                
-    fig, ax = plt.subplots(2,1, 
-                        subplot_kw={'projection' : ccrs.PlateCarree()},
-                        figsize = (12,16))
-    n=0
-    for name, max_hour_array in max_hour_arrays.items():
+    ax = fig.add_subplot(gs[0, 0], projection = ccrs.PlateCarree())
+
+    plot_contourf(ax=ax, title='IMERG',data=peak_dict_smoothed['Obs (IMERG)'], lon_range=longitude_range, lat_range=latitude_range, cmap='twilight_shifted', 
+                value_range=np.arange(0, max(digitized_hours),3))
+
+    n=1
+    for name, peak_data in peak_dict_smoothed.items():
         if name != 'Obs (IMERG)':
+            ax = fig.add_subplot(gs[0, n], projection = ccrs.PlateCarree())
+
+            im1 = plot_contourf(ax=ax, title=name, 
+                                data=peak_data, 
+                                lon_range=longitude_range, 
+                                lat_range=latitude_range,
+                                cmap='twilight_shifted', value_range=np.arange(0, max(digitized_hours),3))
             
-            im = plot_contourf(ax[n], max_hour_array - max_hour_arrays['Obs (IMERG)'], name, lat_range=latitude_range, lon_range=longitude_range, value_range=np.linspace(-24, 24, 10))
             n+=1
-    plt.savefig(f'plots/diurnal_maximum_map_{model_type}_{model_number}.pdf')
 
+            
+    cbar_ax = fig.add_subplot(gs[-1, 1])
+    cb = fig.colorbar(im1, cax=cbar_ax, orientation='horizontal', shrink = 0.2, aspect=10, ticks=range(len(hour_bin_edges)),
+                    )
+    cb.ax.set_xticks(range(0,24,3))
+    cb.ax.set_xticklabels(range(0,24,3))
+    cb.ax.set_xlabel("Peak rainfall hour (EAT)", loc='center')
 
+    plt.savefig(f'plots/diurnal_cycle_map_{nickname}_{model_number}.pdf', format='pdf')
 #################################################################################
 
 if metric_dict.get('confusion_matrix'):
@@ -912,7 +964,7 @@ if metric_dict.get('confusion_matrix'):
             tmp_results_dict[k] = confusion_matrix(y_true, v)
         
         results['conf_mat'].append(tmp_results_dict)
-        with open(f'plots/confusion_matrices_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+        with open(f'plots/confusion_matrices_{nickname}_{model_number}.pkl', 'wb+') as ofh:
             pickle.dump(results, ofh)
             
 if metric_dict.get('csi'):
@@ -935,7 +987,7 @@ if metric_dict.get('csi'):
                      hourly_thresholds=hourly_thresholds
                     )
         
-    with open(f'plots/csi_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/csi_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(csi_results, ofh)
         
 
@@ -946,7 +998,7 @@ if metric_dict.get('csi'):
                     hourly_thresholds=hourly_thresholds
                     )
     
-    with open(f'plots/ets_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/ets_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(ets_results, ofh)
     
     csi_area_results = {}
@@ -981,10 +1033,10 @@ if metric_dict.get('csi'):
                     hourly_thresholds=hourly_thresholds
                     )
     
-    with open(f'plots/csi_area_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/csi_area_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(csi_area_results, ofh)
     
-    with open(f'plots/ets_area_{model_type}_{model_number}.pkl', 'wb+') as ofh:
+    with open(f'plots/ets_area_{nickname}_{model_number}.pkl', 'wb+') as ofh:
         pickle.dump(ets_area_results, ofh) 
     
     

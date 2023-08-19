@@ -27,8 +27,7 @@ parser.add_argument('--year', type=int, help='Years to process')
 parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME/ 'rainfall_data'))
 args = parser.parse_args()
 
-if not os.path.isdir(args.output_dir):
-    os.mkdir(args.output_dir)
+os.makedirs(args.output_dir, exist_ok=True)
 
 year = args.year
 total_imerg_rainfall_dict = {}

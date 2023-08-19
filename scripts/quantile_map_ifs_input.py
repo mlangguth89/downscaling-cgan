@@ -116,7 +116,7 @@ start_date = dates[0]
 ifs_folder = data_paths['GENERAL']['IFS']
 
 if args.output_folder is None:
-    args.output_folder = ifs_folder + '_qmap'
+    args.output_folder = ifs_folder
 
 os.makedirs(args.output_folder, exist_ok=True)
 
