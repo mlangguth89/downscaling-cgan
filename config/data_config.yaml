@@ -2,9 +2,7 @@ data_paths: "BLUE_PEBBLE"  # Choose which paths version to use in PATHS
 fcst_data_source: "ifs"
 obs_data_source: "imerg"
 normalisation_year: 2017
-input_image_width: 264 # Assumes a square image
 num_samples: 320000
-num_samples_per_image: 1
 normalise_inputs: True
 output_normalisation: "log"
 num_classes: 4 # Number of bins to split data into
