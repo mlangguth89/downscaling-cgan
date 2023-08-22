@@ -50,7 +50,7 @@ metric_dict = {'examples': True,
                'quantiles': True,
                'hist': True,
                'crps': False,
-               'fss': False,
+               'fss': True,
                'diurnal': True,
                'confusion_matrix': False,
                'csi': True
