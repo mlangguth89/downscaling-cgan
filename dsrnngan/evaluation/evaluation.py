@@ -489,16 +489,22 @@ def evaluate_multiple_checkpoints(
         ranks, lowress, hiress = rank_arrays
         OP = rank_OP(ranks)
         
+
+        if use_training_data:
+            ym_range = model_config.train.training_range
+        else:
+            ym_range = model_config.val.val_range
+            
         # save one directory up from model weights, in same dir as logfile
         # Assuming that it is very unlikely to have the same start and end of the range and have a collision on this hash
-        range_hash = hashlib.sha256(str(model_config.val.val_range).encode('utf-8')).hexdigest()[:5]
-        output_folder = os.path.join(log_folder, f"n{num_images}_{model_config.val.val_range[0][0]}-{model_config.val.val_range[-1][-1]}_{range_hash}_e{ensemble_size}")
+        range_hash = hashlib.sha256(str(ym_range).encode('utf-8')).hexdigest()[:5]
+        output_folder = os.path.join(log_folder, f"n{num_images}_{ym_range[0][0]}-{ym_range[-1][-1]}_{range_hash}_e{ensemble_size}")
         
         os.makedirs(output_folder, exist_ok=True)
 
         # Save exact validation range
         with open(os.path.join(output_folder, 'val_range.pkl'), 'wb+') as ofh:
-            pickle.dump(model_config.val.val_range, ofh)
+            pickle.dump(ym_range, ofh)
         
         # Create a dataframe of all the data (to ensure scores are recorded in the right column)
         df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))

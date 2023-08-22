@@ -43,7 +43,7 @@ class DataGenerator(Sequence):
                 self.hours = np.repeat(hour, len(self.dates))
                 self.dates = np.tile(self.dates, len(hour))
 
-            if self.constant_fieldsforecast_data_source == 'era5':
+            if self.forecast_data_source == 'era5':
                 raise ValueError('ERA5 data only supports daily')
 
         else:
