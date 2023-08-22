@@ -92,6 +92,14 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
             data_config_ns.output_normalisation = None
     else:
         data_config_ns.output_normalisation = data_config_dict.get('output_normalisation', "log")
+        
+    # Infer input image dimensions if not given
+    latitude_range, longitude_range = get_lat_lon_range_from_config(data_config=data_config_ns)
+    if data_config_dict.get('input_image_height') is None:
+        data_config_ns.input_image_height = len(latitude_range)
+    
+    if data_config_dict.get('input_image_width') is None:
+        data_config_ns.input_image_width = len(longitude_range)
 
     return data_config_ns
 

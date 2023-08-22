@@ -1,18 +1,17 @@
 import gc
 import os
-import copy
 import pickle
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from argparse import ArgumentParser
 from typing import Iterable, Generator
+from types import SimpleNamespace
 
 from dsrnngan.data import tfrecords_generator, setupdata
 from dsrnngan.data.tfrecords_generator import DataGenerator
-from dsrnngan.data.data import DATA_PATHS, denormalise
+from dsrnngan.data.data import DATA_PATHS
 from dsrnngan.utils.utils import date_range_from_year_month_range, load_yaml_file
-from dsrnngan.model.noise import NoiseGenerator
 from dsrnngan.utils import read_config
 
 HOME = Path(os.getcwd()).parents[1]
@@ -88,52 +87,44 @@ def setup_full_image_dataset(
                                   hour=hour)
     return data_full
 
-def setup_data(data_config,
-               model_config,
-               training_range: list[float]=None,
+def setup_data(data_config: SimpleNamespace,
+               model_config: SimpleNamespace,
+               fcst_shape: tuple[int]=None,
+               con_shape: tuple[int]=None,
+               out_shape: tuple[int]=None,
                records_folder: str=None,
                hour: str='random',
-               fcst_shape: tuple[int]=(20, 20, 9),
-               con_shape: tuple[int]=(200, 200, 1),
-               out_shape: tuple[int]=(200, 200, 1),
                weights: Iterable=None,
                load_full_image: bool=False,
                seed: int=None,
                shuffle: bool=True,
                full_image_batch_size: int=1) -> tuple[Generator]:
-    """
-        Setup data for training or validation; if load_ful
+    """Setup data for training or validation
 
     Args:
-        TODO: update
-        training_range (list[float], optional): Range of training dates, list of YYYYMM format (just the start and end required). Defaults to None.
-        validation_range (list[float], optional): Range of validation dates, list of YYYYMM format (just the start and end required). Defaults to None.
-        fcst_fields (list, optional): List of fcst fields, for creating full image dataset. Defaults to None for which case the default local config is used
+        data_config (SimpleNamespace): data config object
+        model_config (SimpleNamespace): model config object
+        fcst_shape (tuple[int], optional): Shape of forecast data. 
+        con_shape (tuple[int], optional): Shape of constant data. 
+        out_shape (tuple[int], optional): Shape of output. 
         records_folder (str, optional): Folder with tfrecords in it (required if load_full_image=False). Defaults to None.
         hour (str, optional): Hour to load. Defaults to 'random'.
-        downsample (bool, optional): _description_. Defaults to False.
-        fcst_shape (tuple[int], optional): _description_. Defaults to (20, 20, 9).
-        con_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
-        out_shape (tuple[int], optional): _description_. Defaults to (200, 200, 1).
-        constant_fields (list, optional): _description_. Defaults to None.
-        batch_size (int, optional): _description_. Defaults to None.
-        load_full_image (bool, optional): _description_. Defaults to False.
-        seed (int, optional): _description_. Defaults to None.
-        data_paths (dict, optional): _description_. Defaults to DATA_PATHS.
-        crop_size (int, optional): _description_. Defaults to None.
-        permute_var_index (int, optional): _description_. Defaults to None.
-        shuffle (bool, optional): _description_. Defaults to True.
+        weights (Iterable, optional): _description_. Defaults to None.
+        load_full_image (bool, optional): If True, will load full images (e.g. for validation). Defaults to False.
+        seed (int, optional): Seed to control shuffling in data generator. Defaults to None.
+        shuffle (bool, optional): If true then data generators will shuffle data. Defaults to True.
+        full_image_batch_size (int, optional): Batch size to use. Defaults to 1.
 
     Returns:
-        tuple[Generator]: Tuple containing training data generator and validation data generator
+        tuple[Generator]: training data generator and validation data generator
     """
 
     if load_full_image:
-        if training_range is None:
+        if model_config.train.training_range is None:
             batch_gen_train = None
         else:
             batch_gen_train = setup_full_image_dataset(data_config=data_config,
-                                          year_month_ranges=training_range,
+                                          year_month_ranges=model_config.train.training_range,
                                           batch_size=full_image_batch_size,
                                           downsample=model_config.downsample,
                                           hour=hour,
@@ -221,33 +212,6 @@ def load_data_from_folder(records_folder: str=None,
     data_gen_train, data_gen_valid = load_data_from_config(setup_params, batch_size, load_full_image, data_paths)
     return data_gen_train, data_gen_valid
 
-def generate_prediction(data_iterator, generator, 
-                        noise_channels, ensemble_size=1, 
-                        batch_size=1, denormalise_data=False):
-    
-    raise NotImplementedError()
-    inputs, outputs = next(data_iterator)
-    cond = inputs['lo_res_inputs']
-    const = inputs['hi_res_inputs']
-    dates = inputs['dates']
-    hours = inputs['hours']
-    
-    truth = outputs['output']
-    fcst = copy.copy(cond)
-    truth = np.expand_dims(np.array(truth), axis=-1)
-
-    if denormalise_data:
-        truth = denormalise(truth)
-        fcst = denormalise(fcst)
-    
-    img_gens = []
-    for _ in range(ensemble_size):
-        
-        noise_shape = np.array(cond)[0, ..., 0].shape + (noise_channels,)
-        noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
-        img_gens.append(generator.predict([cond, const, noise_gen()]))
-    
-    return img_gens, truth, fcst, dates, hours
 
 
 if __name__=='__main__':
@@ -256,41 +220,52 @@ if __name__=='__main__':
     from dsrnngan.data.data import get_obs_dates
     
     parser = ArgumentParser(description='Gather training data for quantile mapping.')
-    parser.add_argument('--nsamples', type=int, help='Number of samples to gather', default='all')
-    parser.add_argument('--output-dir', type=str, help='output directory')
+    parser.add_argument('--n_samples', type=int, 
+                        help='Number of samples to gather pe month. -1 for all samples', default=-1)
+    parser.add_argument('--output-dir', type=str, help='output directory',
+                        )
+    parser.add_argument('--model-folder', type=str, default=None,
+                       help="Folder in which previous model configs and training results have been stored.")
+    # parser.add_argument('-ym', '--ym-ranges', type=str, nargs='+', action='append', default=None,
+    #                     help='Year month ranges to extract data from')
     args = parser.parse_args()
 
+    model_config = read_config.read_model_config(config_folder=args.model_folder)
+    data_config = read_config.read_data_config(config_folder=args.model_folder)
     
-    fcst_data_source = 'ifs'
-    obs_data_source='imerg'
-    full_ym_range = ['201603', '202009']
-    
-    date_range = date_range_from_year_month_range(full_ym_range)
-    all_dates = get_obs_dates(date_range[0], date_range[-1], 
-                        obs_data_source=obs_data_source, data_paths=DATA_PATHS)
-    all_year_months = sorted(set([f"{d.year}{d.month:02d}" for d in all_dates]))
+    date_range = date_range_from_year_month_range(model_config.train.training_range)
+    # all_dates = get_obs_dates(date_range, 
+    #                     obs_data_source=obs_data_source, data_paths=DATA_PATHS)
+    all_year_months = sorted(set([f"{d.year}{d.month:02d}" for d in date_range]))
 
     for ym in all_year_months:
         ym_range = [ym]
 
-        if args.n_samples == 'all':
+        if args.n_samples == -1:
             ym_date_range = date_range_from_year_month_range(ym_range)
-            ym_dates = get_obs_dates(ym_date_range[0], ym_date_range[-1], 
-                                obs_data_source=obs_data_source, data_paths=DATA_PATHS)
-            args.n_samples = 24*len(ym_dates)
+            # ym_dates = get_obs_dates(ym_date_range[0], ym_date_range[-1], 
+            #                     obs_data_source=obs_data_source, data_paths=DATA_PATHS)
+            args.n_samples = 24*len(ym_date_range)
     
-        data_gen = setup_full_image_dataset(ym_range,
-                                fcst_data_source=fcst_data_source,
-                                obs_data_source=obs_data_source,
-                                constant_fields=True,
-                                data_paths=DATA_PATHS,
-                                latitude_range=DEFAULT_LATITUDE_RANGE,
-                                longitude_range=DEFAULT_LONGITUDE_RANGE,
-                                batch_size=1,
-                                downsample=False,
-                                hour='random',
-                                shuffle=True
-                                )
+        data_gen = setup_full_image_dataset(
+                             data_config=data_config,
+                             year_month_ranges=ym_range,
+                             batch_size=2,
+                             downsample=False,
+                             hour='random',
+                             shuffle=True
+                             )
+                                # fcst_data_source=fcst_data_source,
+                                # obs_data_source=obs_data_source,
+                                # constant_fields=True,
+                                # data_paths=DATA_PATHS,
+                                # latitude_range=DEFAULT_LATITUDE_RANGE,
+                                # longitude_range=DEFAULT_LONGITUDE_RANGE,
+                                # batch_size=1,
+                                # downsample=False,
+                                # hour='random',
+                                # shuffle=True
+                                # )
         
         tpidx = input_fields.index('tp')
         

@@ -35,12 +35,13 @@ metrics = {'correlation': calculate_pearsonr, 'mae': mae, 'mse': mse,
            }
 
 def setup_inputs(
-                 model_config,
-                 data_config,
-                 records_folder,
-                 hour,
-                 shuffle,
-                 batch_size):
+                 model_config: SimpleNamespace,
+                 data_config: SimpleNamespace,
+                 records_folder: str,
+                 hour: int,
+                 shuffle: bool,
+                 batch_size: int,
+                 use_training_data: bool=False):
 
     # initialise model
     model = setupmodel.setup_model(model_config=model_config,
@@ -51,7 +52,7 @@ def setup_inputs(
 
     # always uses full-sized images
     print('Loading full sized image dataset')
-    _, data_gen_valid = setupdata.setup_data(
+    data_gen_train, data_gen_valid = setupdata.setup_data(
         data_config,
         model_config,
         records_folder=records_folder,
@@ -60,7 +61,10 @@ def setup_inputs(
         hour=hour,
         full_image_batch_size=batch_size)
     
-    return gen, data_gen_valid
+    if use_training_data:
+        return gen, data_gen_train
+    else:
+        return gen, data_gen_valid
 
 
 def _init_VAEGAN(gen, data_gen, load_full_image, batch_size, latent_variables):
@@ -280,21 +284,16 @@ def eval_one_chkpt(*,
                 success = True
                 data_idx += 1
                 
-            # except FileNotFoundError:
             except Exception as e:
-
-                print('Could not load file, attempting retries')
-                success = False
-                data_idx += 1
-                continue
+                if n < 4:
+                    print(f'Could not load file, attempting retry {n+1} of 4')
+                    data_idx += 1
+                    continue
+                else:
+                    raise e
             except IndexError:
                 # Run out of samples
                 break 
-
-        if not success:
-            print(dates[-1])
-            print(hours[-1])
-            raise FileNotFoundError
         
         dates.append(date)
         hours.append(hour)
@@ -454,14 +453,16 @@ def evaluate_multiple_checkpoints(
                                   shuffle,
                                   save_generated_samples=False,
                                   batch_size: int=1,
+                                  use_training_data: bool=False
                                   ):
 
-    gen, data_gen_valid = setup_inputs(model_config=model_config,
+    gen, data_gen = setup_inputs(model_config=model_config,
                                        data_config=data_config,
                                        records_folder=records_folder,
                                        hour='random',
                                        shuffle=shuffle,
-                                       batch_size=batch_size)
+                                       batch_size=batch_size,
+                                       use_training_data=use_training_data)
     header = True
 
     for model_number in model_numbers:
@@ -473,12 +474,12 @@ def evaluate_multiple_checkpoints(
 
         print(gen_weights_file)
         if model_config.mode == "VAEGAN":
-            _init_VAEGAN(gen, data_gen_valid, True, 1, model_config.latent_variables)
+            _init_VAEGAN(gen, data_gen, True, 1, model_config.latent_variables)
         gen.load_weights(gen_weights_file)
         
         rank_arrays, agg_metrics, arrays = eval_one_chkpt(
                                              gen=gen,
-                                             data_gen=data_gen_valid,
+                                             data_gen=data_gen,
                                              data_config=data_config,
                                              model_config=model_config,
                                              num_images=num_images,

@@ -53,6 +53,8 @@ parser.add_argument('--num-images', type=int, default=20,
                     help="Number of images to evaluate on")
 parser.add_argument('--eval-ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
+parser.add_argument('--eval-on-train-set', action="store_true", 
+                    help="Use this flag to make the evaluation occur on the training dates")
 parser.add_argument('--noise-factor', type=float, default=1e-3,
                     help="Multiplicative noise factor for rank histogram")
 parser.add_argument('--val-ym-start', type=str,
@@ -130,26 +132,13 @@ def main(restart: bool,
         output_suffix = '_' + output_suffix if not output_suffix.startswith('_') else output_suffix
         
     log_folder = log_folder + output_suffix
-    print("Models being written to folder: ", log_folder, flush=True)
-    
-    if do_training:
-        # Initiialise weights and biases logging
-        wandb.init(
-            project='cgan-test' if args.debug else 'cgan-east-africa',
-            sync_tensorboard=True,
-            name=log_folder.split('/')[-1],
-            config={
-                'data': data_config_dict,
-                'model': model_config_dict,
-                'gpu_devices': tf_config.list_physical_devices('GPU')
-            }
-        )
+    print("Models being written to folder: ", log_folder, flush=True)      
 
     num_constant_fields = len(data_config.constant_fields)
 
-    input_image_shape = (data_config.input_image_width, data_config.input_image_width, data_config.input_channels)
+    input_image_shape = (data_config.input_image_height, data_config.input_image_width, data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (data_config.input_image_width, data_config.input_image_width, num_constant_fields)
+    constants_image_shape = (data_config.input_image_height, data_config.input_image_width, num_constant_fields)
     
     if training_weights is None:
         training_weights = model_config.train.training_weights
@@ -242,6 +231,18 @@ def main(restart: bool,
         plot_fname = os.path.join(log_folder, "progress.pdf")
 
         while (training_samples < model_config.train.num_samples):  # main training loop
+            # Initiialise weights and biases logging
+            wandb.init(
+                project='cgan-test' if args.debug else 'cgan-east-africa',
+                sync_tensorboard=True,
+                name=log_folder.split('/')[-1],
+                config={
+                    'data': data_config_dict,
+                    'model': model_config_dict,
+                    'gpu_devices': tf_config.list_physical_devices('GPU')
+                }
+            )
+        
 
             logger.debug("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
 
@@ -326,7 +327,8 @@ def main(restart: bool,
                                                  ensemble_size=eval_ensemble_size,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
-                                                 batch_size=1)
+                                                 batch_size=1,
+                                                 use_training_data=args.eval_on_train_set)
     
     return log_folder
 
