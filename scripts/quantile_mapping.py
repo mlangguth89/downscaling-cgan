@@ -24,16 +24,16 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 sys.path.insert(1, str(HOME / 'dsrnngan'))
 
-from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
-from dsrnngan.evaluation.benchmarks import QuantileMapper, quantile_map_grid
-from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
 from dsrnngan.data.data import denormalise
+from dsrnngan.evaluation.benchmarks import QuantileMapper, quantile_map_grid
+from dsrnngan.utils.utils import load_yaml_file
+from dsrnngan.utils import read_config
 from dsrnngan.evaluation.plots import plot_quantiles
 
 parser = ArgumentParser(description='Script for quantile mapping.')
-
+parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
+parser.add_argument('--model-number', type=str, help='model number', required=True)
 parser.add_argument('--num-lat-lon-chunks', type=int, help='Number of chunks to split up spatial data into along each axis', default=1)
-parser.add_argument('--model-type', type=str, help='Choice of model type')
 parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
 parser.add_argument('--min-points-per-quantile', type=int, default=1, help='Minimum number of data points per quantile in the plots')
@@ -49,16 +49,12 @@ if not args.plot and not args.save_data:
 ###########################
 
 print('Loading model data', flush=True)
-log_folders = {
-               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
 
 # Get best model
-log_folder = log_folders[args.model_type]
+log_folder = args.log_folder
+model_number =args.model_number
 
-model_number = get_best_model_number(log_folder=log_folder)
-
-log_folder = log_folders[args.model_type]
-with open(os.path.join(log_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, 'n4000_202010-202109_45682_e1', f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
 
 if args.debug:
@@ -67,10 +63,14 @@ else:
     n_samples = arrays['truth'].shape[0]
     
 truth_array = arrays['truth'][:n_samples, :, :]
-samples_gen_array = arrays['samples_gen'][:n_samples, :,:,:]
+samples_gen_array = arrays['samples_gen'][:n_samples, ...]
+
+if len(samples_gen_array.shape) == 3:
+    samples_gen_array = np.expand_dims(samples_gen_array, axis=-1)
+
 fcst_array = arrays['fcst_array'][:n_samples, :,: ]
 persisted_fcst_array = arrays['persisted_fcst'][:n_samples, :,: ]
-ensmean_array = np.mean(arrays['samples_gen'], axis=-1)[:n_samples, :,:]
+ensmean_array = np.mean(samples_gen_array, axis=-1)[:n_samples, :,:]
 dates = [d[0] for d in arrays['dates']][:n_samples]
 hours = [h[0] for h in arrays['hours']][:n_samples]
 
@@ -82,18 +82,11 @@ assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate dat
 ###########################
 
 # Get lat/lon range from log folder
-base_folder = '/'.join(log_folder.split('/')[:-1])
-config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
+data_config = read_config.read_data_config(config_folder=log_folder)
+model_config = read_config.read_model_config(config_folder=log_folder)
 
 # Locations
-min_latitude = config['DATA']['min_latitude']
-max_latitude = config['DATA']['max_latitude']
-latitude_step_size = config['DATA']['latitude_step_size']
-min_longitude = config['DATA']['min_longitude']
-max_longitude = config['DATA']['max_longitude']
-longitude_step_size = config['DATA']['longitude_step_size']
-latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_config=data_config)
 
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
@@ -114,91 +107,27 @@ for k, v in special_areas.items():
         special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
         
 quantile_data_dicts = {'test': {
-                    'GAN': {'data': samples_gen_array[:, :, :, 0], 'color': 'b', 'marker': '+', 'alpha': 1},
-                    'Fcst': {'data': fcst_array, 'color': 'r', 'marker': '+', 'alpha': 1},
-                    'Obs (IMERG)': {'data': truth_array, 'color': 'k'},
-                    'Fcst + qmap': {'data': None, 'color': 'r', 'marker': 'o', 'alpha': 0.7},
-                    'GAN + qmap': {'data': None, 'color': 'b', 'marker': 'o', 'alpha': 0.7}
+                    'GAN': samples_gen_array[:, :, :, 0],
+                    'Fcst': fcst_array,
+                    'Obs (IMERG)': truth_array,
+                    'Fcst + qmap': None,
+                    'GAN + qmap': None,
                     }}
 
 ###########################
-print('## Quantile mapping for IFS', flush=True)
-###########################
-# Use data prepared by the dsrnngan.data.setupdata script
-fps = glob('/user/work/uz22147/quantile_training_data/*_744.pkl')
-
-imerg_train_data = []
-ifs_train_data = []
-training_dates = []
-training_hours = []
-
-if args.debug:
-    fps = fps[:3]
-
-for fp in tqdm(fps, file=sys.stdout):
-    with open(fp, 'rb') as ifh:
-        training_data = pickle.load(ifh)
-        
-    imerg_train_data.append(denormalise(training_data['obs']))
-    ifs_train_data.append(denormalise(training_data['fcst_array']))
-
-    training_dates += [item[0] for item in training_data['dates']]
-    training_hours += [item[0] for item in training_data['hours']]
-
-# Need to account for difference in lat/lon ranges; setupdata incorporates the final lat value whereas 
-# the generated data doesn't
-imerg_train_data = np.concatenate(imerg_train_data, axis=0)[:,:-1,:-1]
-ifs_train_data = np.concatenate(ifs_train_data, axis=0)[:,:-1,:-1]
-
-if args.debug:
-    imerg_train_data = imerg_train_data[:100,:,:]
-    ifs_train_data = ifs_train_data[:100,:,:]
-    training_dates = training_dates[:100]
-    training_hours = training_hours[:100]
-
-
-month_ranges = [[n for n in range(1,13)]]
-
-
-qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
-                         num_lat_lon_chunks=args.num_lat_lon_chunks)
-
-# Get auto spaced quantiles, up to one data point per quantile
-ifs_quantile_locs = qmapper.update_quantile_locations(input_data=ifs_train_data, max_step_size=0.01)
-
-
-if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
-    # Do quantile mapping grid cell by grid cell
-    print('Quantile mapping Fcst at grid level')
-    quantile_data_dicts['test']['Fcst + qmap']['data'] = quantile_map_grid(array_to_correct=fcst_array, 
-                                                                                fcst_train_data=ifs_train_data, 
-                                                                                obs_train_data=imerg_train_data, 
-                                                                                quantiles=ifs_quantile_locs,
-                                                                                extrapolate='constant')
-    fcst_corrected_train = [] # Not yet implemented for this, as not currently required
-else:
-    
-    qmapper.train(fcst_data=ifs_train_data, obs_data=imerg_train_data, training_dates=training_dates, training_hours=training_hours)
-    quantile_data_dicts['test']['Fcst + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
-
-    fcst_corrected_train = qmapper.get_quantile_mapped_forecast(fcst=ifs_train_data, dates=training_dates, hours=training_hours)
-
-###########################
-print('## Quantile mapping for GAN', flush=True)
+# Load training data
 ###########################
 
-# NOTE:This requires data collection for the model 
-
-fps = ['/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n9000_201603-201702_e1', '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n9000_201703-201802_e1']
+fps = [os.path.join(log_folder, 'n9000_201603-202009_6f02b_e1')]
 
 imerg_training_data = []
 cgan_training_data = []
+ifs_training_data = []
 training_dates = []
 training_hours = []
 
-
 for fp in fps:
-    with open(os.path.join(fp, f'arrays-288000.pkl'), 'rb') as ifh:
+    with open(os.path.join(fp, f'arrays-{args.model_number}.pkl'), 'rb') as ifh:
         arrays = pickle.load(ifh)
     
     if args.debug:
@@ -208,11 +137,83 @@ for fp in fps:
         
     imerg_training_data.append(arrays['truth'][:n_samples,:,:])
     cgan_training_data.append(arrays['samples_gen'][:n_samples,:,:,0])
+    ifs_training_data.append(arrays['fcst_array'][:n_samples,:,:])
     training_dates += [d[0] for d in arrays['dates']][:n_samples]
     training_hours += [h[0] for h in arrays['hours']][:n_samples]
     
 imerg_training_data = np.concatenate(imerg_training_data, axis=0)
 cgan_training_data = np.concatenate(cgan_training_data, axis=0)
+ifs_training_data = np.concatenate(ifs_training_data, axis=0)
+
+
+# ###########################
+# print('## Quantile mapping for IFS', flush=True)
+# ###########################
+# # Use data prepared by the dsrnngan.data.setupdata script
+# fps = glob('/user/work/uz22147/quantile_training_data/*_744.pkl')
+
+# imerg_train_data = []
+# ifs_train_data = []
+# training_dates = []
+# training_hours = []
+
+# if args.debug:
+#     fps = fps[:3]
+
+# for fp in tqdm(fps, file=sys.stdout):
+#     with open(fp, 'rb') as ifh:
+#         training_data = pickle.load(ifh)
+    
+#     if data_config.output_normalisation is not None:
+#         training_data['obs'] = denormalise(training_data['obs'], normalisation_type=data_config.output_normalisation)
+#     imerg_train_data.append(training_data['obs'])
+    
+#     if data_config.normalise_inputs:
+#         training_data['fcst_array'] = denormalise(training_data['fcst_array'], normalisation_type=data_config.input_normalisation_strategy['tp']['normalisation'])
+#     ifs_train_data.append(training_data['fcst_array'])
+
+#     training_dates += [item[0] for item in training_data['dates']]
+#     training_hours += [item[0] for item in training_data['hours']]
+
+# # Need to account for difference in lat/lon ranges; setupdata incorporates the final lat value whereas 
+# # the generated data doesn't
+# imerg_train_data = np.concatenate(imerg_train_data, axis=0)[:,:-1,:-1]
+# ifs_train_data = np.concatenate(ifs_train_data, axis=0)[:,:-1,:-1]
+
+
+
+month_ranges = [[n for n in range(1,13)]]
+
+
+qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+                         num_lat_lon_chunks=args.num_lat_lon_chunks)
+
+# Get auto spaced quantiles, up to one data point per quantile
+ifs_quantile_locs = qmapper.update_quantile_locations(input_data=ifs_training_data, max_step_size=0.01)
+
+
+if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
+    # Do quantile mapping grid cell by grid cell
+    print('Quantile mapping Fcst at grid level')
+    quantile_data_dicts['test']['Fcst + qmap']= quantile_map_grid(array_to_correct=fcst_array, 
+                                                                                fcst_train_data=ifs_training_data, 
+                                                                                obs_train_data=imerg_training_data, 
+                                                                                quantiles=ifs_quantile_locs,
+                                                                                extrapolate='constant')
+    fcst_corrected_train = [] # Not yet implemented for this, as not currently required
+else:
+    
+    qmapper.train(fcst_data=ifs_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
+    quantile_data_dicts['test']['Fcst + qmap'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+
+    fcst_corrected_train = qmapper.get_quantile_mapped_forecast(fcst=ifs_training_data, dates=training_dates, hours=training_hours)
+
+###########################
+print('## Quantile mapping for GAN', flush=True)
+###########################
+
+# NOTE:This requires data collection for the model 
+
 
 qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
@@ -231,10 +232,10 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
                                                                             obs_train_data=imerg_training_data, 
                                                                             quantiles=cgan_quantile_locs,
                                                                             extrapolate='constant')
-        quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected[:,:,:,0]
+        quantile_data_dicts['test']['GAN + qmap'] = cgan_corrected[:,:,:,0]
     else:
         # Do quantile mapping grid cell by grid cell
-        quantile_data_dicts['test']['GAN + qmap']['data'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
+        quantile_data_dicts['test']['GAN + qmap'] = quantile_map_grid(array_to_correct=samples_gen_array[:,:,:,0], 
                                                                                 fcst_train_data=cgan_training_data, 
                                                                                 obs_train_data=imerg_training_data, 
                                                                                 quantiles=cgan_quantile_locs,
@@ -249,10 +250,10 @@ else:
         
         for en in range(ensemble_size):
             cgan_corrected[:,:,:,en] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
-            quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected[...,0]
+            quantile_data_dicts['test']['GAN + qmap'] = cgan_corrected[...,0]
     else:
-        cgan_corrected = quantile_data_dicts['test']['GAN + qmap']['data'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
-        quantile_data_dicts['test']['GAN + qmap']['data'] = cgan_corrected
+        cgan_corrected = quantile_data_dicts['test']['GAN + qmap'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
+        quantile_data_dicts['test']['GAN + qmap'] = cgan_corrected
 
         
 if args.save_data:
@@ -260,8 +261,8 @@ if args.save_data:
     print('### Saving data ', flush=True)
     ###########################
     with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
-        print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap']['data'].shape)
-        pickle.dump(quantile_data_dicts['test']['Fcst + qmap']['data'], ofh)
+        print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap'].shape)
+        pickle.dump(quantile_data_dicts['test']['Fcst + qmap'], ofh)
     
     if len(fcst_corrected_train) > 0:
         # Save trained quantile mapper for experiment
@@ -270,7 +271,6 @@ if args.save_data:
     
     with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
-
 
 if args.plot:
     ###########################
@@ -286,8 +286,8 @@ if args.plot:
                     'Fcst': {'color': 'r', 'marker': '+', 'alpha': 1},
                     'Fcst + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
                     'GAN + qmap': {'color': 'b', 'marker': 'o', 'alpha': 0.7}}
-        
-        plot_quantiles(quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile, format_lookup=quantile_format_dict,
+
+        plot_quantiles(quantile_data_dict=quantile_data_dict, min_data_points_per_quantile=args.min_points_per_quantile, format_lookup=quantile_format_dict,
                        save_path=os.path.join(args.output_folder, f'qq_plot_{data_type}_n{args.num_lat_lon_chunks}_total.pdf'))
 
         # Q-Q plot for areas
@@ -295,14 +295,13 @@ if args.plot:
         fig.tight_layout(pad=4)
         for n, (area, area_range) in enumerate(special_areas.items()):
 
-
             lat_range = area_range['lat_index_range']
             lon_range = area_range['lon_index_range']
             
             local_quantile_data_dict = {}
             for k, v in quantile_data_dict.items():
                 local_quantile_data_dict[k] = copy.deepcopy(v)
-                local_quantile_data_dict[k]['data'] = local_quantile_data_dict[k]['data'][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]]
+                local_quantile_data_dict[k] = local_quantile_data_dict[k][:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]]
             
             try:
                 plot_quantiles(local_quantile_data_dict, ax=ax[n], min_data_points_per_quantile=args.min_points_per_quantile,  format_lookup=quantile_format_dict,

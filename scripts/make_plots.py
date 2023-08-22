@@ -42,19 +42,6 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
     return data_clipped
 
 # This dict chooses which plots to create
-metric_dict = {'examples': True,
-               'scatter': False,
-               'rank_hist': False,
-               'spread_error': True,
-               'rapsd': True,
-               'quantiles': True,
-               'hist': True,
-               'crps': False,
-               'fss': True,
-               'diurnal': True,
-               'confusion_matrix': False,
-               'csi': True
-               }
 
 plot_persistence = False
 
@@ -76,9 +63,28 @@ parser.add_argument('--nickname', type=str, help='Nickname of model', required=T
 parser.add_argument('--log-folder', type=str, help='model log folder', default=None)
 parser.add_argument('--model-number', type=int, help='model number', default=None)
 parser.add_argument('--debug', action='store_true', help='Debug mode')
+metric_group = parser.add_argument_group('metrics')
+metric_group.add_argument('-ex', '--examples', action="store_true")
+metric_group.add_argument('-sc', '--scatter', action="store_true")
+metric_group.add_argument('-rh', '--rank-hist', action="store_true")
+metric_group.add_argument('-se', '--spread-error', action="store_true")
+metric_group.add_argument('-rapsd', action="store_true")
+metric_group.add_argument('-qq', '--quantiles', action="store_true")
+metric_group.add_argument('-hist', action="store_true")
+metric_group.add_argument('-crps', action="store_true")
+metric_group.add_argument('-fss', action="store_true")
+metric_group.add_argument('-d', '--diurnal', action="store_true")
+metric_group.add_argument('-conf', '--confusion-matrix', action="store_true")
+metric_group.add_argument('-csi', action="store_true")
+
+
 args = parser.parse_args()
 
 nickname = args.nickname
+
+all_metrics = ['examples', 'scatter','rank_hist','spread_error','rapsd','quantiles','hist','crps','fss','diurnal','confusion_matrix','csi']
+metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
+
 
 log_folders = {'cropped': {'log_folder': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10', 'model_number': 262400},
                'nologs': {'log_folder': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1', 'model_number': 268800},
@@ -376,7 +382,7 @@ if metric_dict['rank_hist']:
 #################################################################################
 ## Spread error
 
-if metric_dict['spread_error']:
+if metric_dict['spread_error'] and ensemble_size > 2:
     print('*********** Plotting spread error **********************')
     plt.rcParams.update({'font.size': 20})
     
