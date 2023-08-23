@@ -38,11 +38,12 @@ parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
 parser.add_argument('--min-points-per-quantile', type=int, default=1, help='Minimum number of data points per quantile in the plots')
 parser.add_argument('--save-data', action='store_true', help='save data')
+parser.add_argument('--save-qmapper', action='store_true', help='save quantile mapping objects')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
 
-if not args.plot and not args.save_data:
-    raise ValueError('Either --plot or --save-data must be specified')
+if not args.plot and not args.save_data and not args.save_qmapper:
+    raise ValueError('Either --plot, --save-data or --save-qmapper must be specified')
 
 ###########################
 # Load model data
@@ -54,7 +55,7 @@ print('Loading model data', flush=True)
 log_folder = args.log_folder
 model_number =args.model_number
 
-with open(os.path.join(log_folder, 'n4000_202010-202109_45682_e1', f'arrays-{model_number}.pkl'), 'rb') as ifh:
+with open(os.path.join(log_folder, 'n2900_201806-201903_42e34_e20', f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
 
 if args.debug:
@@ -67,7 +68,9 @@ samples_gen_array = arrays['samples_gen'][:n_samples, ...]
 
 if len(samples_gen_array.shape) == 3:
     samples_gen_array = np.expand_dims(samples_gen_array, axis=-1)
-
+elif len(samples_gen_array.shape) == 4:
+    samples_gen_array = samples_gen_array[...,:1]
+    
 fcst_array = arrays['fcst_array'][:n_samples, :,: ]
 persisted_fcst_array = arrays['persisted_fcst'][:n_samples, :,: ]
 ensmean_array = np.mean(samples_gen_array, axis=-1)[:n_samples, :,:]
@@ -117,6 +120,8 @@ quantile_data_dicts = {'test': {
 ###########################
 # Load training data
 ###########################
+
+# NOTE:This requires data collection for the model 
 
 fps = [os.path.join(log_folder, 'n9000_201603-202009_6f02b_e1')]
 
@@ -185,11 +190,11 @@ ifs_training_data = np.concatenate(ifs_training_data, axis=0)
 month_ranges = [[n for n in range(1,13)]]
 
 
-qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+fcst_qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 
 # Get auto spaced quantiles, up to one data point per quantile
-ifs_quantile_locs = qmapper.update_quantile_locations(input_data=ifs_training_data, max_step_size=0.01)
+ifs_quantile_locs = fcst_qmapper.update_quantile_locations(input_data=ifs_training_data, max_step_size=0.01)
 
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
@@ -203,23 +208,21 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
     fcst_corrected_train = [] # Not yet implemented for this, as not currently required
 else:
     
-    qmapper.train(fcst_data=ifs_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
-    quantile_data_dicts['test']['Fcst + qmap'] = qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+    fcst_qmapper.train(fcst_data=ifs_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
+    quantile_data_dicts['test']['Fcst + qmap'] = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
 
-    fcst_corrected_train = qmapper.get_quantile_mapped_forecast(fcst=ifs_training_data, dates=training_dates, hours=training_hours)
+    fcst_corrected_train = fcst_qmapper.get_quantile_mapped_forecast(fcst=ifs_training_data, dates=training_dates, hours=training_hours)
 
 ###########################
 print('## Quantile mapping for GAN', flush=True)
 ###########################
 
-# NOTE:This requires data collection for the model 
 
-
-qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
+cgan_qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude_range, longitude_range=longitude_range,
                          num_lat_lon_chunks=args.num_lat_lon_chunks)
 
 # Get auto spaced quantiles, up to one data point per quantile
-cgan_quantile_locs = qmapper.update_quantile_locations(input_data=cgan_training_data, max_step_size=0.01)
+cgan_quantile_locs = cgan_qmapper.update_quantile_locations(input_data=cgan_training_data, max_step_size=0.01)
 
 
 if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
@@ -243,19 +246,33 @@ if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
 
 else:
      
-    qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
+    cgan_qmapper.train(fcst_data=cgan_training_data, obs_data=imerg_training_data, training_dates=training_dates, training_hours=training_hours)
     if args.save_data:
         # Only correct all ensemble members if we are saving data; not needed if just plotting
         cgan_corrected = np.empty(samples_gen_array.shape)
         
         for en in range(ensemble_size):
-            cgan_corrected[:,:,:,en] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+            cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
             quantile_data_dicts['test']['GAN + qmap'] = cgan_corrected[...,0]
     else:
-        cgan_corrected = quantile_data_dicts['test']['GAN + qmap'] = qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
+        cgan_corrected = quantile_data_dicts['test']['GAN + qmap'] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,0], dates=dates, hours=hours)
         quantile_data_dicts['test']['GAN + qmap'] = cgan_corrected
 
+
+
+if args.save_qmapper:
+    ###########################
+    print('### Saving quantile mapping objects ', flush=True)
+    ###########################
+
+    # Save trained quantile mapper for experiment
+    with open(os.path.join(log_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+        pickle.dump(fcst_qmapper, ofh)
+    
+    with open(os.path.join(log_folder, f'cgan_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+        pickle.dump(cgan_qmapper, ofh)
         
+          
 if args.save_data:
     ###########################
     print('### Saving data ', flush=True)
@@ -263,12 +280,7 @@ if args.save_data:
     with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap'].shape)
         pickle.dump(quantile_data_dicts['test']['Fcst + qmap'], ofh)
-    
-    if len(fcst_corrected_train) > 0:
-        # Save trained quantile mapper for experiment
-        with open(os.path.join(log_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
-            pickle.dump(qmapper, ofh)
-    
+
     with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
 

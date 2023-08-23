@@ -92,15 +92,14 @@ def setup_model(*,
 def load_model_from_folder(model_folder, model_number=None):
 
     model_weights_root = os.path.join(model_folder, "models")
-    config_path = os.path.join(model_folder, 'setup_params.yaml')
 
     if model_number is None:
         model_fp = sorted(glob(os.path.join(model_weights_root, '*.h5')))[-1]
     else:
         model_fp = os.path.join(model_weights_root, f'gen_weights-{model_number:07d}.h5')
 
-    setup_params = load_yaml_file(config_path)
-    model_config, data_config = read_config.get_config_objects(setup_params)
+    data_config = read_config.read_data_config(config_folder=model_folder)
+    model_config = read_config.read_model_config(config_folder=model_folder)
 
     print('setting up inputs')
     model = setupmodel.setup_model(model_config=model_config, data_config=data_config)

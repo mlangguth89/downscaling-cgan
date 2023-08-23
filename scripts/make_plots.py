@@ -60,8 +60,8 @@ parser = ArgumentParser(description='Cross validation for selecting quantile map
 
 parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME))
 parser.add_argument('--nickname', type=str, help='Nickname of model', required=True)
-parser.add_argument('--log-folder', type=str, help='model log folder', default=None)
-parser.add_argument('--model-number', type=int, help='model number', default=None)
+parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
+parser.add_argument('--model-number', type=int, help='model number', required=True)
 parser.add_argument('--debug', action='store_true', help='Debug mode')
 metric_group = parser.add_argument_group('metrics')
 metric_group.add_argument('-ex', '--examples', action="store_true")
@@ -86,30 +86,26 @@ all_metrics = ['examples', 'scatter','rank_hist','spread_error','rapsd','quantil
 metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
 
 
-log_folders = {'cropped': {'log_folder': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10', 'model_number': 262400},
-               'nologs': {'log_folder': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1', 'model_number': 268800},
-               'final-cl2000': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20', 'model_number': 262400},
-               'final-cl2000-2': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n3000_201806-201905_100a7_e10', 'model_number': 243200},
-               'final-nologs': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2900_201806-201903_42e34_e20', 'model_number': 217600},
-               'sqrt-small': {'log_folder': '/user/work/uz22147/logs/cgan/6baa8b10ec61eaed_small-cl500-sqrt-norm/n2900_201806-201903_42e34_e20', 'model_number': 51200},
-}
+# log_folders = {'cropped': {'log_folder': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10', 'model_number': 262400},
+#                'nologs': {'log_folder': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1', 'model_number': 268800},
+#                'final-cl2000': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20', 'model_number': 262400},
+#                'final-cl2000-2': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n3000_201806-201905_100a7_e10', 'model_number': 243200},
+#                'final-nologs': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2900_201806-201903_42e34_e20', 'model_number': 217600},
+#                'sqrt-small': {'log_folder': '/user/work/uz22147/logs/cgan/6baa8b10ec61eaed_small-cl500-sqrt-norm/n2900_201806-201903_42e34_e20', 'model_number': 51200},
+# }
+
 
 # If in debug mode, then don't overwrite existing plots
 if args.debug:
     temp_stats_dir = tempfile.TemporaryDirectory()
     args.output_dir = temp_stats_dir.name
 
-if args.log_folder is None:
-    if nickname not in log_folders:
-        raise ValueError('Model type not found')
+model_number = args.model_number
+log_folder = args.log_folder
 
-    model_number = log_folders[nickname]['model_number']
-    log_folder = log_folders[nickname]['log_folder']
-else:
-    if args.model_number is None:
-        raise ValueError('Must provide model number')
-    model_number = args.model_number
-    log_folder = args.log_folder
+folder_suffix = log_folder.split('/')[-1]
+args.output_dir = os.path.join(args.output_dir, folder_suffix)
+os.makedirs(args.output_dir, exist_ok=True)
 
 with open(os.path.join(log_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
@@ -126,6 +122,8 @@ persisted_fcst_array = arrays['persisted_fcst'][:n_samples, :,: ]
 ensmean_array = np.mean(arrays['samples_gen'], axis=-1)[:n_samples, :,:]
 dates = [d[0] for d in arrays['dates']][:n_samples]
 hours = [h[0] for h in arrays['hours']][:n_samples]
+
+
 
 # Times in EAT timezone
 eat_datetimes = [datetime(d.year, d.month, d.day, hours[n]).replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Africa/Nairobi')) for n,d in enumerate(dates)]
@@ -147,7 +145,6 @@ dry_day_indexes = [item[0] for item in sorted_means[:10]]
 base_folder = '/'.join(log_folder.split('/')[:-1])
 try:
     config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
-
     model_config, data_config = read_config.get_config_objects(config)
 except FileNotFoundError:
     data_config = read_config.read_data_config(config_folder=base_folder)
@@ -180,19 +177,44 @@ for k, v in special_areas.items():
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
 
-try:
-    with open(os.path.join(log_folder, f'fcst_qmap_20.pkl'), 'rb') as ifh:
+# try:
+if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_25.pkl')):
+    with open(os.path.join(log_folder, 'fcst_qmap_25.pkl'), 'rb') as ifh:
         fcst_corrected = pickle.load(ifh)
+else:
+    with open(os.path.join(base_folder, 'fcst_qmapper_25.pkl'), 'rb') as ifh:
+        fcst_qmapper = pickle.load(ifh) 
+    print('Performing forecast quantile mapping', flush=True)
+    fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+    print('Finished forecast quantile mapping', flush=True)
+    
+    with open(os.path.join(log_folder, 'fcst_qmap_25.pkl'), 'wb+') as ofh:
+        pickle.dump(fcst_corrected, ofh)
 
-    with open(os.path.join(log_folder, f'cgan_qmap_6.pkl'), 'rb') as ifh:
+if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_40.pkl')):
+    with open(os.path.join(log_folder, 'cgan_qmap_40.pkl'), 'rb') as ifh:
         cgan_corrected = pickle.load(ifh)
-        
-    # clip values at 200mm/hr
+else:
+    with open(os.path.join(base_folder, 'cgan_qmapper_40.pkl'), 'rb') as ifh:
+        cgan_qmapper = pickle.load(ifh)
+    print('Performing cGAN quantile mapping', flush=True)
 
-    cgan_corrected = np.clip(cgan_corrected, 0, 200)
-except:
-    fcst_corrected = fcst_array.copy()
-    cgan_corrected = samples_gen_array.copy()
+    cgan_corrected = np.empty(shape=samples_gen_array.shape)
+    cgan_corrected[...] = np.nan
+    for en in tqdm(range(ensemble_size)):
+        print(en, flush=True)
+
+        cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+    print('Finished cgan quantile mapping', flush=True)
+       
+    with open(os.path.join(log_folder, 'cgan_qmap_40.pkl'), 'wb+') as ofh:
+        pickle.dump(cgan_corrected, ofh)
+
+
+# Only keep one ensemble member if we aren't looking at distribution based things
+if not args.rank_hist and not  args.spread_error and not args.crps and not args.examples:
+    samples_gen_array = samples_gen_array[...,:1]
+    cgan_corrected = cgan_corrected[...,:-1]
     
 data_dict = {
                         'GAN': samples_gen_array[:, :, :, 0],
@@ -311,7 +333,7 @@ if metric_dict['examples']:
     cb.ax.set_xlabel("Precipitation (mm / hr)", loc='center')
 
 
-    plt.savefig(f'plots/cGAN_samples_IFS_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir, f'cGAN_samples_IFS_{nickname}_{model_number}.pdf'), format='pdf')
 
 ##################################################################################
 ## Binned scatter plot
@@ -344,7 +366,7 @@ if metric_dict['scatter']:
     ax.set_xlabel('Observations (mm/hr)')
     ax.set_ylabel('Model (mm/hr)')
     ax.legend()
-    plt.savefig(f'plots/scatter_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir, f'scatter_{nickname}_{model_number}.pdf'), format='pdf')
 
 
 ##################################################################################
@@ -377,7 +399,7 @@ if metric_dict['rank_hist']:
 
     ax.set_ylim([0, max(h)+0.01])
     ax.set_title('Rank histogram ')
-    plt.savefig(f'plots/rank_hist__{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig(os.path.join(args.output_dir,f'rank_hist__{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Spread error
@@ -406,7 +428,7 @@ if metric_dict['spread_error'] and ensemble_size > 2:
     ax.set_ylabel('RMSE (mm/hr)')
     ax.set_xlabel('Ensemble spread (mm/hr)')
     ax.legend()
-    plt.savefig(f'plots/spread_error_{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig(os.path.join(args.output_dir,f'spread_error_{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## RAPSD
@@ -426,7 +448,7 @@ if metric_dict['rapsd']:
             rapsd_results[k] = np.mean(np.stack(rapsd_results[k], axis=-1), axis=-1)
     
     # Save results
-    with open(f'plots/rapsd_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'rapsd_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(rapsd_results, ofh)
 
     # plot
@@ -441,7 +463,7 @@ if metric_dict['rapsd']:
     ax.set_xlabel('Wavenumber')
     ax.legend()
     
-    plt.savefig(f'plots/rapsd_{nickname}_{model_number}.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig(os.path.join(args.output_dir,f'rapsd_{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Q-Q plot
@@ -464,7 +486,7 @@ if metric_dict['quantiles']:
           
     fig, ax = plt.subplots(1,1)
     plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
-                   save_path=f'plots/quantiles_total_{nickname}_{model_number}.pdf')
+                   save_path=os.path.join(args.output_dir,f'quantiles_total_{nickname}_{model_number}.pdf'))
 
     # Quantiles for different areas
 
@@ -490,7 +512,7 @@ if metric_dict['quantiles']:
 
         
     fig.tight_layout(pad=2.0)
-    plt.savefig(f'plots/quantiles_area_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'quantiles_area_{nickname}_{model_number}.pdf'), format='pdf')
 
 
 
@@ -532,8 +554,9 @@ if metric_dict['hist']:
         ax.set_xlabel('Average hourly rainfall in bin (mm/hr)')
         ax.vlines(q_99pt99, 0, 10**8, linestyles='--')
         ax.text(q_99pt99 + 7 , 10**7, '$99.99^{th}$')
-    plt.savefig(f'plots/histograms_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'histograms_{nickname}_{model_number}.pdf'), format='pdf')
 
+if metric_dict['rmse']:
     #################################################################################
     ## Bias and RMSE
     # RMSE
@@ -542,10 +565,7 @@ if metric_dict['hist']:
             'Fcst' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
             'Fcst + qmap' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected[:n_samples,:,:]), axis=0))}
 
-    bias_dict = {'GAN': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
-            'GAN + qmap' : np.mean(cgan_corrected[:n_samples,:,:,0] - truth_array, axis=0),
-            'Fcst' : np.mean(fcst_array - truth_array, axis=0),
-            'Fcst + qmap' : np.mean(fcst_corrected[:n_samples, :,:] - truth_array, axis=0)}
+
 
     fig, ax = plt.subplots(len(rmse_dict.keys())+1,2, 
                         subplot_kw={'projection' : ccrs.PlateCarree()},
@@ -568,10 +588,16 @@ if metric_dict['hist']:
     im = plot_contourf(ax=ax[n+1,0], data=hourly_historical_std, title='truth_std', lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+1,0])
 
-    plt.savefig(f'plots/rmse_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'rmse_{nickname}_{model_number}.pdf'), format='pdf')
+    
+
+if metric_dict['rmse']:
+    bias_dict = {'GAN': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
+        'GAN + qmap' : np.mean(cgan_corrected[:n_samples,:,:,0] - truth_array, axis=0),
+        'Fcst' : np.mean(fcst_array - truth_array, axis=0),
+        'Fcst + qmap' : np.mean(fcst_corrected[:n_samples, :,:] - truth_array, axis=0)}
     
     # Bias
-
     lat_range=np.arange(-10.05, 10.05, 0.1)
     lon_range=np.arange(25.05, 45.05, 0.1)
     fig, ax = plt.subplots(len(bias_dict.keys())+2,2, 
@@ -609,7 +635,7 @@ if metric_dict['hist']:
                     value_range=list(np.arange(0, 0.6, 0.01)), lat_range=latitude_range, lon_range=longitude_range)
     plt.colorbar(im, ax=ax[n+2,1])
 
-    plt.savefig(f'plots/bias_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'bias_{nickname}_{model_number}.pdf'), format='pdf')
     
     # RMSE by hour
     from dsrnngan.evaluation.scoring import mse, get_metric_by_hour
@@ -626,7 +652,7 @@ if metric_dict['hist']:
             ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
             ax.set_xticklabels(hour_bin_edges)
     ax.legend()
-    plt.savefig(f'plots/rmse_hours_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'rmse_hours_{nickname}_{model_number}.pdf'), format='pdf')
 
 #################################################################################
 
@@ -654,7 +680,7 @@ if metric_dict['crps']:
     ax.coastlines(resolution='10m', color='black', linewidth=0.4)
     ax.add_feature(cfeature.BORDERS)
     plt.colorbar(im, ax=ax)
-    plt.savefig(f'plots/crps_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'crps_{nickname}_{model_number}.pdf'), format='pdf')
 
 
 #################################################################################
@@ -681,10 +707,12 @@ if metric_dict['fss']:
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
     # Save results
-    with open(f'plots/fss_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(fss_results, ofh)
             
-    plot_fss_scores(fss_results=fss_results, output_folder='plots', output_suffix=f'{nickname}_{model_number}')
+    plot_fss_scores(fss_results=fss_results, 
+                    output_folder=args.output_dir,
+                    output_suffix=f'{nickname}_{model_number}')
     
     
     # FSS for regions
@@ -706,9 +734,11 @@ if metric_dict['fss']:
                         'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
         fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
         
-        plot_fss_scores(fss_results=fss_area_results[area], output_folder='plots', output_suffix=f'{area}_{nickname}_{model_number}')
+        plot_fss_scores(fss_results=fss_area_results[area], 
+                        output_folder=args.output_dir, 
+                        output_suffix=f'{area}_{nickname}_{model_number}')
     
-    with open(f'plots/fss_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(fss_area_results, ofh)
         
     # Save results
@@ -752,8 +782,8 @@ if metric_dict['diurnal']:
 
     
     diurnal_data_dict = {'Obs (IMERG)': truth_array,
-                         'GAN': cgan_corrected[:,:,:,0],
-                         'Fcst': fcst_corrected
+                         'GAN + qmap': cgan_corrected[:,:,:,0],
+                         'IFS + qmap': fcst_corrected
                          }
 
     metric_fn = lambda x,y: x.mean()
@@ -769,7 +799,7 @@ if metric_dict['diurnal']:
     ax.set_ylabel('Average mm/hr')
     ax.legend()
     
-    plt.savefig(f'plots/diurnal_cycle_{nickname}_{model_number}.pdf', bbox_inches='tight')
+    plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_{nickname}_{model_number}.pdf'), bbox_inches='tight')
         
     
     # # Seasonal diurnal cycle
@@ -841,7 +871,7 @@ if metric_dict['diurnal']:
             ax[n].set_xlabel('Hour')
             ax[n].set_ylabel('Average mm/hr')
             ax[n].set_title(area)
-        plt.savefig(f'plots/diurnal_cycle_area_{nickname}_{model_number}.pdf')
+        plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_area_{nickname}_{model_number}.pdf'))
     except:
         print('Failed to perform diurnal area plots.')
         
@@ -858,8 +888,8 @@ if metric_dict['diurnal']:
 
     n_samples = truth_array.shape[0]
     raw_diurnal_data_dict = {'Obs (IMERG)': truth_array,
-                        'cGAN': cgan_corrected[:n_samples,:,:,0],
-                        'IFS': fcst_corrected[:n_samples, :,:]}
+                        'cGAN + qmap': cgan_corrected[:n_samples,:,:,0],
+                        'IFS + qmap': fcst_corrected[:n_samples, :,:]}
 
     smoothed_diurnal_data_dict = {}
     for k, v in raw_diurnal_data_dict.items():
@@ -940,7 +970,7 @@ if metric_dict['diurnal']:
     cb.ax.set_xticklabels(range(0,24,3))
     cb.ax.set_xlabel("Peak rainfall hour (EAT)", loc='center')
 
-    plt.savefig(f'plots/diurnal_cycle_map_{nickname}_{model_number}.pdf', format='pdf')
+    plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_map_{nickname}_{model_number}.pdf'), format='pdf')
 #################################################################################
 
 if metric_dict.get('confusion_matrix'):
@@ -970,7 +1000,7 @@ if metric_dict.get('confusion_matrix'):
             tmp_results_dict[k] = confusion_matrix(y_true, v)
         
         results['conf_mat'].append(tmp_results_dict)
-        with open(f'plots/confusion_matrices_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+        with open(os.path.join(args.output_dir,f'confusion_matrices_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
             pickle.dump(results, ofh)
             
 if metric_dict.get('csi'):
@@ -993,7 +1023,7 @@ if metric_dict.get('csi'):
                      hourly_thresholds=hourly_thresholds
                     )
         
-    with open(f'plots/csi_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'csi_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(csi_results, ofh)
         
 
@@ -1004,7 +1034,7 @@ if metric_dict.get('csi'):
                     hourly_thresholds=hourly_thresholds
                     )
     
-    with open(f'plots/ets_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'ets_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(ets_results, ofh)
     
     csi_area_results = {}
@@ -1039,10 +1069,10 @@ if metric_dict.get('csi'):
                     hourly_thresholds=hourly_thresholds
                     )
     
-    with open(f'plots/csi_area_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'csi_area_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(csi_area_results, ofh)
     
-    with open(f'plots/ets_area_{nickname}_{model_number}.pkl', 'wb+') as ofh:
+    with open(os.path.join(args.output_dir,f'ets_area_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(ets_area_results, ofh) 
     
     

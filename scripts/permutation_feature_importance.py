@@ -22,9 +22,12 @@ from dsrnngan.data.data import denormalise, DATA_PATHS, get_obs_dates
 
 parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
 
-parser.add_argument('--model-type', type=str, help='Choice of model type', default=str(HOME))
+parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
+parser.add_argument('--best-model-number', type=int, help='model number', required=True)
 parser.add_argument('--num-extra-models', type=int, help='Number of models to assess on, around the best performing model.',
                     default=5)
+parser.add_argument('--ym-ranges', type=list, help='Date range to perform experiment on.',
+                    default=['202010','202109'])
 parser.add_argument('--debug', action='store_true')
 args = parser.parse_args()
 
@@ -32,21 +35,18 @@ args = parser.parse_args()
 # Load previously saved evaluation data
 ##############################################################
 
-model_type = 'cropped' # Currently this is the only version with the correct data
 
-log_folders = {
-               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10'}
+log_folder = args.log_folder
+best_model_number = args.best_model_number
 
-log_folder = log_folders[model_type]
-best_model_number = int(utils.get_best_model_number(log_folder=log_folder))
 # Get config
 base_folder = '/'.join(log_folder.split('/')[:-1])
-config = utils.load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
+data_config = read_config.read_data_config(config_folder=base_folder)
+model_config = read_config.read_model_config(config_folder=base_folder)
 
-model_config, data_config = read_config.get_config_objects(config)
 latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config=data_config)
 
-all_model_numbers = utils.get_checkpoint_model_numbers(log_folder=log_folders[model_type])
+all_model_numbers = utils.get_checkpoint_model_numbers(log_folder=base_folder)
 other_model_distances = sorted([(mn,np.abs(mn-best_model_number)) for mn in all_model_numbers if mn != best_model_number], key=lambda x: x[1])
 model_numbers = [best_model_number ] + [item[0] for item in other_model_distances[:args.num_extra_models]]
 
@@ -73,13 +73,13 @@ for model_number in model_numbers:
     index_max_lookup = {'lo_res_inputs': len(data_config.input_fields), 'hi_res_inputs': len(data_config.constant_fields)}
 
     if args.debug:
-        index_max_lookup['lo_res_inputs'] = 2
+        index_max_lookup['lo_res_inputs'] = 1
         index_max_lookup['hi_res_inputs'] = 1
 
-    date_range = utils.date_range_from_year_month_range(['201806', '201905'])
-    dates = get_obs_dates(date_range[0], date_range[-1], 
-                            obs_data_source='imerg', data_paths=DATA_PATHS, hour='random')
-    hours = np.repeat(all_fcst_hours, len(dates))
+    date_range = utils.date_range_from_year_month_range(args.ym_ranges)
+    # dates = get_obs_dates(date_range[0], date_range[-1], 
+    #                         obs_data_source='imerg', data_paths=DATA_PATHS, hour='random')
+    hours = np.repeat(all_fcst_hours, len(date_range))
 
     scores = {}
     for permutation_type in ['lo_res_inputs', 'hi_res_inputs']:
@@ -91,13 +91,15 @@ for model_number in model_numbers:
             # Create permuted data generator
             ##############################################################
 
-            data_gen = DataGenerator(dates=dates,
+            data_gen = DataGenerator(dates=date_range,
                                     batch_size=1,
+                                    data_config=data_config,
                                     shuffle=False,
                                     hour=hours)
             
             # Same date/hour combination but with shuffle=True
-            permuted_data_gen = DataGenerator(dates=dates,
+            permuted_data_gen = DataGenerator(dates=date_range,                                              
+                                    data_config=data_config,
                                     batch_size=1,
                                     shuffle=True,
                                     hour=hours)
@@ -151,7 +153,7 @@ for model_number in model_numbers:
                 samples_gen = generate_gan_sample(gen, 
                                         cond=cond,
                                         const=const, 
-                                        noise_channels=config['GENERATOR']['noise_channels'], 
+                                        noise_channels=model_config.generator.noise_channels, 
                                         ensemble_size=ensemble_size, 
                                         batch_size=1, 
                                         )
@@ -161,13 +163,15 @@ for model_number in model_numbers:
                     sample_gen = samples_gen[ii][0, :, :, 0]
                     
                     # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
-                    sample_gen = denormalise(sample_gen)
+                    if data_config.output_normalisation is not None:
+                        sample_gen = denormalise(sample_gen, normalisation_type=data_config.output_normalisation)
 
                     samples_gen[ii] = sample_gen
                 
                 samples_gen = np.stack(samples_gen, axis=-1)
                 
                 # Evaluate a metric on the data
+                # TODO: bootstrap this.
                 crps_truth_input = np.expand_dims(obs, 0)
                 crps_gen_input = np.expand_dims(samples_gen, 0)
                 crps_score_grid = crps_ensemble(crps_truth_input, crps_gen_input)
