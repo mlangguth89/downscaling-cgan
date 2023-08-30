@@ -46,10 +46,10 @@ assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate dat
 
 
 # Open quantile mapped forecasts
-with open(os.path.join(args.log_folder, f'fcst_qmap_25.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'fcst_qmap_15.pkl'), 'rb') as ifh:
     fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(args.log_folder, f'cgan_qmap_40.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'cgan_qmap_1.pkl'), 'rb') as ifh:
     cgan_corrected = pickle.load(ifh)
     
     
@@ -101,9 +101,9 @@ cgan_quantiles = calculate_quantiles(cgan_corrected)
 obs_quantiles = calculate_quantiles(truth_array)
 
 
-bootstrap_results_dict_obs = bootstrap_summary_statistic(calculate_quantiles, truth_array[0::2, ...], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
-bootstrap_results_dict_fcst_qmap = bootstrap_summary_statistic(calculate_quantiles, fcst_corrected[0::2, ...], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
-bootstrap_results_dict_cgan_qmap = bootstrap_summary_statistic(calculate_quantiles, cgan_corrected[0::2, ...], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+bootstrap_results_dict_obs = bootstrap_summary_statistic(calculate_quantiles, truth_array, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+bootstrap_results_dict_fcst_qmap = bootstrap_summary_statistic(calculate_quantiles, fcst_corrected, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+bootstrap_results_dict_cgan_qmap = bootstrap_summary_statistic(calculate_quantiles, cgan_corrected[...,0], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
 
 # Save results 
 with open(os.path.join(args.log_folder, f'bootstrap_quantile_results_n{args.n_bootstrap_samples}.pkl'), 'wb+') as ofh:

@@ -123,7 +123,7 @@ quantile_data_dicts = {'test': {
 
 # NOTE:This requires data collection for the model 
 
-fps = [os.path.join(log_folder, 'n9000_201603-202009_6f02b_e1')]
+fps = [os.path.join(log_folder, 'n18000_201603-202009_6f02b_e1')]
 
 imerg_training_data = []
 cgan_training_data = []
@@ -197,7 +197,7 @@ fcst_qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude
 ifs_quantile_locs = fcst_qmapper.update_quantile_locations(input_data=ifs_training_data, max_step_size=0.01)
 
 
-if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
+if args.num_lat_lon_chunks == 0:
     # Do quantile mapping grid cell by grid cell
     print('Quantile mapping Fcst at grid level')
     quantile_data_dicts['test']['Fcst + qmap']= quantile_map_grid(array_to_correct=fcst_array, 
@@ -225,7 +225,7 @@ cgan_qmapper = QuantileMapper(month_ranges=month_ranges, latitude_range=latitude
 cgan_quantile_locs = cgan_qmapper.update_quantile_locations(input_data=cgan_training_data, max_step_size=0.01)
 
 
-if args.num_lat_lon_chunks == max(fcst_array.shape[1], fcst_array.shape[2]):
+if args.num_lat_lon_chunks == 0:
     if args.save_data:
         cgan_corrected = np.empty(samples_gen_array.shape)
         

@@ -46,9 +46,9 @@ def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
 plot_persistence = False
 
 format_lookup = {'GAN': {'color': 'b'}, 
-                 'Fcst': {'color': 'r'}, 
+                 'IFS': {'color': 'r'}, 
                  'GAN + qmap': {'color': 'b', 'linestyle': '--'}, 
-                 'Fcst + qmap': {'color': 'r', 'linestyle': '--'},
+                 'IFS + qmap': {'color': 'r', 'linestyle': '--'},
                  'Obs (IMERG)': {'color': 'k', 'linestyle': '-'}}
 
 
@@ -67,6 +67,8 @@ metric_group = parser.add_argument_group('metrics')
 metric_group.add_argument('-ex', '--examples', action="store_true")
 metric_group.add_argument('-sc', '--scatter', action="store_true")
 metric_group.add_argument('-rh', '--rank-hist', action="store_true")
+metric_group.add_argument('-rmse', action="store_true")
+metric_group.add_argument('-bias', action="store_true")
 metric_group.add_argument('-se', '--spread-error', action="store_true")
 metric_group.add_argument('-rapsd', action="store_true")
 metric_group.add_argument('-qq', '--quantiles', action="store_true")
@@ -82,7 +84,7 @@ args = parser.parse_args()
 
 nickname = args.nickname
 
-all_metrics = ['examples', 'scatter','rank_hist','spread_error','rapsd','quantiles','hist','crps','fss','diurnal','confusion_matrix','csi']
+all_metrics = ['examples', 'scatter','rank_hist','rmse', 'bias', 'spread_error','rapsd','quantiles','hist','crps','fss','diurnal','confusion_matrix','csi']
 metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
 
 
@@ -178,24 +180,24 @@ for k, v in special_areas.items():
 ####################################
 
 # try:
-if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_25.pkl')):
-    with open(os.path.join(log_folder, 'fcst_qmap_25.pkl'), 'rb') as ifh:
+if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_15.pkl')):
+    with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
         fcst_corrected = pickle.load(ifh)
 else:
-    with open(os.path.join(base_folder, 'fcst_qmapper_25.pkl'), 'rb') as ifh:
+    with open(os.path.join(base_folder, 'fcst_qmapper_15.pkl'), 'rb') as ifh:
         fcst_qmapper = pickle.load(ifh) 
     print('Performing forecast quantile mapping', flush=True)
     fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
     print('Finished forecast quantile mapping', flush=True)
     
-    with open(os.path.join(log_folder, 'fcst_qmap_25.pkl'), 'wb+') as ofh:
+    with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
         pickle.dump(fcst_corrected, ofh)
 
-if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_40.pkl')):
-    with open(os.path.join(log_folder, 'cgan_qmap_40.pkl'), 'rb') as ifh:
+if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_1.pkl')):
+    with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
         cgan_corrected = pickle.load(ifh)
 else:
-    with open(os.path.join(base_folder, 'cgan_qmapper_40.pkl'), 'rb') as ifh:
+    with open(os.path.join(base_folder, 'cgan_qmapper_1.pkl'), 'rb') as ifh:
         cgan_qmapper = pickle.load(ifh)
     print('Performing cGAN quantile mapping', flush=True)
 
@@ -207,7 +209,7 @@ else:
         cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
     print('Finished cgan quantile mapping', flush=True)
        
-    with open(os.path.join(log_folder, 'cgan_qmap_40.pkl'), 'wb+') as ofh:
+    with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
 
 
@@ -219,8 +221,8 @@ if not args.rank_hist and not  args.spread_error and not args.crps and not args.
 data_dict = {
                         'GAN': samples_gen_array[:, :, :, 0],
                         'Obs (IMERG)': truth_array,
-                        'Fcst': fcst_array,
-                        'Fcst + qmap':fcst_corrected,
+                        'IFS': fcst_array,
+                        'IFS + qmap': fcst_corrected,
                         'GAN + qmap': cgan_corrected[:,:,:,0]}
           
 ################################################################################
@@ -388,7 +390,9 @@ if metric_dict['rank_hist']:
     temp_samples += rng.random(size=temp_samples.shape, dtype=np.float32)*noise_factor
 
     ranks = np.sum(temp_truth > temp_samples, axis=-1)
-
+    with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+            pickle.dump(ranks, ofh)
+            
     n_bins = samples_gen_array.shape[-1]
 
     fig, ax = plt.subplots(1,1)
@@ -404,40 +408,42 @@ if metric_dict['rank_hist']:
 #################################################################################
 ## Spread error
 
-if metric_dict['spread_error'] and ensemble_size > 2:
+if metric_dict.get('spread_error') and ensemble_size > 2:
     print('*********** Plotting spread error **********************')
     plt.rcParams.update({'font.size': 20})
     
     upper_percentile = 99
     num_bins=100
     
-    se_data_dict = {'cgan': {'data': samples_gen_array, 'label': 'GAN'},
-                 'cgan_qmap': {'data': cgan_corrected, 'label': 'GAN + qmap'}}
     fig, ax = plt.subplots(1,1)
-    for k, v in se_data_dict.items():
-        variance_mse_pairs = get_spread_error_data(n_samples=n_samples, observation_array=truth_array, ensemble_array=v['data'], 
-                                                   n_bins=num_bins)
-
-
-        # Currently leaving out the top one
-        ens_spread = [np.sqrt(item[0]) for item in variance_mse_pairs[:-1]]
-        rmse_err = [np.sqrt(item[1]) for item in variance_mse_pairs[:-1]]
-
-        ax.plot(ens_spread, rmse_err, label=v['label'])
-    ax.plot(np.linspace(0,max(ens_spread),10), np.linspace(0,max(ens_spread),10), '--')
+    binned_mse, binned_spread = get_spread_error_data(n_samples=4000, observation_array=truth_array, 
+                                                      ensemble_array=cgan_corrected, 
+                                                      n_bins=100)
+    if np.isnan(binned_spread[0]):
+        binned_spread = binned_spread[1:]
+        binned_mse = binned_mse[1:]
+        
+    ax.plot(binned_spread, binned_mse, marker='+', markersize=10)
+    ax.plot(np.linspace(0,max(binned_spread),10), np.linspace(0,max(binned_spread),10), 'k--')
     ax.set_ylabel('RMSE (mm/hr)')
     ax.set_xlabel('Ensemble spread (mm/hr)')
-    ax.legend()
+    ax.set_title(f'Spread-error')
     plt.savefig(os.path.join(args.output_dir,f'spread_error_{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
 
+    with open(os.path.join(args.output_dir, f'spread_error_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+        pickle.dump({'binned_spread': binned_spread, 'binned_mse': binned_mse}, ofh)
 #################################################################################
 ## RAPSD
 plt.rcParams.update({'font.size': 16})
 if metric_dict['rapsd']:
+    rapsd_data_dict = {
+                        'GAN': cgan_corrected[:, :, :, 0],
+                        'Obs (IMERG)': truth_array,
+                        'IFS': fcst_corrected}
     
     print('*********** Plotting RAPSD **********************')
     rapsd_results = {}
-    for k, v in data_dict.items():
+    for k, v in rapsd_data_dict.items():
             rapsd_results[k] = []
             for n in tqdm(range(n_samples)):
                 
@@ -474,14 +480,14 @@ if metric_dict['quantiles']:
     print('*********** Plotting Q-Q  **********************')
     quantile_format_dict = {'GAN': {'color': 'b', 'marker': '+', 'alpha': 1},
                     'Obs (IMERG)': {'color': 'k'},
-                    'Fcst': {'color': 'r', 'marker': '+', 'alpha': 1},
-                    'Fcst + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
+                    'IFS': {'color': 'r', 'marker': '+', 'alpha': 1},
+                    'IFS + qmap': {'color': 'r', 'marker': 'o', 'alpha': 0.7},
                     'GAN + qmap': {'color': 'b', 'marker': 'o', 'alpha': 0.7}}
     quantile_data_dict = {
                         'GAN': samples_gen_array[:, :, :, 0],
                         'Obs (IMERG)': truth_array,
-                        'Fcst': fcst_array,
-                        'Fcst + qmap':fcst_corrected,
+                        'IFS': fcst_array,
+                        'IFS + qmap':fcst_corrected,
                         'GAN + qmap': cgan_corrected[:,:,:,0]}
           
     fig, ax = plt.subplots(1,1)
@@ -504,8 +510,8 @@ if metric_dict['quantiles']:
         quantile_data_dict = {
                     'GAN': samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0],
                     'Obs (IMERG)': truth_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
-                    'Fcst': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
-                    'Fcst + qmap': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+                    'IFS': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+                    'IFS + qmap': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
                     'GAN + qmap': cgan_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0]}
                
         _, ax[n] = plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax[n], min_data_points_per_quantile=1)
@@ -556,14 +562,14 @@ if metric_dict['hist']:
         ax.text(q_99pt99 + 7 , 10**7, '$99.99^{th}$')
     plt.savefig(os.path.join(args.output_dir,f'histograms_{nickname}_{model_number}.pdf'), format='pdf')
 
-if metric_dict['rmse']:
+if metric_dict.get('rmse'):
     #################################################################################
     ## Bias and RMSE
     # RMSE
     rmse_dict = {'GAN': np.sqrt(np.mean(np.square(truth_array - samples_gen_array[:,:,:,0]), axis=0)),
             'GAN + qmap' : np.sqrt(np.mean(np.square(truth_array - cgan_corrected[:n_samples,:,:,0]), axis=0)),
-            'Fcst' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
-            'Fcst + qmap' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected[:n_samples,:,:]), axis=0))}
+            'IFS' : np.sqrt(np.mean(np.square(truth_array - fcst_array), axis=0)),
+            'IFS + qmap' : np.sqrt(np.mean(np.square(truth_array - fcst_corrected[:n_samples,:,:]), axis=0))}
 
 
 
@@ -591,11 +597,11 @@ if metric_dict['rmse']:
     plt.savefig(os.path.join(args.output_dir,f'rmse_{nickname}_{model_number}.pdf'), format='pdf')
     
 
-if metric_dict['rmse']:
+if metric_dict['bias']:
     bias_dict = {'GAN': np.mean(samples_gen_array[:,:,:,0] - truth_array, axis=0),
         'GAN + qmap' : np.mean(cgan_corrected[:n_samples,:,:,0] - truth_array, axis=0),
-        'Fcst' : np.mean(fcst_array - truth_array, axis=0),
-        'Fcst + qmap' : np.mean(fcst_corrected[:n_samples, :,:] - truth_array, axis=0)}
+        'IFS' : np.mean(fcst_array - truth_array, axis=0),
+        'IFS + qmap' : np.mean(fcst_corrected[:n_samples, :,:] - truth_array, axis=0)}
     
     # Bias
     lat_range=np.arange(-10.05, 10.05, 0.1)
@@ -643,7 +649,7 @@ if metric_dict['rmse']:
     fig, ax = plt.subplots(1,1)
     data_dict = {'Obs (IMERG)': truth_array,
                         'GAN + qmap': cgan_corrected[:,:,:,0],
-                        'Fcst + qmap': fcst_corrected}
+                        'IFS + qmap': fcst_corrected}
 
     for name, arr in data_dict.items():
         if name != 'Obs (IMERG)':
@@ -692,17 +698,15 @@ if metric_dict['fss']:
     from dsrnngan.evaluation.evaluation import get_fss_scores
     from dsrnngan.evaluation.plots import plot_fss_scores
 
-    window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200]
-    
+    window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200, 250, 300, 350, 400, 450, 500]
+
     fss_data_dict = {
-                        'cgan': samples_gen_array[:n_samples, :, :, 0],
-                        'ifs': fcst_array[:n_samples, :, :],
-                        'fcst_qmap': fcst_corrected[:n_samples, :, :],
-                        'cgan_qmap': cgan_corrected[:n_samples, :, :, 0]}
+                        'cgan': cgan_corrected[:n_samples, :, :, 0],
+                        'ifs': fcst_corrected[:n_samples, :, :]}
 
     # get quantiles
 
-    hourly_thresholds = [1, 5, 10, 20, 50]
+    hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
 
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
@@ -710,36 +714,36 @@ if metric_dict['fss']:
     with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(fss_results, ofh)
             
-    plot_fss_scores(fss_results=fss_results, 
-                    output_folder=args.output_dir,
-                    output_suffix=f'{nickname}_{model_number}')
+    # plot_fss_scores(fss_results=fss_results, 
+    #                 output_folder=args.output_dir,
+    #                 output_suffix=f'{nickname}_{model_number}')
     
     
-    # FSS for regions
-    fss_area_results = {}
-    for n, (area, area_range) in enumerate(special_areas.items()):
+    # # FSS for regions
+    # fss_area_results = {}
+    # for n, (area, area_range) in enumerate(special_areas.items()):
         
-        lat_range_ends = area_range['lat_range']
-        lon_range_ends = area_range['lon_range']
-        lat_range_index = area_range['lat_index_range']
-        lon_range_index = area_range['lon_index_range']
-        lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
-        lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
+    #     lat_range_ends = area_range['lat_range']
+    #     lon_range_ends = area_range['lon_range']
+    #     lat_range_index = area_range['lat_index_range']
+    #     lon_range_index = area_range['lon_index_range']
+    #     lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
+    #     lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
         
-        area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
-        fss_data_dict = {
-                        'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
-                        'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-                        'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-                        'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
-        fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
+    #     area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
+    #     fss_data_dict = {
+    #                     'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
+    #                     'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+    #                     'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+    #                     'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
+    #     fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
         
-        plot_fss_scores(fss_results=fss_area_results[area], 
-                        output_folder=args.output_dir, 
-                        output_suffix=f'{area}_{nickname}_{model_number}')
+    #     plot_fss_scores(fss_results=fss_area_results[area], 
+    #                     output_folder=args.output_dir, 
+    #                     output_suffix=f'{area}_{nickname}_{model_number}')
     
-    with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
-        pickle.dump(fss_area_results, ofh)
+    # with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+    #     pickle.dump(fss_area_results, ofh)
         
     # Save results
     
@@ -981,8 +985,7 @@ if metric_dict.get('confusion_matrix'):
     
     # quantile_locations = [0.1, 0.5, 0.75, 0.9, 0.99, 0.999, 0.9999]
     # hourly_thresholds = np.quantile(truth_array, quantile_locations)
-    hourly_thresholds = [0.1, 5, 20]
-
+    hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
     results = {'hourly_thresholds': hourly_thresholds,
                'conf_mat': []}
     
@@ -990,10 +993,9 @@ if metric_dict.get('confusion_matrix'):
         y_true = (truth_array > threshold).astype(np.int0).flatten()
 
         y_dict = {
-                'ifs': (fcst_array > threshold).astype(np.int0).flatten(),
-                'cgan' : (samples_gen_array[:,:,:,0]> threshold).astype(np.int0).flatten(),
                 'cgan_qmap' : (cgan_corrected[:,:,:,0]> threshold).astype(np.int0).flatten(),
-                'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten()}
+                'ifs_qmap': (fcst_corrected > threshold).astype(np.int0).flatten(),
+                'cgan_ens': (np.mean(cgan_corrected, axis=-1)> threshold).astype(np.int0).flatten()}
 
         tmp_results_dict = {'threshold': threshold}
         for k, v in tqdm(y_dict.items()):
@@ -1007,13 +1009,13 @@ if metric_dict.get('csi'):
     print('*********** Calculating critical success index **********************')
 
     from dsrnngan.evaluation import scoring
-    hourly_thresholds = [1, 5, 10, 20, 50]
+    hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
 
     csi_dict = {
                          'GAN': samples_gen_array[:,:,:,0],
-                         'Fcst': fcst_array,
+                         'IFS': fcst_array,
                          'GAN + qmap': cgan_corrected[:,:,:,0],
-                         'Fcst + qmap': fcst_corrected
+                         'IFS + qmap': fcst_corrected
                          }
     
     csi_results =  scoring.get_skill_score_results(
@@ -1051,8 +1053,8 @@ if metric_dict.get('csi'):
         area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
         area_data_dict = {
                         'GAN': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
-                        'Fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-                        'Fcst + qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'IFS': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
+                        'IFS + qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
                         'GAN + qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
 
         csi_area_results[area] =  scoring.get_skill_score_results(
