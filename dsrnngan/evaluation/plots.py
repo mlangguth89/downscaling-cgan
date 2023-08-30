@@ -159,24 +159,69 @@ def plot_fss_scores(fss_results, output_folder, output_suffix):
         
     plt.savefig(os.path.join(output_folder, f'fractional_skill_score_{output_suffix}.pdf'), format='pdf')
     
-    
-def plot_quantiles(quantile_data_dict: dict, 
-                   format_lookup: dict,
-                   save_path: str=None, fig: plt.figure=None, 
-                   ax: plt.Axes=None, 
-                   obs_key: str='Obs (IMERG)',
-                   range_dict: dict=range_dict,
-                   min_data_points_per_quantile: int=None):
+
+def get_quantile_data(quantile_data_dict: dict,
+                   save_path: str=None, 
+                   range_dict: dict=range_dict):
     """
     Produce qauntile-quantile plot
 
     Args:
         quantile_data_dict (dict): Dict containing entries for data sets to plot. One must have the key=obs_key. Structure:
                     {
-                    data_name_1: : np.ndarray, },
-                    data_name_2: 
-                        {'data': np.ndarray, 'color': str, 'marker': str, 'alpha': float}
+                    data_name_1:  np.ndarray,
+                    data_name_2:  np.ndarray
                     }
+        save_path (str, optional): Path to save plots in. Defaults to None.
+        range_dict (dict, optional): Dict containing ranges of quantiles. Defaults to range_dict.
+
+    Returns:
+        fig, ax: Figure and axis with plotted data.
+    """
+
+    quantile_results = {}
+    quantile_boundaries = {}
+    intervals = {}
+    
+    for data_name, d in quantile_data_dict.items():
+        quantile_results[data_name] = {}
+        
+        for k, v in tqdm(range_dict.items()):
+        
+            boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
+            
+            if len(boundaries) > 0:
+                quantile_results[data_name][k] = np.quantile(d, boundaries)
+            
+
+    # Save raw data
+    if save_path:
+        format_str = '.' + save_path.split('.')[-1]
+        data_save_path = save_path.replace(format_str, '.pkl')
+        
+        with open(data_save_path, 'wb+') as ofh:
+            pickle.dump({'quantile_results': quantile_results,
+                         'quantile_boundary_list': quantile_boundaries,
+                         'interval_list': intervals}, ofh)
+            
+    return quantile_results, quantile_boundaries, intervals
+    
+            
+            
+def plot_quantiles(quantile_results: dict, 
+                   quantile_data_dict: dict,
+                   format_lookup: dict,
+                   save_path: str=None, fig: plt.figure=None, 
+                   ax: plt.Axes=None, 
+                   obs_key: str='Obs (IMERG)',
+                   range_dict: dict=range_dict,
+                   max_quantile: float=1.0,
+                   format_str='.pdf'):
+    """
+    Produce qauntile-quantile plot
+
+    Args:
+        quantile_results (dict): Output of get_quantile_data function
         format_lookup (dict): Doct containing formatting details for different datasets
             e.g.   {data_name_1: {'color': str, 'marker': str, 'alpha': float} }
         save_path (str, optional): Path to save plots in. Defaults to None.
@@ -188,44 +233,6 @@ def plot_quantiles(quantile_data_dict: dict,
     Returns:
         fig, ax: Figure and axis with plotted data.
     """
-
-    quantile_results = {}
-    max_quantile = 0
-    quantile_boundaries = {}
-    intervals = {}
-    
-    for data_name, d in quantile_data_dict.items():
-        quantile_boundaries[data_name] = []
-        quantile_results[data_name] = {}
-        intervals[data_name] = []
-        
-        for k, v in tqdm(range_dict.items()):
-        
-            boundaries = np.arange(v['start'], v['stop'], v['interval']) / 100
-
-            if min_data_points_per_quantile is not None:
-                # check minimum number of points per quantile
-                boundaries = utils.get_valid_quantiles(data_size=d.size, raw_quantile_locations=boundaries, 
-                                                        min_data_points_per_quantile=min_data_points_per_quantile)
-            
-            quantile_boundaries[data_name].append(boundaries)
-            intervals[data_name].append(v['interval']/100)
-            
-            if len(boundaries) > 0:
-                quantile_results[data_name][k] = np.quantile(d, boundaries)
-                
-                if np.max(boundaries) > max_quantile:
-                    max_quantile = np.max(boundaries)
-
-    # Save raw data
-    if save_path:
-        format_str = '.' + save_path.split('.')[-1]
-        data_save_path = save_path.replace(format_str, '.pkl')
-        
-        with open(data_save_path, 'wb+') as ofh:
-            pickle.dump({'quantile_results': quantile_results,
-                         'quantile_boundary_list': quantile_boundaries,
-                         'interval_list': intervals}, ofh)
     
     if not ax:
         fig, ax = plt.subplots(1,1, figsize=(8,8))
@@ -258,10 +265,11 @@ def plot_quantiles(quantile_data_dict: dict,
             if not marker_handles:
                 marker_handles = marker_hndl_list
         
-    ax.legend(handles=marker_handles, loc='center left')
+    
     ax.plot(np.linspace(0, max_truth_val, 100), np.linspace(0, max_truth_val, 100), 'k--')
     ax.set_xlabel('Observations (mm/hr)')
     ax.set_ylabel('Model (mm/hr)')
+    ax.legend(handles=marker_handles, loc='lower right')
     
     # find largest value
     max_val = 0
@@ -272,7 +280,7 @@ def plot_quantiles(quantile_data_dict: dict,
     
     for k, v in quantile_annotation_dict.items():
         ax.vlines(v, 0, max_val, linestyles='--')
-        ax.text(1.01*v, 0.8* max_val, f'{np.round(float(k)*100, 12)}th')
+        ax.text(1.01*v, 0.95* max_val, f'{np.round(float(k)*100, 12)}th')
     
     if save_path:
         plt.savefig(save_path, format=format_str.replace('.', ''), bbox_inches='tight')
