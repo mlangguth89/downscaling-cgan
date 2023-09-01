@@ -180,7 +180,7 @@ def get_quantile_data(quantile_data_dict: dict,
     """
 
     quantile_results = {}
-    quantile_boundaries = {}
+    quantile_values = {}
     intervals = {}
     
     for data_name, d in quantile_data_dict.items():
@@ -192,7 +192,7 @@ def get_quantile_data(quantile_data_dict: dict,
             
             if len(boundaries) > 0:
                 quantile_results[data_name][k] = np.quantile(d, boundaries)
-            
+                quantile_values[k] = boundaries
 
     # Save raw data
     if save_path:
@@ -201,10 +201,10 @@ def get_quantile_data(quantile_data_dict: dict,
         
         with open(data_save_path, 'wb+') as ofh:
             pickle.dump({'quantile_results': quantile_results,
-                         'quantile_boundary_list': quantile_boundaries,
+                         'quantile_values': quantile_values,
                          'interval_list': intervals}, ofh)
             
-    return quantile_results, quantile_boundaries, intervals
+    return quantile_results, quantile_values, intervals
     
             
             

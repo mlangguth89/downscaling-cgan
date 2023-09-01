@@ -378,31 +378,25 @@ if metric_dict['scatter']:
 
 
 if metric_dict['rank_hist']:
-    
-    print('*********** Plotting Rank histogram **********************') 
-    rng = np.random.default_rng()
-    noise_factor = 1e-6
+    from pysteps.verification.ensscores import rankhist
+    print('*********** Plotting Rank histogram **********************')
+    rank_cgan_array = np.moveaxis(cgan_corrected, -1, 0)
+    num_ensemble_members = 100
+    ranks = rankhist(rank_cgan_array[:num_ensemble_members,:500,...], truth_array[:500,...], normalize=True)
 
-    temp_truth = np.repeat(truth_array[:n_samples, :, : ,None].copy(), samples_gen_array.shape[-1], axis=-1)
-    temp_samples = samples_gen_array[:n_samples, :, :, :].copy()
-
-    temp_truth += rng.random(size=temp_truth.shape, dtype=np.float32)*noise_factor
-    temp_samples += rng.random(size=temp_samples.shape, dtype=np.float32)*noise_factor
-
-    ranks = np.sum(temp_truth > temp_samples, axis=-1)
     with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
             pickle.dump(ranks, ofh)
             
-    n_bins = samples_gen_array.shape[-1]
+    plt.rcParams.update({'font.size': 16})
+    fig, ax = plt.subplots(1,1, figsize=(5,5))
+    ax.bar(np.linspace(0,1,num_ensemble_members+1), ranks, width=1/num_ensemble_members, 
+        color='cadetblue', edgecolor='grey')
+    ax.set_ylim([0,0.08])
+    ax.set_xlim([0-0.5/num_ensemble_members,1+0.5/num_ensemble_members])
 
-    fig, ax = plt.subplots(1,1)
-    (h, _) = np.histogram(ranks.flatten() / ranks.size, bins=n_bins)
-    h = h / h.sum()
-    ax.plot(h)
-    ax.hlines(1/n_bins, 0, n_bins, linestyles='dashed', colors=['r'])
-
-    ax.set_ylim([0, max(h)+0.01])
-    ax.set_title('Rank histogram ')
+    ax.hlines(1/num_ensemble_members, 0-0.5/num_ensemble_members,1+0.5/num_ensemble_members, linestyles='dashed', colors=['k'])
+    ax.set_xlabel('Normalised rank')
+    ax.set_ylabel('Normalised frequency')
     plt.savefig(os.path.join(args.output_dir,f'rank_hist__{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
 
 #################################################################################
@@ -491,7 +485,8 @@ if metric_dict['quantiles']:
                         'GAN + qmap': cgan_corrected[:,:,:,0]}
           
     fig, ax = plt.subplots(1,1)
-    plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, min_data_points_per_quantile=1,
+    plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, 
+                   min_data_points_per_quantile=1,
                    save_path=os.path.join(args.output_dir,f'quantiles_total_{nickname}_{model_number}.pdf'))
 
     # Quantiles for different areas
@@ -789,21 +784,70 @@ if metric_dict['diurnal']:
                          'GAN + qmap': cgan_corrected[:,:,:,0],
                          'IFS + qmap': fcst_corrected
                          }
+    format_lkp = {'cGAN': {'color': 'b'}, 'IFS': {'color': 'r'}, 'Obs (IMERG)': {}}
 
-    metric_fn = lambda x,y: x.mean()
-    fig, ax = plt.subplots(1,1)
-    for name, arr in diurnal_data_dict.items():
-        
-        metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=hours, bin_width=3)
-        ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
-
-    ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
-    ax.set_xticklabels(hour_bin_edges)
-    ax.set_xlabel('Hour')
-    ax.set_ylabel('Average mm/hr')
-    ax.legend()
+    metric_types = {'quantile_999': lambda x,y: np.quantile(x, 0.999),
+                    'quantile_9999': lambda x,y: np.quantile(x, 0.9999),
+                    'quantile_99999': lambda x,y: np.quantile(x, 0.99999),
+                'median': lambda x,y: np.quantile(x, 0.5),
+                'mean': lambda x,y: np.mean(x)}
     
-    plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_{nickname}_{model_number}.pdf'), bbox_inches='tight')
+  
+    plot_data = {}
+    
+    for metric_name in ['mean', 'quantile_999', 'quantile_9999', 'quantile_99999']:
+        
+        metric_fn = metric_types[metric_name]
+        plot_data[metric_name] = {}
+        
+        for name, arr in diurnal_data_dict.items():
+            if name == 'cGAN':
+                cgan_metrics_by_hour = []
+                for n in tqdm(range(ensemble_size)):
+                    metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, 
+                                                                        obs_array=diurnal_data_dict['cGAN'][...,n], 
+                                                                        fcst_array=diurnal_data_dict['cGAN'][...,n], 
+                                                                        hours=hours, 
+                                                                        bin_width=3)
+                    cgan_metrics_by_hour.append(metric_by_hour)
+                cgan_metric_mean = np.mean(np.stack([list(item.values()) for item in cgan_metrics_by_hour]), axis=0)
+                cgan_metric_std = np.std(np.stack([list(item.values()) for item in cgan_metrics_by_hour]), axis=0)
+                cgan_metric_max = np.max(np.stack([list(item.values()) for item in cgan_metrics_by_hour]), axis=0)
+                cgan_metric_min = np.min(np.stack([list(item.values()) for item in cgan_metrics_by_hour]), axis=0)
+
+                plot_data[metric_name][name] = {'cgan_metric_mean': cgan_metric_mean,
+                                    'cgan_metric_std': cgan_metric_std,
+                                    'cgan_metric_max': cgan_metric_max,
+                                    'cgan_metric_min': cgan_metric_min}
+            else:
+                metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=hours, bin_width=3)
+                plot_data[metric_name][name] = metric_by_hour
+                
+    with open(os.path.join(args.output_dir, f'diurnal_cycle_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+        pickle.dump(plot_data, ofh)
+        
+    # # make plots
+    # fig, ax = plt.subplots(1,1)
+    # for name, arr in diurnal_data_dict.items():
+    #     if name == 'cGAN':
+        
+    #         ax.plot(metric_by_hour.keys(), cgan_metric_mean, '-o', label=name, color=format_lkp[name].get('color', 'black'))
+    #         ax.fill_between(metric_by_hour.keys(), cgan_metric_min, cgan_metric_max, alpha=0.4)
+    #     else:
+    #         ax.plot(metric_by_hour.keys(), metric_by_hour.values(), '-o', label=name, color=format_lkp[name].get('color', 'black'))
+            
+    #     metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=hours, bin_width=3)
+    #     ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
+            
+    # fig, ax = plt.subplots(1,1)
+    # ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
+    # ax.set_xticklabels(hour_bin_edges)
+    # ax.set_xlabel('Hour')
+    # ax.set_ylabel('Average mm/hr')
+    # ax.legend()
+
+        
+    # plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_{nickname}_{model_number}.pdf'), bbox_inches='tight')
         
     
     # # Seasonal diurnal cycle
