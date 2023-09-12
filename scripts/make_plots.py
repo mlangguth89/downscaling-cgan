@@ -25,7 +25,7 @@ sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils import read_config
 from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
-from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, plot_csi, border_feature, disputed_border_feature
+from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, get_quantile_data, border_feature, disputed_border_feature
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
@@ -178,43 +178,46 @@ for k, v in special_areas.items():
 ####################################
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
+try:
+    if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_15.pkl')):
+        with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
+            fcst_corrected = pickle.load(ifh)
+    else:
+        with open(os.path.join(base_folder, 'fcst_qmapper_15.pkl'), 'rb') as ifh:
+            fcst_qmapper = pickle.load(ifh) 
+        print('Performing forecast quantile mapping', flush=True)
+        fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+        print('Finished forecast quantile mapping', flush=True)
+        
+        with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
+            pickle.dump(fcst_corrected, ofh)
 
-# try:
-if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_15.pkl')):
-    with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
-        fcst_corrected = pickle.load(ifh)
-else:
-    with open(os.path.join(base_folder, 'fcst_qmapper_15.pkl'), 'rb') as ifh:
-        fcst_qmapper = pickle.load(ifh) 
-    print('Performing forecast quantile mapping', flush=True)
-    fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
-    print('Finished forecast quantile mapping', flush=True)
-    
-    with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
-        pickle.dump(fcst_corrected, ofh)
+    if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_1.pkl')):
+        with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
+            cgan_corrected = pickle.load(ifh)
+    else:
+        with open(os.path.join(base_folder, 'cgan_qmapper_1.pkl'), 'rb') as ifh:
+            cgan_qmapper = pickle.load(ifh)
+        print('Performing cGAN quantile mapping', flush=True)
 
-if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_1.pkl')):
-    with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
-        cgan_corrected = pickle.load(ifh)
-else:
-    with open(os.path.join(base_folder, 'cgan_qmapper_1.pkl'), 'rb') as ifh:
-        cgan_qmapper = pickle.load(ifh)
-    print('Performing cGAN quantile mapping', flush=True)
+        cgan_corrected = np.empty(shape=samples_gen_array.shape)
+        cgan_corrected[...] = np.nan
+        for en in tqdm(range(ensemble_size)):
+            print(en, flush=True)
 
-    cgan_corrected = np.empty(shape=samples_gen_array.shape)
-    cgan_corrected[...] = np.nan
-    for en in tqdm(range(ensemble_size)):
-        print(en, flush=True)
-
-        cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
-    print('Finished cgan quantile mapping', flush=True)
-       
-    with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
-        pickle.dump(cgan_corrected, ofh)
-
+            cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+        print('Finished cgan quantile mapping', flush=True)
+        
+        with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
+            pickle.dump(cgan_corrected, ofh)
+            
+    print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
+except:
+    cgan_corrected = samples_gen_array.copy()
+    fcst_corrected = fcst_array.copy()
 
 # Only keep one ensemble member if we aren't looking at distribution based things
-if not args.rank_hist and not  args.spread_error and not args.crps and not args.examples:
+if not args.rank_hist and not args.spread_error and not args.crps and not args.examples and samples_gen_array.shape[-1] > 1:
     samples_gen_array = samples_gen_array[...,:1]
     cgan_corrected = cgan_corrected[...,:-1]
     
@@ -321,8 +324,8 @@ if metric_dict['examples']:
                     norm=precip_norm,
                     cmap=precip_cmap,
                     origin='lower',
-                    extent=[min(DEFAULT_LONGITUDE_RANGE), max(DEFAULT_LONGITUDE_RANGE), 
-                    min(DEFAULT_LATITUDE_RANGE), max(DEFAULT_LATITUDE_RANGE)],
+                    extent=[min(longitude_range), max(longitude_range), 
+                    min(latitude_range), max(latitude_range)],
                     transform=ccrs.PlateCarree(),
                     alpha=0.8)
             ax.add_feature(border_feature)
@@ -383,9 +386,13 @@ if metric_dict['rank_hist']:
     rank_cgan_array = np.moveaxis(cgan_corrected, -1, 0)
     num_ensemble_members = 100
     ranks = rankhist(rank_cgan_array[:num_ensemble_members,:500,...], truth_array[:500,...], normalize=True)
-
+    ranks_thr = rankhist(rank_cgan_array[:num_ensemble_members,:500,...], truth_array[:500,...], normalize=True, X_min=0.1)
+    
     with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
-            pickle.dump(ranks, ofh)
+        pickle.dump(ranks, ofh)
+        
+    with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}_thr.pkl'), 'wb+') as ofh:
+        pickle.dump(ranks_thr, ofh)
             
     plt.rcParams.update({'font.size': 16})
     fig, ax = plt.subplots(1,1, figsize=(5,5))
@@ -398,6 +405,17 @@ if metric_dict['rank_hist']:
     ax.set_xlabel('Normalised rank')
     ax.set_ylabel('Normalised frequency')
     plt.savefig(os.path.join(args.output_dir,f'rank_hist__{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
+    
+    fig, ax = plt.subplots(1,1, figsize=(5,5))
+    ax.bar(np.linspace(0,1,num_ensemble_members+1), ranks_thr, width=1/num_ensemble_members, 
+        color='cadetblue', edgecolor='grey')
+    ax.set_ylim([0,0.08])
+    ax.set_xlim([0-0.5/num_ensemble_members,1+0.5/num_ensemble_members])
+
+    ax.hlines(1/num_ensemble_members, 0-0.5/num_ensemble_members,1+0.5/num_ensemble_members, linestyles='dashed', colors=['k'])
+    ax.set_xlabel('Normalised rank')
+    ax.set_ylabel('Normalised frequency')
+    plt.savefig(os.path.join(args.output_dir,f'rank_hist_{nickname}_{model_number}_thr.pdf'), format='pdf', bbox_inches='tight')
 
 #################################################################################
 ## Spread error
@@ -483,37 +501,38 @@ if metric_dict['quantiles']:
                         'IFS': fcst_array,
                         'IFS + qmap':fcst_corrected,
                         'GAN + qmap': cgan_corrected[:,:,:,0]}
-          
+    quantile_results, quantile_boundaries, intervals = get_quantile_data(quantile_data_dict)
     fig, ax = plt.subplots(1,1)
-    plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax, 
-                   min_data_points_per_quantile=1,
+    plot_quantiles(quantile_results=quantile_results, 
+                   quantile_data_dict=quantile_data_dict, 
+                   format_lookup=quantile_format_dict, ax=ax,
                    save_path=os.path.join(args.output_dir,f'quantiles_total_{nickname}_{model_number}.pdf'))
 
     # Quantiles for different areas
 
-    percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
-    percentiles=np.concatenate(percentiles_list)
-    quantile_boundaries = [item / 100 for item in percentiles]
+    # percentiles_list= [np.arange(item['start'], item['stop'], item['interval']) for item in range_dict.values()]
+    # percentiles=np.concatenate(percentiles_list)
+    # quantile_boundaries = [item / 100 for item in percentiles]
 
-    fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, len(special_areas)*10))
-    fig.tight_layout(pad=4)
-    for n, (area, area_range) in enumerate(special_areas.items()):
+    # fig, ax = plt.subplots(max(2, len(special_areas)),1, figsize=(10, len(special_areas)*10))
+    # fig.tight_layout(pad=4)
+    # for n, (area, area_range) in enumerate(special_areas.items()):
 
-        lat_range = area_range['lat_index_range']
-        lon_range = area_range['lon_index_range']
+    #     lat_range = area_range['lat_index_range']
+    #     lon_range = area_range['lon_index_range']
         
-        quantile_data_dict = {
-                    'GAN': samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0],
-                    'Obs (IMERG)': truth_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
-                    'IFS': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
-                    'IFS + qmap': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
-                    'GAN + qmap': cgan_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0]}
+    #     quantile_data_dict = {
+    #                 'GAN': samples_gen_array[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0],
+    #                 'Obs (IMERG)': truth_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+    #                 'IFS': fcst_array[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+    #                 'IFS + qmap': fcst_corrected[:,lat_range[0]:lat_range[1], lon_range[0]:lon_range[1]],
+    #                 'GAN + qmap': cgan_corrected[:, lat_range[0]:lat_range[1], lon_range[0]:lon_range[1], 0]}
                
-        _, ax[n] = plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax[n], min_data_points_per_quantile=1)
+    #     _, ax[n] = plot_quantiles(quantile_data_dict=quantile_data_dict, format_lookup=quantile_format_dict, ax=ax[n], min_data_points_per_quantile=1)
 
         
-    fig.tight_layout(pad=2.0)
-    plt.savefig(os.path.join(args.output_dir,f'quantiles_area_{nickname}_{model_number}.pdf'), format='pdf')
+    # fig.tight_layout(pad=2.0)
+    # plt.savefig(os.path.join(args.output_dir,f'quantiles_area_{nickname}_{model_number}.pdf'), format='pdf')
 
 
 
@@ -700,14 +719,18 @@ if metric_dict['fss']:
                         'ifs': fcst_corrected[:n_samples, :, :]}
 
     # get quantiles
-
-    hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
+    quantile_thresholds = [0.9, 0.99, 0.999, 0.9999, 0.99999]
+    hourly_thresholds = [np.quantile(truth_array, q) for q in quantile_thresholds]
+    
+    # hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
 
     fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
 
     # Save results
     with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
-        pickle.dump(fss_results, ofh)
+        pickle.dump({'quantile_thresholds': quantile_thresholds,
+                     'results': fss_results}, 
+                    ofh)
             
     # plot_fss_scores(fss_results=fss_results, 
     #                 output_folder=args.output_dir,
@@ -781,8 +804,12 @@ if metric_dict['diurnal']:
 
     
     diurnal_data_dict = {'Obs (IMERG)': truth_array,
-                         'GAN + qmap': cgan_corrected[:,:,:,0],
-                         'IFS + qmap': fcst_corrected
+                         'cGAN': cgan_corrected[:,:,:,0],
+                         'IFS': fcst_corrected
+                         }
+    ensemble_diurnal_data_dict = {'Obs (IMERG)': truth_array,
+                         'cGAN': cgan_corrected,
+                         'IFS': fcst_corrected
                          }
     format_lkp = {'cGAN': {'color': 'b'}, 'IFS': {'color': 'r'}, 'Obs (IMERG)': {}}
 
@@ -800,13 +827,13 @@ if metric_dict['diurnal']:
         metric_fn = metric_types[metric_name]
         plot_data[metric_name] = {}
         
-        for name, arr in diurnal_data_dict.items():
+        for name, arr in ensemble_diurnal_data_dict.items():
             if name == 'cGAN':
                 cgan_metrics_by_hour = []
-                for n in tqdm(range(ensemble_size)):
+                for n in tqdm(range(arr.shape[-1])):
                     metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, 
-                                                                        obs_array=diurnal_data_dict['cGAN'][...,n], 
-                                                                        fcst_array=diurnal_data_dict['cGAN'][...,n], 
+                                                                        obs_array=arr[:,:,:,n], 
+                                                                        fcst_array=arr[:,:,:,n], 
                                                                         hours=hours, 
                                                                         bin_width=3)
                     cgan_metrics_by_hour.append(metric_by_hour)
@@ -826,28 +853,35 @@ if metric_dict['diurnal']:
     with open(os.path.join(args.output_dir, f'diurnal_cycle_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(plot_data, ofh)
         
-    # # make plots
-    # fig, ax = plt.subplots(1,1)
-    # for name, arr in diurnal_data_dict.items():
-    #     if name == 'cGAN':
-        
-    #         ax.plot(metric_by_hour.keys(), cgan_metric_mean, '-o', label=name, color=format_lkp[name].get('color', 'black'))
-    #         ax.fill_between(metric_by_hour.keys(), cgan_metric_min, cgan_metric_max, alpha=0.4)
-    #     else:
-    #         ax.plot(metric_by_hour.keys(), metric_by_hour.values(), '-o', label=name, color=format_lkp[name].get('color', 'black'))
-            
-    #     metric_by_hour, hour_bin_edges = get_metric_by_hour(metric_fn, obs_array=arr, fcst_array=arr, hours=hours, bin_width=3)
-    #     ax.plot(metric_by_hour.keys(), metric_by_hour.values(), label=name)
-            
-    # fig, ax = plt.subplots(1,1)
-    # ax.set_xticks(np.array(list(metric_by_hour.keys())) - .5)
-    # ax.set_xticklabels(hour_bin_edges)
-    # ax.set_xlabel('Hour')
-    # ax.set_ylabel('Average mm/hr')
-    # ax.legend()
+    format_lkp = {'cGAN': {'color': 'b', 'label': 'cGAN-qm'}, 'IFS': {'color': 'r', 'label': 'IFS-qm'}, 'Obs (IMERG)': {'label': 'IMERG'}}
+    plt.rcParams.update({'font.size': 15})
 
-        
-    # plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_{nickname}_{model_number}.pdf'), bbox_inches='tight')
+    x_vals = list(plot_data['mean']['IFS'].keys())
+    bin_width = 24 / len(x_vals)
+    hour_bin_edges = np.arange(0, 24, bin_width)
+
+    for metric_name, diurnal_dict in plot_data.items():
+        fig, ax = plt.subplots(1,1, figsize=(7,6))
+
+        for name, arr in diurnal_dict.items():
+            label=format_lkp[name]['label']
+            if name == 'cGAN':
+            
+                ax.plot(x_vals, arr['cgan_metric_mean'], '-o', label=label, color=format_lkp[name].get('color', 'black'))
+                ax.fill_between(x_vals, arr['cgan_metric_min'], arr['cgan_metric_max'], alpha=0.4)
+            else:
+                ax.plot(x_vals, arr.values(), '-o', label=label, color=format_lkp[name].get('color', 'black'))
+            
+        max_val = np.max(diurnal_dict['IFS'])
+        ax.set_xticks(np.array(x_vals) - .5)
+        ax.set_xticklabels([int(hr) for hr in hour_bin_edges])
+        ax.set_xlabel('Hour')
+        ax.set_ylabel('Average mm/hr')
+        ax.set_ylim([0, None])
+        ax.legend(loc='lower right')
+
+        plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_{metric_name}_{nickname}_{model_number}.pdf'), bbox_inches='tight')
+
         
     
     # # Seasonal diurnal cycle
@@ -927,49 +961,59 @@ if metric_dict['diurnal']:
     import xarray as xr
     from datetime import datetime
     from dsrnngan.utils.utils import get_local_hour
-    from scipy.ndimage import uniform_filter
+    from scipy.ndimage import uniform_filter, uniform_filter1d
     import xarray as xr
 
+    special_areas = {'All': {'lat_range': [min(latitude_range), max(latitude_range)], 'lon_range': [min(longitude_range), max(longitude_range)], 'abbrv': 'ALL'},
+                 'Lake Victoria': {'lat_range': [-3.05,0.95], 'lon_range': [31.55, 34.55], 'abbrv': 'LV'},
+                 'Somalia': {'lat_range': [-1.05,4.05], 'lon_range': [40.0, 44.05],  'abbrv': 'S'},
+                 'S Sudan / S Ethiopia': {'lat_range': [4.35, 6.90], 'lon_range': [33.65, 36.9],  'abbrv': 'SSE'},
+                 'Coast': {'lat_range': [-11.05, -4.70 ], 'lon_range': [38.0,39.0],  'abbrv': 'C'},
+                 'West LV Basin': {'lat_range': [-4.70,0.30], 'lon_range': [29.5,31.3],  'abbrv': 'WLVB'},
+                 'East LV Basin': {'lat_range': [-3.15, 1.55], 'lon_range': [34.5,36.0],  'abbrv': 'ELVB'},
+           'NW Ethiopian Highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30], 'abbrv': 'NWEH'}
+
+    }
+
+
+    for k, v in special_areas.items():
+        lat_vals = [lt for lt in lat_range_list if v['lat_range'][0] <= lt <= v['lat_range'][1]]
+        lon_vals = [ln for ln in lon_range_list if v['lon_range'][0] <= ln <= v['lon_range'][1]]
+        
+        if lat_vals and lon_vals:
+    
+            special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
+            special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
+    
+    area = 'All'
+    area_range = special_areas[area]
+    lat_range_ends = area_range['lat_range']
+    lon_range_ends = area_range['lon_range']
+    lat_range_index = [area_range['lat_index_range'][0], area_range['lat_index_range'][-1] +1]
+    lon_range_index = [area_range['lon_index_range'][0], area_range['lon_index_range'][-1] +1]
+    lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.001, 0.1)
+    lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.001, 0.1)
+
+
     hour_bin_edges = np.arange(0, 24, 1)
-    filter_size = 41 # roughly the size of lake victoria region
+    filter_size = 31 # roughly the size of lake victoria region
     digitized_hours = np.digitize(hours, bins=hour_bin_edges)
 
     n_samples = truth_array.shape[0]
-    raw_diurnal_data_dict = {'Obs (IMERG)': truth_array,
-                        'cGAN + qmap': cgan_corrected[:n_samples,:,:,0],
-                        'IFS + qmap': fcst_corrected[:n_samples, :,:]}
+    raw_diurnal_data_dict = {'IMERG': truth_array[:,lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1],
+                        'cGAN-qm':cgan_corrected[:,lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1, 0],
+                        'IFS-qm': fcst_corrected[:,lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]}
 
-    smoothed_diurnal_data_dict = {}
-    for k, v in raw_diurnal_data_dict.items():
-        smoothed_diurnal_data_dict[k] = np.empty(v.shape)
-        for n in range(v.shape[0]):
-            smoothed_diurnal_data_dict[k][n,...] = uniform_filter(v[n,...].copy(), size=filter_size, mode='reflect')
-
-    peak_dict_smoothed = {}
     peak_dict = {}
 
     for name in raw_diurnal_data_dict:
-        smoothed_da = xr.DataArray(
-            data=smoothed_diurnal_data_dict[name],
-            dims=["hour_range", "lat", "lon"],
-            coords=dict(
-                lon=(longitude_range),
-                lat=(latitude_range),
-                hour_range=digitized_hours,
-            ),
-            attrs=dict(
-                description="Precipitation.",
-                units="mm/hr",
-            ),
-        )
-        
         
         da = xr.DataArray(
             data=raw_diurnal_data_dict[name],
             dims=["hour_range", "lat", "lon"],
             coords=dict(
-                lon=(longitude_range),
-                lat=(latitude_range),
+                lon=(lon_range),
+                lat=(lat_range),
                 hour_range=digitized_hours,
             ),
             attrs=dict(
@@ -979,10 +1023,13 @@ if metric_dict['diurnal']:
         )
 
 
-        peak_dict_smoothed[name] = np.argmax(smoothed_da.groupby('hour_range').mean().values, axis=0)
-        peak_dict[name] = np.argmax(da.groupby('hour_range').mean().values, axis=0)
+        smoothed_vals = uniform_filter1d(da.groupby('hour_range').mean().values, 3, axis=0, mode='wrap')
+        peak_dict[name] = np.argmax(smoothed_vals, axis=0)
 
-    from dsrnngan.evaluation.plots import get_geoaxes
+    from dsrnngan.evaluation import plots
+    from matplotlib.pyplot import cm
+    from matplotlib import colors
+    plt.rcParams.update({'font.size': 9})
 
     n_cols = len(peak_dict)
     n_rows = 1
@@ -994,31 +1041,42 @@ if metric_dict['diurnal']:
 
     ax = fig.add_subplot(gs[0, 0], projection = ccrs.PlateCarree())
 
-    plot_contourf(ax=ax, title='IMERG',data=peak_dict_smoothed['Obs (IMERG)'], lon_range=longitude_range, lat_range=latitude_range, cmap='twilight_shifted', 
-                value_range=np.arange(0, max(digitized_hours),3))
+    filter_size=1
+
 
     n=1
-    for name, peak_data in peak_dict_smoothed.items():
-        if name != 'Obs (IMERG)':
+    for name, peak_data in peak_dict.items():
+        if name != 'IMERG':
             ax = fig.add_subplot(gs[0, n], projection = ccrs.PlateCarree())
+            smoothed_peak_data = uniform_filter(peak_data.copy(), size=filter_size, mode='reflect')
+            
+            im1 = ax.imshow(np.flip(smoothed_peak_data, axis=0), extent = [ min(lon_range), max(lon_range), min(lat_range), max(lat_range)], 
+                    transform=ccrs.PlateCarree(), cmap='twilight_shifted', vmin=0, vmax=23)
 
-            im1 = plot_contourf(ax=ax, title=name, 
-                                data=peak_data, 
-                                lon_range=longitude_range, 
-                                lat_range=latitude_range,
-                                cmap='twilight_shifted', value_range=np.arange(0, max(digitized_hours),3))
             
             n+=1
+        else:
+            smoothed_peak_data = uniform_filter(peak_data.copy(), size=filter_size, mode='reflect')
 
+            name = 'IMERG'
+            im_imerg = ax.imshow(np.flip(smoothed_peak_data, axis=0), extent = [ min(lon_range), max(lon_range), min(lat_range), max(lat_range)], 
+                    transform=ccrs.PlateCarree(), cmap='twilight_shifted', vmin=0, vmax=23)
+        print(name, peak_data.max())
+        ax.add_feature(plots.border_feature)
+        ax.add_feature(plots.disputed_border_feature)
+        ax.add_feature(plots.lake_feature, alpha=0.4)
+        ax.coastlines(resolution='10m', color='black', linewidth=0.4)
+        ax.set_title(name)
             
     cbar_ax = fig.add_subplot(gs[-1, 1])
-    cb = fig.colorbar(im1, cax=cbar_ax, orientation='horizontal', shrink = 0.2, aspect=10, ticks=range(len(hour_bin_edges)),
-                    )
+    # cb = fig.colorbar(cm.ScalarMappable(norm=None, cmap=colors.Colormap('twilight_shifted')), cax=cbar_ax, orientation='horizontal', shrink = 0.2, aspect=10, ticks=range(len(hour_bin_edges)))
+    cb = fig.colorbar(im_imerg, cax=cbar_ax, orientation='horizontal', shrink = 0.2, aspect=10, ticks=range(len(hour_bin_edges)),
+                        )
     cb.ax.set_xticks(range(0,24,3))
     cb.ax.set_xticklabels(range(0,24,3))
     cb.ax.set_xlabel("Peak rainfall hour (EAT)", loc='center')
-
     plt.savefig(os.path.join(args.output_dir,f'diurnal_cycle_map_{nickname}_{model_number}.pdf'), format='pdf')
+    
 #################################################################################
 
 if metric_dict.get('confusion_matrix'):
