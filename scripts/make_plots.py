@@ -385,14 +385,41 @@ if metric_dict['rank_hist']:
     print('*********** Plotting Rank histogram **********************')
     rank_cgan_array = np.moveaxis(cgan_corrected, -1, 0)
     num_ensemble_members = 100
-    ranks = rankhist(rank_cgan_array[:num_ensemble_members,:500,...], truth_array[:500,...], normalize=True)
-    ranks_thr = rankhist(rank_cgan_array[:num_ensemble_members,:500,...], truth_array[:500,...], normalize=True, X_min=0.1)
+    n_samples = 500
+    ranks = rankhist(rank_cgan_array[:num_ensemble_members,:n_samples,...], truth_array[:n_samples,...], normalize=True)
+    
+    # Rank histogram above threshold
+    thr = 0.1
+    rank_cgan_array_above_thr = []
+    for en in range(cgan_corrected.shape[-1]):
+        rank_cgan_array_above_thr.append(cgan_corrected[:n_samples,:,:,en][ensmean_array[:n_samples,:,:] > thr])
+    rank_cgan_array_above_thr = np.stack(rank_cgan_array_above_thr, axis=0)
+    rank_cgan_array_above_thr = np.expand_dims(rank_cgan_array_above_thr, -1)
+    
+    rank_obs_array_above_thr = np.expand_dims(truth_array[:n_samples,:,:][ensmean_array[:n_samples,:,:] > thr], axis=-1)
+    
+    ranks_above_thr = rankhist(rank_cgan_array_above_thr, rank_obs_array_above_thr, normalize=True)
+
+
+    # Rank histogram below threshold
+    rank_cgan_array_below_thr = []
+    for en in range(cgan_corrected.shape[-1]):
+        rank_cgan_array_below_thr.append(cgan_corrected[:n_samples,:,:,en][ensmean_array[:n_samples,:,:] <= thr])
+    rank_cgan_array_below_thr = np.stack(rank_cgan_array_below_thr, axis=0)
+    rank_cgan_array_below_thr = np.expand_dims(rank_cgan_array_below_thr, -1)
+
+    rank_obs_array_below_thr = np.expand_dims(truth_array[:n_samples,:,:][ensmean_array[:n_samples,:,:] <= thr], axis=-1)
+
+    ranks_below_thr = rankhist(rank_cgan_array_below_thr, rank_obs_array_below_thr, normalize=True)
     
     with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
         pickle.dump(ranks, ofh)
         
-    with open(os.path.join(args.output_dir, f'ranks_{nickname}_{model_number}_thr.pkl'), 'wb+') as ofh:
-        pickle.dump(ranks_thr, ofh)
+    with open(os.path.join(args.output_dir, f'ranks_above_thr_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+        pickle.dump(ranks_above_thr, ofh)
+    
+    with open(os.path.join(args.output_dir, f'ranks_below_thr_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
+        pickle.dump(ranks_below_thr, ofh)
             
     plt.rcParams.update({'font.size': 16})
     fig, ax = plt.subplots(1,1, figsize=(5,5))
@@ -406,17 +433,6 @@ if metric_dict['rank_hist']:
     ax.set_ylabel('Normalised frequency')
     plt.savefig(os.path.join(args.output_dir,f'rank_hist__{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
     
-    fig, ax = plt.subplots(1,1, figsize=(5,5))
-    ax.bar(np.linspace(0,1,num_ensemble_members+1), ranks_thr, width=1/num_ensemble_members, 
-        color='cadetblue', edgecolor='grey')
-    ax.set_ylim([0,0.08])
-    ax.set_xlim([0-0.5/num_ensemble_members,1+0.5/num_ensemble_members])
-
-    ax.hlines(1/num_ensemble_members, 0-0.5/num_ensemble_members,1+0.5/num_ensemble_members, linestyles='dashed', colors=['k'])
-    ax.set_xlabel('Normalised rank')
-    ax.set_ylabel('Normalised frequency')
-    plt.savefig(os.path.join(args.output_dir,f'rank_hist_{nickname}_{model_number}_thr.pdf'), format='pdf', bbox_inches='tight')
-
 #################################################################################
 ## Spread error
 
