@@ -473,8 +473,8 @@ def write_data(year_month_ranges: list,
                         if data_config.class_bin_boundaries is not None:
                                                     
                             threshold = 0.1
-                            if data_config.normalise_outputs:
-                                rainy_pixel_fraction = (denormalise(observations) > threshold).mean()
+                            if data_config.output_normalisation:
+                                rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
                             else:
                                 rainy_pixel_fraction = (observations > threshold).mean()
 

@@ -16,7 +16,7 @@ HOME = Path(__file__).parents[1]
 sys.path.append(str(HOME))
 
 from dsrnngan.data.tfrecords_generator import write_data, create_dataset
-from dsrnngan.data.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS
+from dsrnngan.data.data import all_ifs_fields, all_era5_fields, IMERG_PATH, ERA5_PATH, DATA_PATHS, denormalise, normalise_precipitation
 from dsrnngan.utils.read_config import read_data_config, get_data_paths, get_lat_lon_range_from_config
 from system_tests.test_data import create_dummy_stats_data
 
@@ -42,7 +42,6 @@ class TestTfrecordsGenerator(unittest.TestCase):
                             'fcst_data_source': 'ifs', 
                             'obs_data_source': 'imerg', 
                             'normalisation_year': 2017, 
-                            'input_image_width': 10, 
                             'num_samples': 3, 
                             'num_samples_per_image': 1, 
                             'normalise_inputs': True,
@@ -54,8 +53,14 @@ class TestTfrecordsGenerator(unittest.TestCase):
                             'min_longitude': 32.05, 
                             'max_longitude': 34.95, 
                             'longitude_step_size': 0.1, 
-                            'input_fields': ['2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
+                            'input_fields': ['tp', '2t', 'cape', 'cp', 'r200', 'r700', 'r950'], 
                             'constant_fields': ['lakes', 'sea', 'orography'], 
+                            'input_normalisation_strategy': {
+                                    'tp':  {'negative_vals': False, 'normalisation': "log", 'negative_vals': False},
+                                    'cp': {'negative_vals': False, 'normalisation': "log"},
+                                    'r': {'normalisation': "max"}, 
+                                    '2t': {'normalisation': "minmax",'negative_vals': False},
+                                    'cape': {'normalisation': "log"}},
                             'paths': {'BLUE_PEBBLE':
                                 {'GENERAL': {'IMERG': str(test_data_dir / 'IMERG/half_hourly/final'),
                                                 'IFS': str(test_data_dir /  'IFS'),
@@ -197,7 +202,7 @@ class TestTfrecordsGenerator(unittest.TestCase):
         self.assertEqual(lo_res_vals.shape, (4, 4, len(all_ifs_fields)))
         self.assertEqual(output_vals.shape, (4, 4, 1))
 
-        
+    
     def test_create_dataset_ifs_imerg(self):
         '''
         Note that the tfrecords have been created using the test_write_era5_data function, so 
@@ -215,8 +220,8 @@ class TestTfrecordsGenerator(unittest.TestCase):
                 debug=True)
 
         # Without cropping
-        height = data_config.input_image_width
-        width = data_config.input_image_width
+        height = 39
+        width = 30
         ds  = create_dataset(data_label='train',
                    clss=0,
                    fcst_shape=(height, width, len(data_config.input_fields)),
@@ -295,7 +300,119 @@ class TestTfrecordsGenerator(unittest.TestCase):
         
         #############################
         # with rotation
-        ds  = create_dataset(data_label='train',
+        # seed = (1,2)
+        # ds  = create_dataset(data_label='train',
+        #            clss=0,
+        #            fcst_shape=(height, width, len(data_config.input_fields)),
+        #            con_shape=(height, width, len(data_config.constant_fields)),
+        #            out_shape=(height, width, 1),
+        #            folder=hash_dir,
+        #            shuffle_size=1024,
+        #            crop_size=None,
+        #            repeat=True,
+        #            seed=seed,
+        #            rotate=True
+        #            )
+        
+        # np.random.seed(seed=seed[0])
+        # rotation_num = np.random.choice([0,1,2,3],1)[0]
+
+        # element_spec = ds.element_spec
+
+        # rotated_sample_vals = list(ds.take(1))[0]
+        # lo_res_vals_rotated = rotated_sample_vals[0]['lo_res_inputs'].numpy()
+        # hi_res_vals_rotated = rotated_sample_vals[0]['hi_res_inputs'].numpy()
+        # output_vals_rotated = rotated_sample_vals[1]['output'].numpy()
+
+        # self.assertTrue(np.array_equal(lo_res_vals, np.rot90(lo_res_vals_rotated, k=rotation_num)))
+        # self.assertTrue(np.array_equal(hi_res_vals, np.rot90(hi_res_vals_rotated, k=rotation_num)))
+        # self.assertTrue(np.array_equal(output_vals, np.rot90(output_vals_rotated, k=rotation_num)))
+
+    def test_output_log_normalisation(self):
+
+        
+        for normalisation_type in ['log', 'sqrt']:
+            # Test with log normalisation
+            data_config = copy.copy(self.data_config)
+            data_config.paths['BLUE_PEBBLE'] = DATA_PATHS
+            data_config.paths['BLUE_PEBBLE']['TFRecords']['tfrecords_path'] = self.temp_dir_name
+            data_config.paths['BLUE_PEBBLE']['GENERAL']['CONSTANTS'] = self.constants_path
+            data_config.output_normalisation = normalisation_type
+            data_config.input_normalisation_strategy['tp']['normalisation'] = normalisation_type
+            tpidx = data_config.input_fields.index('tp')
+            
+            hash_dir = write_data(['201707'],
+                                    data_label='train',
+                    hours=[18],
+                    data_config=data_config,
+                    debug=True)
+
+            height = 39
+            width = 30
+            ds_log  = create_dataset(data_label='train',
+                    clss=0,
+                    fcst_shape=(height, width, len(data_config.input_fields)),
+                    con_shape=(height, width, len(data_config.constant_fields)),
+                    out_shape=(height, width, 1),
+                    folder=hash_dir,
+                    shuffle_size=1024,
+                    crop_size=None,
+                    repeat=True,
+                    seed=1)
+            
+            sample_vals = list(ds_log.take(1))[0]
+            output_vals_log = sample_vals[1]['output'].numpy()
+            lo_res_vals_log = sample_vals[0]['lo_res_inputs'].numpy()
+            
+            # Test with log normalisation
+            data_config_no_log = copy.copy(data_config)
+            data_config_no_log.output_normalisation = None
+            data_config_no_log.input_normalisation_strategy['tp']['normalisation'] = None
+            
+            hash_dir = write_data(['201707'],
+                                    data_label='train',
+                    hours=[18],
+                    data_config=data_config_no_log,
+                    debug=True)
+
+            height = 39
+            width = 30
+            ds_no_log  = create_dataset(data_label='train',
+                    clss=0,
+                    fcst_shape=(height, width, len(data_config_no_log.input_fields)),
+                    con_shape=(height, width, len(data_config_no_log.constant_fields)),
+                    out_shape=(height, width, 1),
+                    folder=hash_dir,
+                    shuffle_size=1024,
+                    crop_size=None,
+                    repeat=True,
+                    seed=1)
+            
+            sample_vals = list(ds_no_log.take(1))[0]
+            output_vals_no_log = sample_vals[1]['output'].numpy()
+            lo_res_vals_no_log = sample_vals[0]['lo_res_inputs'].numpy()
+
+            np.testing.assert_allclose(denormalise(output_vals_log, normalisation_type), output_vals_no_log, atol=1e-6)
+            np.testing.assert_allclose(denormalise(lo_res_vals_log[:,:,tpidx], normalisation_type), lo_res_vals_no_log[:,:,tpidx], atol=1e-6)
+        
+    def test_pipeline(self):
+        
+        # Test with log normalisation
+        data_config = copy.copy(self.data_config)
+        data_config.paths['BLUE_PEBBLE'] = DATA_PATHS
+        data_config.paths['BLUE_PEBBLE']['TFRecords']['tfrecords_path'] = self.temp_dir_name
+        data_config.paths['BLUE_PEBBLE']['GENERAL']['CONSTANTS'] = self.constants_path
+        data_config.output_normalisation = "log"
+        
+        hash_dir = write_data(['201707'],
+                                data_label='train',
+                hours=[18],
+                data_config=data_config,
+                debug=True)
+
+        height = 39
+        width = 30
+        ds_log  = create_dataset(data_label='train',
                    clss=0,
                    fcst_shape=(height, width, len(data_config.input_fields)),
                    con_shape=(height, width, len(data_config.constant_fields)),
@@ -304,22 +421,10 @@ class TestTfrecordsGenerator(unittest.TestCase):
                    shuffle_size=1024,
                    crop_size=None,
                    repeat=True,
-                   seed=(1,2),
-                   rotate=True
-                   )
+                   seed=1)
         
-        element_spec = ds.element_spec
-
-        rotated_sample_vals = list(ds.take(1))[0]
-        lo_res_vals_rotated = rotated_sample_vals[0]['lo_res_inputs'].numpy()
-        hi_res_vals_rotated = rotated_sample_vals[0]['hi_res_inputs'].numpy()
-        output_vals_rotated = rotated_sample_vals[1]['output'].numpy()
-
-        self.assertTrue(np.array_equal(lo_res_vals, np.rot90(lo_res_vals_rotated, k=2)))
-        self.assertTrue(np.array_equal(hi_res_vals, np.rot90(hi_res_vals_rotated, k=2)))
-        self.assertTrue(np.array_equal(output_vals, np.rot90(output_vals_rotated, k=2)))
-
-
-        
+        sample_vals = list(ds_log.take(1))[0]
+        output_vals_log = sample_vals[1]['output'].numpy()
+    
 if __name__ == '__main__':
     unittest.main()

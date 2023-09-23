@@ -1093,7 +1093,7 @@ def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_
     ds.close()
 
     if ifield == 'tp' and log_precip == True:
-        y = log_plus_1(y)
+        y = normalise_precipitation(y, normalisation_type='log')
 
     ds.close()
 

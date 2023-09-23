@@ -242,7 +242,7 @@ def main(restart: bool,
                     'gpu_devices': tf_config.list_physical_devices('GPU')
                 }
             )
-        
+                
 
             logger.debug("Checkpoint {}/{}".format(checkpoint, num_checkpoints))
 
