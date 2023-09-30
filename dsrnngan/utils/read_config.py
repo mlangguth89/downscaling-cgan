@@ -82,6 +82,13 @@ def read_data_config(config_filename: str='data_config.yaml', config_folder: str
     data_config_ns.input_channels = len(data_config_ns.input_fields)
     data_config_ns.class_bin_boundaries = data_config_dict.get('class_bin_boundaries')
     
+    if data_config_ns.class_bin_boundaries is not None:
+        if 0 not in data_config_ns.class_bin_boundaries:
+            data_config_ns.class_bin_boundaries = [0] + data_config_ns.class_bin_boundaries
+            
+        if len(data_config_ns.class_bin_boundaries) != data_config_ns.num_classes:
+            raise ValueError('Class bin boundary lenght not consistent with number of classes')
+    
     # For backwards compatability
     if isinstance(data_config_ns.constant_fields, int):
         data_config_ns.constant_fields = ['orography', 'lsm']

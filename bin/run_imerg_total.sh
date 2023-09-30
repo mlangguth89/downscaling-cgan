@@ -5,8 +5,8 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=monthly_rainfall
 #SBATCH --partition short
-#SBATCH --array=2016
-#SBATCH --output=logs/slurm-%A_%a.out
+#SBATCH --array=2009
+#SBATCH --output=logs/imerg-total-%A_%a.out
 
 source ~/.bashrc
 echo Running on host `hostname`

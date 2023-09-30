@@ -4,8 +4,8 @@
 #SBATCH --mem=150gb
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=qmap-cv
-#SBATCH --partition short
-#SBATCH --output=logs/slurm-%A.out
+#SBATCH --partition compute
+#SBATCH --output=logs/qmap-cv-%A.out
 
 source ~/.bashrc
 echo Running on host `hostname`
@@ -25,4 +25,3 @@ srun python -m scripts.qmap_cv
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
- 

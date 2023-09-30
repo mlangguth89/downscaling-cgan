@@ -395,14 +395,15 @@ class TestTfrecordsGenerator(unittest.TestCase):
             np.testing.assert_allclose(denormalise(output_vals_log, normalisation_type), output_vals_no_log, atol=1e-6)
             np.testing.assert_allclose(denormalise(lo_res_vals_log[:,:,tpidx], normalisation_type), lo_res_vals_no_log[:,:,tpidx], atol=1e-6)
         
-    def test_pipeline(self):
+    def test_class_bin_boundaries(self):
         
         # Test with log normalisation
         data_config = copy.copy(self.data_config)
         data_config.paths['BLUE_PEBBLE'] = DATA_PATHS
         data_config.paths['BLUE_PEBBLE']['TFRecords']['tfrecords_path'] = self.temp_dir_name
         data_config.paths['BLUE_PEBBLE']['GENERAL']['CONSTANTS'] = self.constants_path
-        data_config.output_normalisation = "log"
+        data_config.class_bin_boundaries = [0.05, 0.075, 0.1, 0.15]
+        data_config.num_classes = 5
         
         hash_dir = write_data(['201707'],
                                 data_label='train',
@@ -410,21 +411,6 @@ class TestTfrecordsGenerator(unittest.TestCase):
                 data_config=data_config,
                 debug=True)
 
-        height = 39
-        width = 30
-        ds_log  = create_dataset(data_label='train',
-                   clss=0,
-                   fcst_shape=(height, width, len(data_config.input_fields)),
-                   con_shape=(height, width, len(data_config.constant_fields)),
-                   out_shape=(height, width, 1),
-                   folder=hash_dir,
-                   shuffle_size=1024,
-                   crop_size=None,
-                   repeat=True,
-                   seed=1)
-        
-        sample_vals = list(ds_log.take(1))[0]
-        output_vals_log = sample_vals[1]['output'].numpy()
     
 if __name__ == '__main__':
     unittest.main()

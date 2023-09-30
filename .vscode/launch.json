@@ -5,15 +5,58 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: imerg_download_official",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.imerg_download_official",
+            "justMyCode": true,
+            "args": [
+                "2021-01-01"
+            ]
+        },
+        {
+            "name": "Python: Download IMERG",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.download_imerg",
+            "justMyCode": true,
+            "args": [
+                "--year",
+                "2021",
+                "--month",
+                "10",
+                "--output-folder",
+                "/user/home/uz22147/repos/downscaling-cgan"
+            ]
+        },
+        {
+            "name": "Python: Quantile map IFS input",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.quantile_map_ifs_input",
+            "justMyCode": true,
+            "args": [
+                "--model-type",
+                "cropped",
+                "--year",
+                "2016",
+                "--month",
+                "3",
+                "--debug"
+            ]
+        },
+        {
             "name": "Python: Permutation Feature Importance",
             "type": "python",
             "request": "launch",
             "module": "scripts.permutation_feature_importance",
             "justMyCode": true,
             "args": [
-                "--model-type",
-                "cropped_v2",
-                "--debug"
+                "--log-folder",
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20", 
+                "--best-model-number" ,"217600", 
+                "--num-extra-models", "0", "--debug"
+                
             ]
         },
         {
@@ -25,11 +68,14 @@
             "args": [
                 "--num-lat-lon-chunks",
                 "1",
-                "--model-type",
-                "cropped",
+                "--log-folder", 
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs", 
+                "--model-number", 
+                "217600",
                 "--output-folder",
                 "plots/quantile_map_plots",
-                "--plot"
+                "--plot",
+                "--debug"
             ]
         },
         {
@@ -43,8 +89,12 @@
             "name": "Python: setupdata",
             "type": "python",
             "request": "launch",
-            "module": "dsrnngan.setupdata",
-            "justMyCode": true
+            "module": "dsrnngan.data.setupdata",
+            "justMyCode": true,
+            "args": ["--output-dir", 
+            "/user/work/uz22147/quantile_training_data", 
+            "--model-folder", 
+            "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs"]
         },
         {
             "name": "Python: imerg monthly",
@@ -75,9 +125,15 @@
             "module": "scripts.make_plots",
             "justMyCode": true,
             "args": [
-                "--model-type",
-                "cropped_4000",
-                "--debug"
+                "--log-folder",
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
+                "--model-number",
+                "217600",
+                "--output-dir",
+                "/user/home/uz22147/repos/downscaling-cgan/plots",
+                "--diurnal",
+                "--nickname",
+                "cl100-medium-nologs"
             ]
         },
         {
@@ -92,7 +148,7 @@
             "type": "python",
             "request": "launch",
             "module": "scripts.unpack_ifs_data",
-            "justMyCode": true,
+            "justMyCode": false,
             "args": [
                 "--years",
                 "2018",
@@ -104,14 +160,13 @@
             "name": "Python: data.py",
             "type": "python",
             "request": "launch",
-            "module": "dsrnngan.data",
-            "justMyCode": true,
+            "module": "dsrnngan.data.data",
+            "justMyCode": false,
             "args": [
                 "--years",
-                "2011",
+                "2021",
                 "--months",
-                "10",
-                "12",
+                "2",
                 "--obs-data-source",
                 "imerg",
                 "--output-dir",
@@ -123,7 +178,9 @@
                 "--min-longitude",
                 "22",
                 "--max-longitude",
-                "50"
+                "50",
+                "--input-obs-folder",
+                "/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG_NEW/half_hourly/final"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
@@ -135,15 +192,17 @@
             "justMyCode": true,
             "args": [
                 "--num-samples",
-                "230400",
-                "--num-images",
                 "5",
+                "--num-images",
+                "2",
                 "--model-config-path",
-                "/user/home/uz22147/repos/downscaling-cgan/config/model_config_medium_batch16.yaml",
+                "/user/home/uz22147/repos/downscaling-cgan/config/model_config_small_rotate.yaml",
                 "--records-folder",
-                "/user/work/uz22147/tfrecords/d2032352fec00219",
+                "/user/work/uz22147/tfrecords/7ed5693482c955aa",
                 "--log-folder",
-                "/user/work/uz22147/logs/test"            ],
+                "/user/work/uz22147/logs/test",
+                "--debug"
+            ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
         {
@@ -154,25 +213,16 @@
             "justMyCode": true,
             "args": [
                 "--no-train",
-                "--num-samples",
-                "230400",
                 "--num-images",
-                "5",
-                "--eval-full",
-                "--val-ym-start",
-                "201806",
-                "--val-ym-end",
-                "201905",
+                "1",
+                "--eval-model-numbers",
+                "217600",
                 "--eval-ensemble-size",
                 "1",
                 "--model-folder",
-                "/user/work/uz22147/logs/cgan/d2032352fec00219_small-cl1000-weightedcloss",
-                "--training-weights",
-                "0.4",
-                "0.3",
-                "0.2",
-                "0.1",
-                "--debug"
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs",
+                "--debug",
+                "--eval-on-train-set"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         },
@@ -187,9 +237,10 @@
                 "18",
                 "--records-folder",
                 "/user/work/uz22147/tfrecords/test",
-                "--debug",
                 "--data-config-path",
-                "/user/home/uz22147/repos/downscaling-cgan/config/data_config_plus_cin.yaml"
+                "/user/home/uz22147/repos/downscaling-cgan/config/data_config_sqrt_norm.yaml",
+                "--model-config-path",
+                "/user/home/uz22147/repos/downscaling-cgan/config/model_config_final_run.yaml"
             ],
             "cwd": "/user/home/uz22147/repos/downscaling-cgan"
         }

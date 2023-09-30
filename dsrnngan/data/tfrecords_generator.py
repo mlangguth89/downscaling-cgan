@@ -473,16 +473,13 @@ def write_data(year_month_ranges: list,
                         if data_config.class_bin_boundaries is not None:
                                                     
                             threshold = 0.1
-                            if data_config.output_normalisation:
+                            if data_config.output_normalisation is not None:
                                 rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
                             else:
                                 rainy_pixel_fraction = (observations > threshold).mean()
 
-                            boundary_comparison = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries]
-                            if any(boundary_comparison):
-                                clss = [rainy_pixel_fraction < cbb for cbb in data_config.class_bin_boundaries].index(True)
-                            else:
-                                clss = len(data_config.class_bin_boundaries) 
+                            clss = np.digitize(rainy_pixel_fraction, right=False)
+                            
                         else:
                             clss = random.choice(range(data_config.num_classes))
                             

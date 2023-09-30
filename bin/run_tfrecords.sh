@@ -5,8 +5,8 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --job-name=tfrecords-creation
 #SBATCH --partition short
-#SBATCH --array=0-5
-#SBATCH --output=logs/slurm-%A_%a.out
+#SBATCH --array=0-23
+#SBATCH --output=logs/tfrecords-%A_%a.out
 
 echo `which python`
 export LD_LIBRARY_PATH=/user/work/uz22147/miniconda3/lib/:$LD_LIBRARY_PATH
@@ -23,7 +23,7 @@ dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
 # either run the script to train your model
-srun python -m dsrnngan.data.tfrecords_generator --records-folder /user/work/uz22147/tfrecords --fcst-hours ${SLURM_ARRAY_TASK_ID}
+srun python -m dsrnngan.data.tfrecords_generator --records-folder /user/work/uz22147/tfrecords/ --fcst-hours ${SLURM_ARRAY_TASK_ID} --data-config-path /user/home/uz22147/repos/downscaling-cgan/config/data_config_nologs_separate_lakes.yaml --model-config-path /user/home/uz22147/repos/downscaling-cgan/config/model_config_medium-cl50-nologs-nocrop.yaml
 
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
