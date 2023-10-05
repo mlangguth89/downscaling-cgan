@@ -167,6 +167,25 @@ In this case, the `--eval-on-train-set` flag means it will read the training dat
 
 Once this has finished, a folder will be created within TRAINED_MODEL_FOLDER, specific to the training range. Copy this path, and use it as an input to the quantile mapping script:
 
+```bash
+scripts.quantile_mapping [-h] --log-folder LOG_FOLDER --model-number MODEL_NUMBER [--num-lat-lon-chunks NUM_LAT_LON_CHUNKS] [--output-folder OUTPUT_FOLDER] [--debug] [--min-points-per-quantile MIN_POINTS_PER_QUANTILE] [--save-data]
+               [--save-qmapper] [--plot]
+
+```
+Arguments
+
+|short|long|default|help|
+| :--- | :--- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--log-folder`|`None`|model log folder|
+||`--model-number`|`None`|model number|
+||`--num-lat-lon-chunks`|`1`|Number of chunks to split up spatial data into along each axis|
+||`--output-folder`|`None`|Folder to save plots in|
+||`--debug`||Debug mode|
+||`--min-points-per-quantile`|`1`|Minimum number of data points per quantile in the plots|
+||`--save-data`||save data|
+||`--save-qmapper`||save quantile mapping objects|
+||`--plot`||Make plots|
 
 
 
