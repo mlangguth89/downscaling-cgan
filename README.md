@@ -168,8 +168,8 @@ In this case, the `--eval-on-train-set` flag means it will read the training dat
 Once this has finished, a folder will be created within TRAINED_MODEL_FOLDER, specific to the training range. Copy this path, and use it as an input to the quantile mapping script:
 
 ```bash
-scripts.quantile_mapping [-h] --log-folder LOG_FOLDER --model-number MODEL_NUMBER [--num-lat-lon-chunks NUM_LAT_LON_CHUNKS] [--output-folder OUTPUT_FOLDER] [--debug] [--min-points-per-quantile MIN_POINTS_PER_QUANTILE] [--save-data]
-               [--save-qmapper] [--plot]
+scripts.quantile_mapping [-h] --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [--num-lat-lon-chunks NUM_LAT_LON_CHUNKS] [--output-folder OUTPUT_FOLDER] [--min-points-per-quantile MIN_POINTS_PER_QUANTILE] [--save-data]
+               [--save-qmapper] [--plot] [--debug]
 
 ```
 Arguments
@@ -177,26 +177,52 @@ Arguments
 |short|long|default|help|
 | :--- | :--- | :--- | :--- |
 |`-h`|`--help`||show this help message and exit|
-||`--log-folder`|`None`|model log folder|
-||`--model-number`|`None`|model number|
+||`--model-eval-folder`|`None`|Folder containing evaluated samples for the model|
+||`--model-number`|`None`|Checkpoint number of model that created the samples|
 ||`--num-lat-lon-chunks`|`1`|Number of chunks to split up spatial data into along each axis|
 ||`--output-folder`|`None`|Folder to save plots in|
-||`--debug`||Debug mode|
 ||`--min-points-per-quantile`|`1`|Minimum number of data points per quantile in the plots|
-||`--save-data`||save data|
-||`--save-qmapper`||save quantile mapping objects|
+||`--save-data`||Save the quantile mapped data to the model folder|
+||`--save-qmapper`||Save the quantile mapping objects to the model folder|
 ||`--plot`||Make plots|
+||`--debug`||Debug mode|
+
+You may want to iterate over several different settings of `num_lat_lon_chunks`; one way of doing this is to run this script many times using `--plot` to create plots (and data) for different scenarios, then choosing the best one by eye / your metric of choice.
 
 
+# Plotting
 
-3. To generate plots of the output from a trained model, use `python -m scripts.make_plots --nickname NICKNAME --log-folder MODEL_LOG_FOLDER --model-number MODEL_NUMBER --output-dir OUTPUT_DIRECTORY_FOR_PLOTS`
+Use the script in `scripts/make_plots.py` to create plots and data for plots.
 
-Together with a combination of flags depending on what plots you would like:
+```python -m scripts.make_plots --output-dir OUTPUT_DIR --nickname NICKNAME --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [-ex] [-sc] [-rh] [-rmse] [-bias] [-se] [-rapsd] [-qq] [-hist] [-crps] [-fss] [-d] [-conf]
+               [-csi] [--debug]
 
- --diurnal -ex -qq -rapsd -hist -csi -fss`
+```
+# Arguments
 
-This requires that an array of generated data has already been created for the appropriate model numbers using `--save-generated-samples`, as above.
+|short|long|default|help|
+| :--- | :--- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--output-dir`|`None`|Folder to store the plots in|
+||`--nickname`|`None`|nickname to give this model|
+||`--model-eval-folder`|`None`|Folder containing pre-evaluated cGAN data|
+||`--model-number`|`None`|Checkpoint number of model|
+|`-ex`|`--examples`||Plot a selection of example precipitation forecasts|
+|`-sc`|`--scatter`||Plot scatter plots of domain averaged rainfall|
+|`-rh`|`--rank-hist`||Plot rank histograms|
+|`-rmse`|||Plot root mean square error|
+|`-bias`|||Plot bias|
+|`-se`|`--spread-error`||Plot the spread error|
+|`-rapsd`|||Plot the radially averaged power spectral density|
+|`-qq`|`--quantiles`||Create quantile-quantile plot|
+|`-hist`|||Plot Histogram of rainfall intensities|
+|`-crps`|||Plot CRPS scores|
+|`-fss`|||PLot fractions skill score|
+|`-d`|`--diurnal`||Plot diurnal cycle|
+|`-conf`|`--confusion-matrix`||Calculate confusion matrices|
+|`-csi`|||Plot CSI and ETS|
+||`--debug`||Debug flag to use small amounts of data|
 
+# Logging
 
-
-This is research code so please let us know if something is wrong and also note that it definitely isn't perfect :)
+Logging inside main.py used Weights and Biases; to use this functionality you need to create an account and follow their documentation to make sure the API calls will authenticate correctly. Or just comment this bit out.

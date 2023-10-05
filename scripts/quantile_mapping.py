@@ -31,15 +31,15 @@ from dsrnngan.utils import read_config
 from dsrnngan.evaluation.plots import plot_quantiles
 
 parser = ArgumentParser(description='Script for quantile mapping.')
-parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
-parser.add_argument('--model-number', type=str, help='model number', required=True)
+parser.add_argument('--model-eval-folder', type=str, help='Folder containing evaluated samples for the model', required=True)
+parser.add_argument('--model-number', type=str, help='Checkpoint number of model that created the samples', required=True)
 parser.add_argument('--num-lat-lon-chunks', type=int, help='Number of chunks to split up spatial data into along each axis', default=1)
 parser.add_argument('--output-folder', type=str, help='Folder to save plots in')
-parser.add_argument('--debug', action='store_true', help='Debug mode')
 parser.add_argument('--min-points-per-quantile', type=int, default=1, help='Minimum number of data points per quantile in the plots')
-parser.add_argument('--save-data', action='store_true', help='save data')
-parser.add_argument('--save-qmapper', action='store_true', help='save quantile mapping objects')
+parser.add_argument('--save-data', action='store_true', help='Save the quantile mapped data to the model folder')
+parser.add_argument('--save-qmapper', action='store_true', help='Save the quantile mapping objects to the model folder')
 parser.add_argument('--plot', action='store_true', help='Make plots')
+parser.add_argument('--debug', action='store_true', help='Debug mode')
 args = parser.parse_args()
 
 if not args.plot and not args.save_data and not args.save_qmapper:
@@ -52,10 +52,10 @@ if not args.plot and not args.save_data and not args.save_qmapper:
 print('Loading model data', flush=True)
 
 # Get best model
-log_folder = args.log_folder
+model_eval_folder = args.model_eval_folder
 model_number =args.model_number
 
-with open(os.path.join(log_folder, 'n2900_201806-201903_42e34_e20', f'arrays-{model_number}.pkl'), 'rb') as ifh:
+with open(os.path.join(model_eval_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
 
 if args.debug:
@@ -85,8 +85,8 @@ assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate dat
 ###########################
 
 # Get lat/lon range from log folder
-data_config = read_config.read_data_config(config_folder=log_folder)
-model_config = read_config.read_model_config(config_folder=log_folder)
+data_config = read_config.read_data_config(config_folder=model_eval_folder)
+model_config = read_config.read_model_config(config_folder=model_eval_folder)
 
 # Locations
 latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_config=data_config)
@@ -123,7 +123,7 @@ quantile_data_dicts = {'test': {
 
 # NOTE:This requires data collection for the model 
 
-fps = [os.path.join(log_folder, 'n18000_201603-202009_6f02b_e1')]
+fps = [os.path.join(model_eval_folder, 'n18000_201603-202009_6f02b_e1')]
 
 imerg_training_data = []
 cgan_training_data = []
@@ -266,10 +266,10 @@ if args.save_qmapper:
     ###########################
 
     # Save trained quantile mapper for experiment
-    with open(os.path.join(log_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(model_eval_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(fcst_qmapper, ofh)
     
-    with open(os.path.join(log_folder, f'cgan_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(model_eval_folder, f'cgan_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_qmapper, ofh)
         
           
@@ -277,11 +277,11 @@ if args.save_data:
     ###########################
     print('### Saving data ', flush=True)
     ###########################
-    with open(os.path.join(log_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(model_eval_folder, f'fcst_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         print('Fcst corrected shape', quantile_data_dicts['test']['Fcst + qmap'].shape)
         pickle.dump(quantile_data_dicts['test']['Fcst + qmap'], ofh)
 
-    with open(os.path.join(log_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(model_eval_folder, f'cgan_qmap_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
 
 if args.plot:
