@@ -194,9 +194,8 @@ You may want to iterate over several different settings of `num_lat_lon_chunks`;
 
 Use the script in `scripts/make_plots.py` to create plots and data for plots.
 
-```python -m scripts.make_plots --output-dir OUTPUT_DIR --nickname NICKNAME --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [-ex] [-sc] [-rh] [-rmse] [-bias] [-se] [-rapsd] [-qq] [-hist] [-crps] [-fss] [-d] [-conf]
-               [-csi] [--debug]
-
+```
+python -m scripts.make_plots --output-dir OUTPUT_DIR --nickname NICKNAME --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [-ex] [-sc] [-rh] [-rmse] [-bias] [-se] [-rapsd] [-qq] [-hist] [-crps] [-fss] [-d] [-conf] [-csi] [--debug]
 ```
 # Arguments
 
