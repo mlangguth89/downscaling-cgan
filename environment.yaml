@@ -22,7 +22,7 @@ dependencies:
   - climlab
   - iris
   - scikit-learn
-  - tensorflow=2.8.2
+  - tensorflow
   - keras-preprocessing
   - black
   - pytest

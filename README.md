@@ -10,7 +10,7 @@ Works on Linux, possibly not on Windows.
 
 Note that to set up this to work with a GPU you may also need to run:
 
-`conda install pip; pip uninstall tensorflow; pip install tensorflow-gpu==2.8.2`
+`conda install pip; pip install tensorflow-gpu==2.8.2`
 
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
