@@ -6,11 +6,17 @@ Uses Python3.9. Create a new conda enviroment with:
 
 `conda env create -f environment.yaml`
 
+Then run:
+
+`pip install tensorflow-gpu==2.8.2`
+
+To use with a gpu (recommended) or:
+
+`pip install tensorflow==2.8.2`
+
+To use with a CPU (for some reason, tensorflow installation on conda doesn't seem to work)
+
 Works on Linux, possibly not on Windows.
-
-Note that to set up this to work with a GPU you may also need to run:
-
-`conda install pip; pip install tensorflow-gpu==2.8.2`
 
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.

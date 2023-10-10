@@ -22,7 +22,6 @@ dependencies:
   - climlab
   - iris
   - scikit-learn
-  - tensorflow
   - keras-preprocessing
   - black
   - pytest
