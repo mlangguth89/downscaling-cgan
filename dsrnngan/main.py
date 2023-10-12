@@ -33,7 +33,7 @@ model_config_group = parser.add_mutually_exclusive_group(required=False)
 
 model_config_group.add_argument('--model-folder', type=str, default=None,
                     help="Folder in which previous model configs and training results have been stored.")
-model_config_group.add_argument('--model-config-path', type=str, help='Full path of config yaml file to use.')
+model_config_group.add_argument('--model-config-path', type=str, help='Full path of model config yaml file to use.')
 
 parser.add_argument('--no-train', dest='do_training', action='store_false',
                     help="Do NOT carry out training, only perform eval")
@@ -43,13 +43,13 @@ parser.add_argument('--restart', dest='restart', action='store_true',
 eval_group = parser.add_mutually_exclusive_group()
 eval_group.add_argument('--eval-model-numbers', nargs='+', default=None,
                     help='Model number(s) to evaluate on (space separated)')
-eval_group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full")
-eval_group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short")
-eval_group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz")
+eval_group.add_argument('--eval-full', dest='evalnum', action='store_const', const="full", help="Evaluate on all checkpoints.")
+eval_group.add_argument('--eval-short', dest='evalnum', action='store_const', const="short", help="Evaluate on last third of checkpoints")
+eval_group.add_argument('--eval-blitz', dest='evalnum', action='store_const', const="blitz", help="Evaluate on last 4 checkpoints.")
 
 parser.add_argument('--num-samples', type=int,
-                    help="Override of num samples")
-parser.add_argument('--num-images', type=int, default=20,
+                    help="Number of samples to train on (overrides value in config)")
+parser.add_argument('--num-eval-images', type=int, default=20,
                     help="Number of images to evaluate on")
 parser.add_argument('--eval-ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
@@ -65,18 +65,18 @@ parser.add_argument('--no-shuffle-eval', action='store_true',
                     help='Boolean, will turn off shuffling at evaluation.')
 parser.add_argument('--save-generated-samples', action='store_true',
                     help='Flag to trigger saving of the evaluation arrays')
-parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting of classes',
+parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting of classes to use in training (assumes data has been split according to e.g. mean rainfall)',
                     type=float
                     )
 parser.add_argument('--output-suffix', default=None, type=str,
                     help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
-parser.add_argument('--log-folder', type=str, default=None)
-parser.add_argument('--debug', action='store_true')                
+parser.add_argument('--log-folder', type=str, default=None, help='Root folder to which models are saved')
+parser.add_argument('--debug', action='store_true', help="Flag to trigger debug mode, to reduce data volumes")                
 
 
 def main(restart: bool, 
          do_training: bool, 
-         num_images: int,
+         num_eval_images: int,
          noise_factor: float, 
          eval_ensemble_size: int, 
          model_config: SimpleNamespace,
@@ -323,7 +323,7 @@ def main(restart: bool,
                                                  records_folder=records_folder,
                                                  noise_factor=noise_factor,
                                                  model_numbers=eval_model_numbers,
-                                                 num_images=num_images,
+                                                 num_images=num_eval_images,
                                                  ensemble_size=eval_ensemble_size,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
@@ -417,7 +417,7 @@ if __name__ == "__main__":
             evalnum=args.evalnum,
             noise_factor=args.noise_factor,
             num_samples_override=args.num_samples,
-            num_images=args.num_images,
+            num_eval_images=args.num_eval_images,
             eval_model_numbers=eval_model_numbers,
             val_start=args.val_ym_start,
             val_end=args.val_ym_end,

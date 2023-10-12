@@ -6,11 +6,17 @@ Uses Python3.9. Create a new conda enviroment with:
 
 `conda env create -f environment.yaml`
 
+Then run:
+
+`pip install tensorflow-gpu==2.8.2`
+
+To use with a gpu (recommended) or:
+
+`pip install tensorflow==2.8.2`
+
+To use with a CPU (for some reason, tensorflow installation on conda doesn't seem to work)
+
 Works on Linux, possibly not on Windows.
-
-Note that to set up this to work with a GPU you may also need to run:
-
-`conda install pippip uninstall tensorflow; pip install tensorflow-gpu==2.8.2`
 
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
@@ -19,17 +25,14 @@ Install pre-commit hook by running (once python environment is activated):
 `pre-commit install`
 This makes sure that notebook outputs are cleared before commits.
 
-# High-level data overview
+# Preparing the data
 
-You should have two main datasets:
+You should have three datasets:
 1. Forecast data (low-resolution)
 2. Truth data, for example radar (high-resolution)
-
-All images in each dataset should be the same size, and there should be a constant resolution scaling factor between them.  Enter this downscaling factor in `downscaling_factor.yaml`, along with a list of `steps` that multiply to the overall factor.  In the original paper, we use 10x, with steps of 5 and 2.  See `models.py` for exactly how these are used in the architecture.
-
-In the paper, we also used a third, static, dataset:
-
 3. "Constant" data - orography and land-sea mask, at the same resolution as the truth data.
+
+All images in each dataset should be the same size, and there should be a constant resolution scaling factor between them.  Enter this downscaling factor via the `downscaling_factor` parameter in `config/model_config.yaml`, along with a list of steps that multiply to the overall factor in `downscaling_steps`.  See `models.py` for exactly how these are used in the architecture.
 
 If you do not want to use similar constant data, you will need to adjust the code and model architecture slightly.
 
@@ -41,117 +44,190 @@ For this reason, part of our dataflow involves generating training data separate
 1. The training data is in an 'optimised' format; only the data needed for training is loaded in, rather than needing to open several files and extract a single timestep from each.
 2. The training data can be split into different bins, and data can be drawn from these bins in a specific ratio.  We use this to artificially increase the prevalence of rainy data.
 
-# Setting up the downscaling cGAN with your own data
+## Creating tfrecords for training
 
-Start by adjusting the paths in `data_paths.yaml` to point at your own datasets.  You can set up multiple configurations, e.g., if you are running your code on different machines that have data stored in different paths.
+Tfrecords are created using the `write_data` function in `dsrnngan/data/tfrecords_generator.py`. This is called as: 
 
-Copy the provided `local_config-example.yaml` to `local_config.yaml` and set the options appropriately.  The file `read_config.py` controls what these options do, and you may wish to add more options of your own.
 
-The main file you will have to change is `data.py`.  The functions in there control how the forecast and "truth" (radar) data are loaded.  You will want to rewrite substantial parts of these functions, according to the data that you plan to use.  As written, these functions are centred around the radar data.  Essentially, for a particular date and time, the radar data for that time is loaded.  A corresponding forecast is found (the logic for this is in `load_fcst()`), and that data is loaded.  You may wish to flip this logic around to be more forecast-centric.
+```bash
+python -m dsrnngan.data.tfrecords_generator [-h] [--fcst-hours FCST_HOURS [FCST_HOURS ...]] [--records-folder RECORDS_FOLDER] [--data-config-path DATA_CONFIG_PATH]
+               [--model-config-path MODEL_CONFIG_PATH] [--debug]
+
+```
+### Arguments
+
+|short|long|default|help|
+| :--- | :-------- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--fcst-hours`|`array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,        17, 18, 19, 20, 21, 22, 23])`|Hour(s) to process (space separated)|
+||`--records-folder`|`None`|Root folder in which to create new tfrecords folder|
+||`--data-config-path`|`None`|Path to data config yaml file|
+||`--model-config-path`|`None`|Path to model config file (used for correct date ranges of training and validation sets)|
+||`--debug`||Debug flag; use when debugging to reduce data sizes|
+
+Start by adjusting the paths in `config/data_config.yaml` to point at your own datasets.  You can set up multiple configurations, e.g., if you are running your code on different machines that have data stored in different paths. Which set of paths is used is controlled by the `data_paths` parameter.
+
+The file `dsrnngan/utils/read_config.py` controls what these options do, and you may wish to add more options of your own.
+
+The functions in `dsrnngan/data/data.py` control how the forecast and observation data are loaded. You may need to rewrite substantial parts of these functions, according to the data that you plan to use.  As written, these functions are centred around the particular satellite data used for our study.  Essentially, for a particular date and time, the observation data for that time is loaded. A corresponding forecast is found (the logic for this is in `load_fcst()`), and that data is loaded.  You may wish to flip this logic around to be more forecast-centric.
 
 A particular trap:
 - Beware the difference between instanteneous fields (use `field[hour]`) and accumulated fields (use `field[hour] - field[hour-1]`).  Naturally, beware of off-by-one errors, etc., too.
 
-These functions are ultimately called by the `DataGenerator` class in `data_generator.py`.  This class represents a dataset of full-size images, which may be used for inference, or to create training data from.
+These functions are ultimately called by the `DataGenerator` class in `dsrnngan/data/data_generator.py`.  This class represents a dataset of full-size images, which may be used for inference, or to create training data from.
 
 At this point, you may wish to visualise the data returned by the `DataGenerator` to check that it matches what you expect!
 
-You will want to manually run the function `gen_fcst_norm` in `data.py`.  This gives certain field statistics (mean, standard dev., max, etc.) that are used for normalising inputs to the neural networks during training.  The NN performance should not be sensitive to the exact values of these, so it will be fine to run for just 1 year (among the training data years)
 
-Next, you will want to manually run the function `write_data` in `tfrecords_generator.py` for each year of training data.  This generates training data by subsampling the full-size images.  This function has various hard-coded constants, including the low-resolution image size (assumed square!  do edit the code if this is not true...), and the upscaling factor.  Make sure you adjust these to your own purpose.
+The first time the data is prepared, statistics of the input forecats variables are gathered, and then cached for future runs (via the function get_ifs_stats in `dsrnngan/data/data.py`). This gives certain field statistics (mean, standard dev., max, etc.) that are used for normalising inputs to the neural networks during training. The NN performance should not be sensitive to the exact values of these, so it will be fine to run for just 1 year (among the training data years). Set the year to use for this normalisation via the `normalisation_year` parameter in the data config.
+
+Next, you will want to manually run the function `write_data` in `tfrecords_generator.py`.  This generates training data by subsampling the full-size images. The typical command you will run is:
+
+`python -m dsrnngan.data.tfrecords_generator --records-folder PATH_TO_ROOT_DATA_FOLDER --fcst-hours FCST_H --data-config-path /user/home/uz22147/repos/downscaling-cgan/config/data_config_nologs_separate_lakes.yaml --model-config-path /user/home/uz22147/repos/downscaling-cgan/config/model_config_medium-cl50-nologs-nocrop.yaml`
+
 
 The training data is separated into several bins/classes, according to what proportion of the image has rainfall.  You may wish to edit how this is performed!
 
+Data config structure
+
 # Training and evaluating a network
 
-1. Training the model
+Models are trained and evaluated by running `dsrnngan/data/main.py`. This is called as: 
 
-First, set up your model parameters in the configuration (.yaml) file.
+
+```bash
+python -m dsrnngan.main [-h] [--records-folder RECORDS_FOLDER] [--model-folder MODEL_FOLDER | --model-config-path MODEL_CONFIG_PATH] [--no-train] [--restart] [--eval-model-numbers EVAL_MODEL_NUMBERS [EVAL_MODEL_NUMBERS ...] |
+               --eval-full | --eval-short | --eval-blitz] [--num-samples NUM_SAMPLES] [--num-images NUM_IMAGES] [--eval-ensemble-size EVAL_ENSEMBLE_SIZE] [--eval-on-train-set] [--noise-factor NOISE_FACTOR]
+               [--val-ym-start VAL_YM_START] [--val-ym-end VAL_YM_END] [--no-shuffle-eval] [--save-generated-samples] [--training-weights TRAINING_WEIGHTS TRAINING_WEIGHTS TRAINING_WEIGHTS TRAINING_WEIGHTS]
+               [--output-suffix OUTPUT_SUFFIX] [--log-folder LOG_FOLDER] [--debug]
+
+```
+## Arguments
+
+|short|long|default|help|
+| :--- | :--- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--records-folder`|`None`|Folder from which to gather the tensorflow records|
+||`--model-folder`|`None`|Folder in which previous model configs and training results have been stored.|
+||`--model-config-path`|`None`|Full path of model config yaml file to use.|
+||`--no-train`||Do NOT carry out training, only perform eval|
+||`--restart`||Restart training from latest checkpoint|
+||`--eval-model-numbers`|`None`|Model number(s) to evaluate on (space separated)|
+||`--eval-full`|`None`|Evaluate on all checkpoints.|
+||`--eval-short`|`None`|Evaluate on last third of checkpoints|
+||`--eval-blitz`|`None`|Evaluate on last 4 checkpoints.|
+||`--num-samples`|`None`|Number of samples to train on (overrides value in config)|
+||`--num-eval-images`|`20`|Number of images to evaluate on|
+||`--eval-ensemble-size`|`None`|Size of ensemble to evaluate on|
+||`--eval-on-train-set`||Use this flag to make the evaluation occur on the training dates|
+||`--noise-factor`|`0.001`|Multiplicative noise factor for rank histogram|
+||`--val-ym-start`|`None`|Validation start in YYYYMM format (defaults to range specified in config)|
+||`--val-ym-end`|`None`|Validation start in YYYYMM format (defaults to the range specified in the config)|
+||`--no-shuffle-eval`||Boolean, will turn off shuffling at evaluation.|
+||`--save-generated-samples`||Flag to trigger saving of the evaluation arrays|
+||`--training-weights`|`None`|Weighting of classes to use in training (assumes data has been split according to e.g. mean rainfall)|
+||`--output-suffix`|`None`|Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.|
+||`--log-folder`|`None`|Root folder to which models are saved|
+||`--debug`||Flag to trigger debug mode, to reduce data volumes|
+
+
+Model parameters are set in the model configuration (.yaml) file.
 An example is provided in the main directory. We recommend copying this 
 file to somewhere on your local machine before training.
 
-Run the following to start the training:
+To restart training for a particular model, just specify the `--model-folder`; the program will read the configs from within this folder. Use `--restart` to make sure the training starts from the most recent checkpoint.
 
-`python main.py`
+This will train the model according to the settings specified in the model config, using the number of training samples specified
 
-There are a number of options you can use at this point. These will 
-evaluate your model after it has finished training:
-
-- `--evaluate` to run checkpoint evaluation (CRPS, rank calculations, RMSE, RALSD, etc.)
-- `--plot_ranks` will plot rank histograms (requires `--evaluate`)
-	   
-If you choose to run `--evaluate`, you must also specify if you want
+To evaluate the model using metrics like CRPS, rank calculations, RMSE, RALSD, etc. on some of the checkpoints, pass the `--evaluate` flag. You must also specify if you want
 to do this for all model checkpoints or just a selection. Do this using 
 
-- `--eval_full`	  (all model checkpoints)
-- `--eval_short`	  (recommended; the final 1/3rd of model checkpoints)
-- `--eval_blitz`	  (the final 4 model checkpoints)
+- `--eval-full`	  (all model checkpoints)
+- `--eval-short`	  (recommended; the final 1/3rd of model checkpoints)
+- `--eval-blitz`	  (the final 4 model checkpoints)
+- `--eval-model-numbers N1 N2` (only evaluate the model numbers N1 and N2)
 
-Two things to note:
-- These three options work well with the 100 checkpoints that we 
-have been working with. If this changes, you may want to update
-them accordingly.
-- Calculating everything, for all model iterations, will take a long 
-time. Possibly weeks. You have been warned. 
 
-As an example, to train a model and evaluate the last few model
-checkpoints, you could run:
+Note: these evaluations can take a long time!
 
-`python main.py --evaluate --eval_blitz --plot_ranks`
+As an example, if you wanted to train a model on 320000 samples, using data in DATA_FOLDER, and the model config in MODEL_CONFIG_PATH, and then evaluate the last four model checkpoints on 100 samples with 2 ensemble members each, you would run the following:
 
-2. If you've already trained your model, and you just want to run some 
-evaluation, use the --no_train flag, for example:
+`python -m dsrnngan.main --eval-blitz --num-samples 320000 --restart --records-folder DATA_FOLDER --model-config-path MODEL_CONFIG_PATH --output-suffix my_model --num-eval-images 100 --eval-ensemble-size 2`
 
-`python main.py --no_train --evaluate --eval_full`
+By default, the evaluation is performed over the date range specified in the model_config.yaml file. These can be overridden by specifiying start and end year-months via `--val-ym-start` and `--val-ym-start` in the form YYYYMM. 
 
-3. To generate plots of the output from a trained model, use `predict.py`
-This requires a path to the directory where the weights of the model are 
-stored, and will read in the setup parameters directly. Use the following
-arguments:
+If you would like the evaluation to be done without shuffling (e.g. to ensure consistency between model runs) then use the `--no-shuffle-eval` flag.
 
-Necessary arguments:
-- `--log_folder`    path to model directory
-- `--model_number`    model checkpoint you want to use to perform predictions
+To save the samples that are generated during evaluation, for offline model analysis, use the  `--save-generated-samples` flag.
 
-Optional arguments:
-- `--predict_year`            year of data to predict on
-- `--num_samples`             number of different input images to predict on
-- `--pred_ensemble_size`      number of predictions to draw from ensemble
-		    N.B. if you run mode == 'det' we have hardcoded this
-		    to 1 for obvious reasons.
+If you've already trained your model, and you just want to run some 
+evaluation, use the `--no-train` flag, for example:
 
-There are also the following optional arguments:
-- `--predict_full_image`          to predict on the full image dataset
+# Quantile mapping
 
-For example:
+In order to quantile map the cGAN, you will need to produce samples for the cGAN over the training year. Do this by running the main script in evaluate mode for the model number you have chosen, without shuffling, and save the generated samples E.g.:
 
-`python predict.py --log_folder /path/to/model --model_number 0006400 
---num_samples 7 --predict_full_image`
+`python -m dsrnngan.main --no-train --eval-model-numbers BEST_MODEL_NUM --save-generated-samples --model-folder TRAINED_MODEL_FOLDER --num-images 18000 --eval-ensemble-size 1 --eval-on-train-set`
 
-4. If you want to do some evaluation on specific checkpoints only, you can
-use the scripts
+In this case, the `--eval-on-train-set` flag means it will read the training data range from the config, but you can override this with `--val-ym-start` and `--val-ym-end` if needed.
 
-- `run_eval.py`, to run CRPS, rank calculations, RMSE, RALSD, etc.  Note this uses 100 ensemble members, rather than the 10 used for intermediate checkpoint evaluation via `main.py`
-- `run_roc.py`, to run ROC and precision-recall curve calculations
-- `run_fss.py`, to run fractions skill score calculations
+Once this has finished, a folder will be created within TRAINED_MODEL_FOLDER, specific to the training range. Copy this path, and use it as an input to the quantile mapping script:
 
-You'll have to open them and hardcode file paths and model numbers at the
-top. I also made a plot_comparisons.py at one point but I've deleted it so
-now you have to use predict.py. Sorry.
+```bash
+scripts.quantile_mapping [-h] --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [--num-lat-lon-chunks NUM_LAT_LON_CHUNKS] [--output-folder OUTPUT_FOLDER] [--min-points-per-quantile MIN_POINTS_PER_QUANTILE] [--save-data]
+               [--save-qmapper] [--plot] [--debug]
 
-5. If you want to change model architectures, add them to the `models.py`
-file. You can then use the `config.yaml` file to call a different model
-architecture. We recommend not deleting the old one just yet.
+```
+Arguments
 
-6. `run_benchmarks.py` will generate benchmark scores for CRPS, RMSE, MAE
-and RAPSD for the specified benchmark models (input arguments). We have
-set this up to use the same evaluation setup as the NN models but note
-the benchmark evaluation uses 100 ensemble members (NN default is 10 for
-time & memory reasons). So, for a proper comparison you *must* evaluate
-your model and specify 100 ensemble members.
+|short|long|default|help|
+| :--- | :--- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--model-eval-folder`|`None`|Folder containing evaluated samples for the model|
+||`--model-number`|`None`|Checkpoint number of model that created the samples|
+||`--num-lat-lon-chunks`|`1`|Number of chunks to split up spatial data into along each axis|
+||`--output-folder`|`None`|Folder to save plots in|
+||`--min-points-per-quantile`|`1`|Minimum number of data points per quantile in the plots|
+||`--save-data`||Save the quantile mapped data to the model folder|
+||`--save-qmapper`||Save the quantile mapping objects to the model folder|
+||`--plot`||Make plots|
+||`--debug`||Debug mode|
 
-For example:
-`python run_benchmarks.py --log_folder /path/to/model --predict_year 2020 --num_images 16`
+You may want to iterate over several different settings of `num_lat_lon_chunks`; one way of doing this is to run this script many times using `--plot` to create plots (and data) for different scenarios, then choosing the best one by eye / your metric of choice.
 
-7. This is research code so please let us know if something is wrong and
-also note that it definitely isn't perfect :)
+
+# Plotting
+
+Use the script in `scripts/make_plots.py` to create plots and data for plots.
+
+```
+python -m scripts.make_plots --output-dir OUTPUT_DIR --nickname NICKNAME --model-eval-folder MODEL_EVAL_FOLDER --model-number MODEL_NUMBER [-ex] [-sc] [-rh] [-rmse] [-bias] [-se] [-rapsd] [-qq] [-hist] [-crps] [-fss] [-d] [-conf] [-csi] [--debug]
+```
+# Arguments
+
+|short|long|default|help|
+| :--- | :--- | :--- | :--- |
+|`-h`|`--help`||show this help message and exit|
+||`--output-dir`|`None`|Folder to store the plots in|
+||`--nickname`|`None`|nickname to give this model|
+||`--model-eval-folder`|`None`|Folder containing pre-evaluated cGAN data|
+||`--model-number`|`None`|Checkpoint number of model|
+|`-ex`|`--examples`||Plot a selection of example precipitation forecasts|
+|`-sc`|`--scatter`||Plot scatter plots of domain averaged rainfall|
+|`-rh`|`--rank-hist`||Plot rank histograms|
+|`-rmse`|||Plot root mean square error|
+|`-bias`|||Plot bias|
+|`-se`|`--spread-error`||Plot the spread error|
+|`-rapsd`|||Plot the radially averaged power spectral density|
+|`-qq`|`--quantiles`||Create quantile-quantile plot|
+|`-hist`|||Plot Histogram of rainfall intensities|
+|`-crps`|||Plot CRPS scores|
+|`-fss`|||PLot fractions skill score|
+|`-d`|`--diurnal`||Plot diurnal cycle|
+|`-conf`|`--confusion-matrix`||Calculate confusion matrices|
+|`-csi`|||Plot CSI and ETS|
+||`--debug`||Debug flag to use small amounts of data|
+
+# Logging
+
+Logging inside main.py used Weights and Biases; to use this functionality you need to create an account and follow their documentation to make sure the API calls will authenticate correctly. Or just comment this bit out.
