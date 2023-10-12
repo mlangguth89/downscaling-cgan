@@ -2,7 +2,6 @@ name: cgan
 channels:
   - conda-forge
 dependencies:
-  - conda
   - python=3.9
   - cudnn=8.1.0
   - cudatoolkit=11.2
@@ -22,7 +21,6 @@ dependencies:
   - climlab
   - iris
   - scikit-learn
-  - tensorflow=2.8.2
   - keras-preprocessing
   - black
   - pytest
@@ -30,4 +28,5 @@ dependencies:
   - xesmf
   - gitpython
   - wandb
+  - timezonefinder
 

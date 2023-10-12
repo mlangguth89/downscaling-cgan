@@ -5,6 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "evaluation timing",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.evaluation_timing",
+            "justMyCode": true,
+            "args": [
+                "--model-folder", "/home/a/antonio/model_data", "--num-images", "2"
+            ]
+        },
+        {
             "name": "Python: imerg_download_official",
             "type": "python",
             "request": "launch",
@@ -53,10 +63,12 @@
             "justMyCode": true,
             "args": [
                 "--log-folder",
-                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20", 
-                "--best-model-number" ,"217600", 
-                "--num-extra-models", "0", "--debug"
-                
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
+                "--best-model-number",
+                "217600",
+                "--num-extra-models",
+                "0",
+                "--debug"
             ]
         },
         {
@@ -68,9 +80,9 @@
             "args": [
                 "--num-lat-lon-chunks",
                 "1",
-                "--log-folder", 
-                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs", 
-                "--model-number", 
+                "--log-folder",
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs",
+                "--model-number",
                 "217600",
                 "--output-folder",
                 "plots/quantile_map_plots",
@@ -91,10 +103,12 @@
             "request": "launch",
             "module": "dsrnngan.data.setupdata",
             "justMyCode": true,
-            "args": ["--output-dir", 
-            "/user/work/uz22147/quantile_training_data", 
-            "--model-folder", 
-            "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs"]
+            "args": [
+                "--output-dir",
+                "/user/work/uz22147/quantile_training_data",
+                "--model-folder",
+                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs"
+            ]
         },
         {
             "name": "Python: imerg monthly",
