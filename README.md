@@ -18,12 +18,15 @@ To use with a CPU (for some reason, tensorflow installation on conda doesn't see
 
 Works on Linux, possibly not on Windows.
 
+I found that there were often problems with conda accessing libraries, which was fixed by modifying the LD_LIBRARY_PATH environment variable. So if you are getting error messages that certain libraries (particularly things like c compiler libraries) aren't being accessed, then try:
+
+`export LD_LIBRARY_PATH=PATH_TO_MINICONDA_FOLDER/lib/:$LD_LIBRARY_PATH`
+
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
 
-Install pre-commit hook by running (once python environment is activated):
-`pre-commit install`
-This makes sure that notebook outputs are cleared before commits.
+
+
 
 # Preparing the data
 
@@ -83,7 +86,7 @@ The first time the data is prepared, statistics of the input forecats variables 
 
 Next, you will want to manually run the function `write_data` in `tfrecords_generator.py`.  This generates training data by subsampling the full-size images. The typical command you will run is:
 
-`python -m dsrnngan.data.tfrecords_generator --records-folder PATH_TO_ROOT_DATA_FOLDER --fcst-hours FCST_H --data-config-path /user/home/uz22147/repos/downscaling-cgan/config/data_config_nologs_separate_lakes.yaml --model-config-path /user/home/uz22147/repos/downscaling-cgan/config/model_config_medium-cl50-nologs-nocrop.yaml`
+`python -m dsrnngan.data.tfrecords_generator --records-folder PATH_TO_ROOT_DATA_FOLDER --fcst-hours FCST_H --data-config-pathPATH_TO_DATA_CONFIG.yaml --model-config-path PATH_TO_MODEL_CONFIG`
 
 
 The training data is separated into several bins/classes, according to what proportion of the image has rainfall.  You may wish to edit how this is performed!

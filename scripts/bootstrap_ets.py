@@ -71,7 +71,7 @@ bootstrap_results_ifs_dict = {}
 
 hourly_thresholds = [0.1, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50]
 
-for n, threshold in hourly_thresholds:
+for n, threshold in enumerate(hourly_thresholds):
 
     bootstrap_results_cgan_dict[n] = {}
     bootstrap_results_ifs_dict[n] = {}

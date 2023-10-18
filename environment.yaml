@@ -30,4 +30,5 @@ dependencies:
   - wandb
   - timezonefinder
   - metpy
+  - gitpython
 
