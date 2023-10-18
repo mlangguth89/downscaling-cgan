@@ -56,29 +56,28 @@ format_lookup = {'GAN': {'color': 'b'},
 ## Setup
 ################################################################################
 
-parser = ArgumentParser(description='Cross validation for selecting quantile mapping threshold.')
+parser = ArgumentParser(description='Plotting script.')
 
-parser.add_argument('--output-dir', type=str, help='output directory', default=str(HOME))
-parser.add_argument('--nickname', type=str, help='Nickname of model', required=True)
-parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
-parser.add_argument('--model-number', type=int, help='model number', required=True)
-parser.add_argument('--debug', action='store_true', help='Debug mode')
+parser.add_argument('--output-dir', type=str, required=True, help="Folder to store the plots in")
+parser.add_argument('--nickname', type=str, required=True, help="nickname to give this model")
+parser.add_argument('--model-eval-folder', type=str, required=True, help="Folder containing pre-evaluated cGAN data")
+parser.add_argument('--model-number', type=int, required=True, help="Checkpoint number of model")
 metric_group = parser.add_argument_group('metrics')
-metric_group.add_argument('-ex', '--examples', action="store_true")
-metric_group.add_argument('-sc', '--scatter', action="store_true")
-metric_group.add_argument('-rh', '--rank-hist', action="store_true")
-metric_group.add_argument('-rmse', action="store_true")
-metric_group.add_argument('-bias', action="store_true")
-metric_group.add_argument('-se', '--spread-error', action="store_true")
-metric_group.add_argument('-rapsd', action="store_true")
-metric_group.add_argument('-qq', '--quantiles', action="store_true")
-metric_group.add_argument('-hist', action="store_true")
-metric_group.add_argument('-crps', action="store_true")
-metric_group.add_argument('-fss', action="store_true")
-metric_group.add_argument('-d', '--diurnal', action="store_true")
-metric_group.add_argument('-conf', '--confusion-matrix', action="store_true")
-metric_group.add_argument('-csi', action="store_true")
-
+metric_group.add_argument('-ex', '--examples', action="store_true", help="Plot a selection of example precipitation forecasts")
+metric_group.add_argument('-sc', '--scatter', action="store_true", help="Plot scatter plots of domain averaged rainfall")
+metric_group.add_argument('-rh', '--rank-hist', action="store_true", help="Plot rank histograms")
+metric_group.add_argument('-rmse', action="store_true", help="Plot root mean square error")
+metric_group.add_argument('-bias', action="store_true", help="Plot bias")
+metric_group.add_argument('-se', '--spread-error', action="store_true", help="Plot the spread error")
+metric_group.add_argument('-rapsd', action="store_true", help="Plot the radially averaged power spectral density")
+metric_group.add_argument('-qq', '--quantiles', action="store_true", help="Create quantile-quantile plot")
+metric_group.add_argument('-hist', action="store_true", help="Plot Histogram of rainfall intensities")
+metric_group.add_argument('-crps', action="store_true", help="Plot CRPS scores")
+metric_group.add_argument('-fss', action="store_true", help="PLot fractions skill score")
+metric_group.add_argument('-d', '--diurnal', action="store_true", help="Plot diurnal cycle")
+metric_group.add_argument('-conf', '--confusion-matrix', action="store_true", help="Calculate confusion matrices")
+metric_group.add_argument('-csi', action="store_true", help="Plot CSI and ETS")
+parser.add_argument('--debug', action='store_true', help="Debug flag to use small amounts of data")
 
 args = parser.parse_args()
 
@@ -88,28 +87,19 @@ all_metrics = ['examples', 'scatter','rank_hist','rmse', 'bias', 'spread_error',
 metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
 
 
-# log_folders = {'cropped': {'log_folder': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72/n4000_201806-201905_e10', 'model_number': 262400},
-#                'nologs': {'log_folder': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e1', 'model_number': 268800},
-#                'final-cl2000': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20', 'model_number': 262400},
-#                'final-cl2000-2': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n3000_201806-201905_100a7_e10', 'model_number': 243200},
-#                'final-nologs': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2900_201806-201903_42e34_e20', 'model_number': 217600},
-#                'sqrt-small': {'log_folder': '/user/work/uz22147/logs/cgan/6baa8b10ec61eaed_small-cl500-sqrt-norm/n2900_201806-201903_42e34_e20', 'model_number': 51200},
-# }
-
-
 # If in debug mode, then don't overwrite existing plots
 if args.debug:
     temp_stats_dir = tempfile.TemporaryDirectory()
     args.output_dir = temp_stats_dir.name
 
 model_number = args.model_number
-log_folder = args.log_folder
+model_eval_folder = args.model_eval_folder
 
-folder_suffix = log_folder.split('/')[-1]
+folder_suffix = model_eval_folder.split('/')[-1]
 args.output_dir = os.path.join(args.output_dir, folder_suffix)
 os.makedirs(args.output_dir, exist_ok=True)
 
-with open(os.path.join(log_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
+with open(os.path.join(model_eval_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
 
 if args.debug:
@@ -144,7 +134,7 @@ wet_day_indexes = [item[0] for item in sorted_means[-10:]]
 dry_day_indexes = [item[0] for item in sorted_means[:10]]
 
 # Get lat/lon range from log folder
-base_folder = '/'.join(log_folder.split('/')[:-1])
+base_folder = '/'.join(model_eval_folder.split('/')[:-1])
 try:
     config = load_yaml_file(os.path.join(base_folder, 'setup_params.yaml'))
     model_config, data_config = read_config.get_config_objects(config)
@@ -179,8 +169,8 @@ for k, v in special_areas.items():
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
 try:
-    if os.path.isfile(os.path.join(log_folder, 'fcst_qmap_15.pkl')):
-        with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
+    if os.path.isfile(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl')):
+        with open(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
             fcst_corrected = pickle.load(ifh)
     else:
         with open(os.path.join(base_folder, 'fcst_qmapper_15.pkl'), 'rb') as ifh:
@@ -189,11 +179,11 @@ try:
         fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
         print('Finished forecast quantile mapping', flush=True)
         
-        with open(os.path.join(log_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
+        with open(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
             pickle.dump(fcst_corrected, ofh)
 
-    if os.path.isfile(os.path.join(log_folder, 'cgan_qmap_1.pkl')):
-        with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
+    if os.path.isfile(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl')):
+        with open(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
             cgan_corrected = pickle.load(ifh)
     else:
         with open(os.path.join(base_folder, 'cgan_qmapper_1.pkl'), 'rb') as ifh:
@@ -208,7 +198,7 @@ try:
             cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
         print('Finished cgan quantile mapping', flush=True)
         
-        with open(os.path.join(log_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
+        with open(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
             pickle.dump(cgan_corrected, ofh)
             
     print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
