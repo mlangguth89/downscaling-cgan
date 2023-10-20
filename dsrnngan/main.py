@@ -71,6 +71,7 @@ parser.add_argument('--training-weights', default=None, nargs=4,help='Weighting 
 parser.add_argument('--output-suffix', default=None, type=str,
                     help='Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.')
 parser.add_argument('--log-folder', type=str, default=None, help='Root folder to which models are saved')
+parser.add_argument('--wandb-logging', action='store_true', help="Flag to trigger logging to weights and biases")          
 parser.add_argument('--debug', action='store_true', help="Flag to trigger debug mode, to reduce data volumes")                
 
 
@@ -94,7 +95,8 @@ def main(restart: bool,
          training_weights: list=None, 
          debug: bool=False,
          output_suffix: str=None, 
-         log_folder: str=None
+         log_folder: str=None,
+         wandb_logging: bool=False
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -231,7 +233,12 @@ def main(restart: bool,
         plot_fname = os.path.join(log_folder, "progress.pdf")
 
         while (training_samples < model_config.train.num_samples):  # main training loop
-            # Initiialise weights and biases logging
+
+            if not wandb_logging:
+                mode = 'disabled'
+            else:
+                mode = 'online'
+                # Initiialise weights and biases logging
             wandb.init(
                 project='cgan-test' if args.debug else 'cgan-east-africa',
                 sync_tensorboard=True,
@@ -240,7 +247,8 @@ def main(restart: bool,
                     'data': data_config_dict,
                     'model': model_config_dict,
                     'gpu_devices': tf_config.list_physical_devices('GPU')
-                }
+                },
+                mode=mode
             )
                 
 
@@ -427,4 +435,5 @@ if __name__ == "__main__":
             training_weights=args.training_weights,
             output_suffix=output_suffix,
             log_folder=log_folder,
-            debug=args.debug)
+            debug=args.debug,
+            wandb_logging=args.wandb_logging)

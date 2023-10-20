@@ -443,7 +443,7 @@ if metric_dict.get('spread_error') and ensemble_size > 2:
         
     ax.plot(binned_spread, binned_mse, marker='+', markersize=10)
     ax.plot(np.linspace(0,max(binned_spread),10), np.linspace(0,max(binned_spread),10), 'k--')
-    ax.set_ylabel('RMSE (mm/hr)')
+    ax.set_ylabel('MSE (mm/hr)')
     ax.set_xlabel('Ensemble spread (mm/hr)')
     ax.set_title(f'Spread-error')
     plt.savefig(os.path.join(args.output_dir,f'spread_error_{nickname}_{model_number}.pdf'), format='pdf', bbox_inches='tight')
