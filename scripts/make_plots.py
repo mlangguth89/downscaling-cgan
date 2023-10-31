@@ -62,6 +62,7 @@ parser.add_argument('--output-dir', type=str, required=True, help="Folder to sto
 parser.add_argument('--nickname', type=str, required=True, help="nickname to give this model")
 parser.add_argument('--model-eval-folder', type=str, required=True, help="Folder containing pre-evaluated cGAN data")
 parser.add_argument('--model-number', type=int, required=True, help="Checkpoint number of model")
+parser.add_argument('--climatological-data-path', type=str, default='/bp1/geog-tropical/users/uz22147/east_africa_data/daily_rainfall/', help="Folder containing climatological data to load")
 metric_group = parser.add_argument_group('metrics')
 metric_group.add_argument('-ex', '--examples', action="store_true", help="Plot a selection of example precipitation forecasts")
 metric_group.add_argument('-sc', '--scatter', action="store_true", help="Plot scatter plots of domain averaged rainfall")
@@ -235,7 +236,7 @@ else:
 for year in tqdm(year_range):
     for month in month_range:
 
-        imerg_ds = xr.open_dataarray(f'/user/home/uz22147/repos/rainfall_data/daily_imerg_rainfall_{month}_{year}.nc')
+        imerg_ds = xr.open_dataarray(os.path.join(args.climatological_data_path, f'daily_imerg_rainfall_{month}_{year}.nc'))
 
         imerg_data = imerg_ds.sel(lat=latitude_range, method='nearest').sel(lon=longitude_range, method='nearest').values
 
