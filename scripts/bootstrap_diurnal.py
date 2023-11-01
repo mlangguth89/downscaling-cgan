@@ -29,8 +29,8 @@ with open(os.path.join(args.log_folder, f'arrays-{args.model_number}.pkl'), 'rb'
 n_samples = arrays['truth'].shape[0]
     
 truth_array = arrays['truth']
-samples_gen_array = arrays['samples_gen']
 fcst_array = arrays['fcst_array']
+samples_gen_array = arrays['samples_gen']
 persisted_fcst_array = arrays['persisted_fcst']
 ensmean_array = np.mean(arrays['samples_gen'], axis=-1)
 dates = [d[0] for d in arrays['dates']]
@@ -40,7 +40,7 @@ assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate dat
 if len(samples_gen_array.shape) == 3:
     samples_gen_array = np.expand_dims(samples_gen_array, axis=-1)
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
-
+del fcst_array
 
 # Open quantile mapped forecasts
 with open(os.path.join(args.log_folder, f'fcst_qmap_15.pkl'), 'rb') as ifh:
@@ -76,23 +76,29 @@ bootstrap_results_cgan_dict = {}
 bootstrap_results_ifs_dict = {}
 bootstrap_results_obs_dict = {}
 
-for hr in range(24):
-    
-    bootstrap_results_cgan_dict[hr] = {}
-    bootstrap_results_ifs_dict[hr] = {}
-    bootstrap_results_obs_dict[hr] = {}
+bin_width = 3
+hour_bin_edges = np.arange(0, 24, bin_width)
 
-    hour_indexes = np.where(np.array(hours) == hr)[0]
+digitized_hours = np.digitize(hours, bins=hour_bin_edges)
+
+for hr in range(24):
+    digitized_hour = np.digitize(hr, bins=hour_bin_edges)
+    
+    bootstrap_results_cgan_dict[digitized_hour] = {}
+    bootstrap_results_ifs_dict[digitized_hour] = {}
+    bootstrap_results_obs_dict[digitized_hour] = {}
+
+    hour_indexes = np.where(np.array(digitized_hours) == digitized_hour)[0]
 
     obs_for_hour = truth_array[hour_indexes,...]
-    fcst_for_hour = fcst_array[hour_indexes,...]
+    fcst_for_hour = fcst_corrected[hour_indexes,...]
     samples_for_hour = cgan_corrected[hour_indexes,:,:,0]
     
     for metric_type, metric_fn in metric_types.items():
 
-        bootstrap_results_cgan_dict[hr][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=samples_for_hour, fcst_array=samples_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
-        bootstrap_results_ifs_dict[hr][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=fcst_for_hour, fcst_array=fcst_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
-        bootstrap_results_obs_dict[hr][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=obs_for_hour, fcst_array=obs_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+        bootstrap_results_cgan_dict[digitized_hour][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=samples_for_hour, fcst_array=samples_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+        bootstrap_results_ifs_dict[digitized_hour][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=fcst_for_hour, fcst_array=fcst_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+        bootstrap_results_obs_dict[digitized_hour][metric_type] = bootstrap_metric_function(metric_func=metric_fn, obs_array=obs_for_hour, fcst_array=obs_for_hour, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
 
 # Save results 
 with open(os.path.join(args.log_folder, f'bootstrap_diurnal_results_n{args.n_bootstrap_samples}.pkl'), 'wb+') as ofh:
