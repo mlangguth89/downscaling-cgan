@@ -102,7 +102,7 @@ Models are trained and evaluated by running `dsrnngan/data/main.py`. This is cal
 python -m dsrnngan.main [-h] [--records-folder RECORDS_FOLDER] [--model-folder MODEL_FOLDER | --model-config-path MODEL_CONFIG_PATH] [--no-train] [--restart] [--eval-model-numbers EVAL_MODEL_NUMBERS [EVAL_MODEL_NUMBERS ...] |
                --eval-full | --eval-short | --eval-blitz] [--num-samples NUM_SAMPLES] [--num-images NUM_IMAGES] [--eval-ensemble-size EVAL_ENSEMBLE_SIZE] [--eval-on-train-set] [--noise-factor NOISE_FACTOR]
                [--val-ym-start VAL_YM_START] [--val-ym-end VAL_YM_END] [--no-shuffle-eval] [--save-generated-samples] [--training-weights TRAINING_WEIGHTS TRAINING_WEIGHTS TRAINING_WEIGHTS TRAINING_WEIGHTS]
-               [--output-suffix OUTPUT_SUFFIX] [--log-folder LOG_FOLDER] [--debug]
+               [--output-suffix OUTPUT_SUFFIX] [--log-folder LOG_FOLDER] [--debug] [--wandb-logging]
 
 ```
 ## Arguments
@@ -131,6 +131,7 @@ python -m dsrnngan.main [-h] [--records-folder RECORDS_FOLDER] [--model-folder M
 ||`--training-weights`|`None`|Weighting of classes to use in training (assumes data has been split according to e.g. mean rainfall)|
 ||`--output-suffix`|`None`|Suffix to append to model folder. If none then model folder has same name as TF records folder used as input.|
 ||`--log-folder`|`None`|Root folder to which models are saved|
+||`--wandb-loggin`||Turn on logging to weights and biases (requires account setup as detailed below)|
 ||`--debug`||Flag to trigger debug mode, to reduce data volumes|
 
 
@@ -233,4 +234,4 @@ python -m scripts.make_plots --output-dir OUTPUT_DIR --nickname NICKNAME --model
 
 # Logging
 
-Logging inside main.py used Weights and Biases; to use this functionality you need to create an account and follow their documentation to make sure the API calls will authenticate correctly. Or just comment this bit out.
+Optional logging inside main.py used Weights and Biases; to use this functionality you need to create an account and follow their documentation to make sure the API calls will authenticate correctly. 
