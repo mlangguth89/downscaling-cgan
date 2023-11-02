@@ -142,9 +142,9 @@ for k, v in special_areas.items():
 
 area = args.area
 lat_range_index = special_areas[area]['lat_index_range']
-lon_range_index = area_range[area]['lon_index_range']
-latitude_range=special_areas[area]['lat_range']
-longitude_range=special_areas[area]['lon_range']
+lon_range_index = special_areas[area]['lon_index_range']
+latitude_range=np.arange(special_areas[area]['lat_range'][0], special_areas[area]['lat_range'][-1] + data_config.latitude_step_size, data_config.latitude_step_size)
+longitude_range=np.arange(special_areas[area]['lon_range'][0], special_areas[area]['lon_range'][-1] + data_config.longitude_step_size, data_config.longitude_step_size)
 
 ###################################
 # Load arrays
@@ -223,8 +223,8 @@ try:
             
     print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
 
-    cgan_corrected = samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
-    fcst_corrected = fcst_array[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
+    cgan_corrected = cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
+    fcst_corrected = fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
 
 except:
     cgan_corrected = samples_gen_array.copy()
@@ -362,32 +362,36 @@ if metric_dict['examples']:
 ##################################################################################
 
 if metric_dict['scatter']:
+    from scipy.stats import pearsonr
 
-    h = np.histogram(truth_array, 10)
-    bin_edges = h[1]
-    bin_edges[0] = 0
-    bin_centres = [0.5*(bin_edges[n] + bin_edges[n+1]) for n in range(len(bin_edges) - 1)]
+    metric_types = {'mean': lambda x: np.mean(x)}
+    metric_name = 'mean'
 
-    mean_data = {}
-    scat_data_dict = {'IFS': fcst_corrected,
-                'cgan': cgan_corrected[:,:,:,0]}
+    scatter_results = {}
+    for metric_name, metric_fn in tqdm(metric_types.items()):
+        if metric_name == 'mean':
 
-    for name, d in data_dict.items():
-        
-        mean_data[name] = []
-        for n in range(len(bin_edges) - 1):
-            valid_ix = np.logical_and(truth_array <=bin_edges[n+1], truth_array >= bin_edges[n])
-            tmp_fcst_data = d[valid_ix]
-            assert tmp_fcst_data.size > 0
-            mean_data[name].append(tmp_fcst_data.mean())
-            
-    fig, ax = plt.subplots(1,1)
+            scatter_results[metric_name] = {}
 
-    for name, d in mean_data.items():
-        ax.scatter(bin_centres, d, label=name)
-    ax.set_xlabel('Observations (mm/hr)')
-    ax.set_ylabel('Model (mm/hr)')
-    ax.legend()
+            scatter_results[metric_name]['cGAN-qm'] = [metric_fn(cgan_corrected[n,:,:,0]) for n in range(cgan_corrected.shape[0])]
+            scatter_results[metric_name]['IMERG'] = [metric_fn(truth_array[n,:,:]) for n in range(truth_array.shape[0])]
+            scatter_results[metric_name]['IFS-qm'] = [metric_fn(fcst_corrected[n,:,:]) for n in range(fcst_corrected.shape[0])]
+
+    plt.rcParams.update({'font.size': 12})
+
+    fig, ax = plt.subplots(1,2, figsize=(10,5))
+
+    ax[0].scatter(scatter_results[metric_name]['IMERG'], scatter_results[metric_name]['cGAN-qm'] , marker='+', label='cGAN-qm')
+    ax[1].scatter(scatter_results[metric_name]['IMERG'], scatter_results[metric_name]['IFS-qm'], marker='+',label='IFS-qm')
+    max_val = np.max(scatter_results[metric_name]['cGAN-qm']  + scatter_results[metric_name]['IMERG'] + scatter_results[metric_name]['IFS-qm'])
+    for a in ax:
+        a.plot(scatter_results[metric_name]['IMERG'], scatter_results[metric_name]['IMERG'], 'k--')
+        a.legend(loc='lower right')
+        a.set_xlabel('IMERG observations (mm/hr)')
+        a.set_ylabel('Forecasts (mm/hr)')
+        a.set_xlim([0, max_val])
+        a.set_ylim([0, max_val])
+    print(metric_name)
     plt.savefig(os.path.join(args.output_dir, f'scatter_{nickname}_{model_number}_{area}.pdf'), format='pdf')
 
 
