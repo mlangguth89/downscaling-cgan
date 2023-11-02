@@ -66,9 +66,9 @@ latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_c
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
 
-quantile_thresholds = [0.99, 0.999, 0.9999, 0.99999]
+quantile_thresholds = [0.9, 0.99, 0.999, 0.9999, 0.99999]
 hourly_thresholds = [np.quantile(truth_array, q) for q in quantile_thresholds]
-window_sizes = [1,20, 40, 60,80, 100, 150,200,300,400,500]
+window_sizes = [1, 10, 20, 40, 60,80, 100, 150,200,300,400,500]
 bootstrap_results_cgan_dict = {}
 bootstrap_results_ifs_dict = {}
 

@@ -893,6 +893,7 @@ def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_
 
     # Filepath is specific to make sure we don't use the wrong normalisation stats
     fp = f'{output_dir}/IFS_norm_{field}_{year}_lat{min_lat}-{max_lat}lon{min_lon}-{max_lon}.pkl'
+
     var_name = None
 
     if use_cached and os.path.isfile(fp):
