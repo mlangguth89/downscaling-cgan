@@ -967,7 +967,7 @@ if metric_dict['diurnal']:
     n_samples = truth_array.shape[0]
     
     raw_diurnal_data_dict = {'IMERG': truth_array,
-                        'cGAN-qm':cgan_corrected,
+                        'cGAN-qm':cgan_corrected[:,:,:,0],
                         'IFS-qm': fcst_corrected}
 
     peak_dict = {}
