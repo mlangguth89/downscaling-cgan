@@ -24,7 +24,7 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils import read_config
-from dsrnngan.utils.utils import load_yaml_file, get_best_model_number
+from dsrnngan.utils.utils import load_yaml_file, get_best_model_number, special_areas
 from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, get_quantile_data, border_feature, disputed_border_feature
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
@@ -51,18 +51,6 @@ format_lookup = {'GAN': {'color': 'b'},
                  'IFS + qmap': {'color': 'r', 'linestyle': '--'},
                  'Obs (IMERG)': {'color': 'k', 'linestyle': '-'}}
 
-special_areas = {'all': {'lat_range': None, 'abbrv': 'ALL'},
-                 'lake_victoria': {'lat_range': [-3.05,0.95], 'lon_range': [31.55, 34.55], 'abbrv': 'LV'},
-                 'somalia': {'lat_range': [-1.05,4.05], 'lon_range': [40.0, 44.05],  'abbrv': 'S'},
-                 'coast': {'lat_range': [-11.05, -4.70 ], 'lon_range': [38.0,39.0],  'abbrv': 'C'},
-                 'west_lv_basin': {'lat_range': [-4.70,0.30], 'lon_range': [29.5,31.3],  'abbrv': 'WLVB'},
-                 'east_lv_basin': {'lat_range': [-3.15, 1.55], 'lon_range': [34.5,36.0],  'abbrv': 'ELVB'},
-                 'nw_ethiopian_highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30], 'abbrv': 'NWEH'},
-                 'kenya': {'lat_range': [-4.65, 5.15], 'lon_range': [33.25, 42.15], 'abbrv': 'NWEH'},
-
-}
-
-
 ################################################################################
 ## Setup
 ################################################################################
@@ -73,7 +61,7 @@ parser.add_argument('--output-dir', type=str, required=True, help="Folder to sto
 parser.add_argument('--nickname', type=str, required=True, help="nickname to give this model")
 parser.add_argument('--model-eval-folder', type=str, required=True, help="Folder containing pre-evaluated cGAN data")
 parser.add_argument('--model-number', type=int, required=True, help="Checkpoint number of model")
-parser.add_argument('--area', type=str, default='All', choices=list(special_areas.keys()), 
+parser.add_argument('--area', type=str, default='all', choices=list(special_areas.keys()), 
 help="Area to run analysis on. Defaults to 'All' which performs analysis over the whole domain")
 parser.add_argument('--climatological-data-path', type=str, default='/bp1/geog-tropical/users/uz22147/east_africa_data/daily_rainfall/', help="Folder containing climatological data to load")
 metric_group = parser.add_argument_group('metrics')

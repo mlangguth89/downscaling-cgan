@@ -19,6 +19,17 @@ from types import SimpleNamespace
 tz_finder = TimezoneFinder()
 from_zone = tz.gettz('UTC')
 
+special_areas = {'all': {'lat_range': None, 'abbrv': 'ALL'},
+                 'lake_victoria': {'lat_range': [-3.05,0.95], 'lon_range': [31.55, 34.55], 'abbrv': 'LV'},
+                 'somalia': {'lat_range': [-1.05,4.05], 'lon_range': [40.0, 44.05],  'abbrv': 'S'},
+                 'coast': {'lat_range': [-11.05, -4.70 ], 'lon_range': [38.0,39.0],  'abbrv': 'C'},
+                 'west_lv_basin': {'lat_range': [-4.70,0.30], 'lon_range': [29.5,31.3],  'abbrv': 'WLVB'},
+                 'east_lv_basin': {'lat_range': [-3.15, 1.55], 'lon_range': [34.5,36.0],  'abbrv': 'ELVB'},
+                 'nw_ethiopian_highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30], 'abbrv': 'NWEH'},
+                 'kenya': {'lat_range': [-4.65, 5.15], 'lon_range': [33.25, 42.15], 'abbrv': 'NWEH'},
+
+}
+
 def hash_dict(params: dict):
     h = hashlib.shake_256()
     h.update(json.dumps(params, sort_keys=True).encode('utf-8'))
