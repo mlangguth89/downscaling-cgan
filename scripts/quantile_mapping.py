@@ -54,6 +54,7 @@ print('Loading model data', flush=True)
 # Get best model
 model_eval_folder = args.model_eval_folder
 model_number =args.model_number
+base_folder = '/'.join(model_eval_folder.split('/')[:-1]) 
 
 with open(os.path.join(model_eval_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
     arrays = pickle.load(ifh)
@@ -85,8 +86,8 @@ assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate dat
 ###########################
 
 # Get lat/lon range from log folder
-data_config = read_config.read_data_config(config_folder=model_eval_folder)
-model_config = read_config.read_model_config(config_folder=model_eval_folder)
+data_config = read_config.read_data_config(config_folder=base_folder)
+model_config = read_config.read_model_config(config_folder=base_folder)
 
 # Locations
 latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_config=data_config)
@@ -123,7 +124,7 @@ quantile_data_dicts = {'test': {
 
 # NOTE:This requires data collection for the model 
 
-fps = [os.path.join(model_eval_folder, 'n18000_201603-202009_6f02b_e1')]
+fps = [os.path.join(base_folder, 'n18000_201603-202009_6f02b_e1')]
 
 imerg_training_data = []
 cgan_training_data = []
@@ -266,10 +267,10 @@ if args.save_qmapper:
     ###########################
 
     # Save trained quantile mapper for experiment
-    with open(os.path.join(model_eval_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(base_folder, f'fcst_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(fcst_qmapper, ofh)
     
-    with open(os.path.join(model_eval_folder, f'cgan_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(base_folder, f'cgan_qmapper_{args.num_lat_lon_chunks}.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_qmapper, ofh)
         
           

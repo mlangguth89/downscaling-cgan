@@ -42,16 +42,21 @@ dates = [d[0] for d in arrays['dates']]
 hours = [h[0] for h in arrays['hours']]
 
 assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
+
+if len(samples_gen_array.shape) == 3:
+    samples_gen_array = np.expand_dims(samples_gen_array, -1)
+
 (n_samples, width, height, ensemble_size) = samples_gen_array.shape
 
 
 # Open quantile mapped forecasts
-with open(os.path.join(args.log_folder, f'fcst_qmap_15.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'fcst_qmap_3.pkl'), 'rb') as ifh:
     fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(args.log_folder, f'cgan_qmap_1.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
     cgan_corrected = pickle.load(ifh)
-    
+    if len(cgan_corrected.shape) == 3:
+        cgan_corrected = np.expand_dims(cgan_corrected, -1)
     
 ###########################
 

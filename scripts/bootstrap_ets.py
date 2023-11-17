@@ -43,10 +43,10 @@ if len(samples_gen_array.shape) == 3:
 
 
 # Open quantile mapped forecasts
-with open(os.path.join(args.log_folder, f'fcst_qmap_15.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'fcst_qmap_3.pkl'), 'rb') as ifh:
     fcst_corrected = pickle.load(ifh)
 
-with open(os.path.join(args.log_folder, f'cgan_qmap_1.pkl'), 'rb') as ifh:
+with open(os.path.join(args.log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
     cgan_corrected = pickle.load(ifh)
     
     

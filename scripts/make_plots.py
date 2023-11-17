@@ -120,8 +120,8 @@ special_areas['all']['lat_range'] = [min(latitude_range), max(latitude_range)]
 special_areas['all']['lon_range'] =  [min(longitude_range), max(longitude_range)]
 
 for k, v in special_areas.items():
-    lat_vals = [lt for lt in lat_range_list if v['lat_range'][0] <= lt <= v['lat_range'][1]]
-    lon_vals = [ln for ln in lon_range_list if v['lon_range'][0] <= ln <= v['lon_range'][1]]
+    lat_vals = [lt for lt in lat_range_list if np.round(v['lat_range'][0],2) <= lt <= np.round(v['lat_range'][1],2)]
+    lon_vals = [ln for ln in lon_range_list if np.round(v['lon_range'][0],2) <= ln <= np.round(v['lon_range'][1],2)]
     
     if lat_vals and lon_vals:
  
@@ -145,15 +145,16 @@ if args.debug:
     n_samples = 100
 else:
     n_samples = arrays['truth'].shape[0]
-    
-truth_array = arrays['truth'][:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
-samples_gen_array = arrays['samples_gen'][:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
-fcst_array = arrays['fcst_array'][:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1 ]
-ensmean_array = np.mean(arrays['samples_gen'], axis=-1)[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
+
+
+truth_array = arrays['truth'][:n_samples, ::]
+samples_gen_array = arrays['samples_gen'][:n_samples, ::]
+fcst_array = arrays['fcst_array'][:n_samples, ::]
+ensmean_array = np.mean(arrays['samples_gen'], axis=-1)[:n_samples, ::]
 dates = [d[0] for d in arrays['dates']][:n_samples]
 hours = [h[0] for h in arrays['hours']][:n_samples]
 
-
+del arrays
 
 # Times in EAT timezone
 eat_datetimes = [datetime(d.year, d.month, d.day, hours[n]).replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Africa/Nairobi')) for n,d in enumerate(dates)]
@@ -176,48 +177,49 @@ dry_day_indexes = [item[0] for item in sorted_means[:10]]
 ####################################
 ### Load in quantile-mapped data (created by scripts/quantile_mapping.py)
 ####################################
-try:
-    if os.path.isfile(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl')):
-        with open(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl'), 'rb') as ifh:
-            fcst_corrected = pickle.load(ifh)
-    else:
-        with open(os.path.join(base_folder, 'fcst_qmapper_15.pkl'), 'rb') as ifh:
-            fcst_qmapper = pickle.load(ifh) 
-        print('Performing forecast quantile mapping', flush=True)
-        fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
-        print('Finished forecast quantile mapping', flush=True)
+
+if os.path.isfile(os.path.join(model_eval_folder, 'fcst_qmap_3.pkl')):
+    with open(os.path.join(model_eval_folder, 'fcst_qmap_3.pkl'), 'rb') as ifh:
+        fcst_corrected = pickle.load(ifh)
+else:
+    with open(os.path.join(base_folder, 'fcst_qmapper_3.pkl'), 'rb') as ifh:
+        fcst_qmapper = pickle.load(ifh) 
+    print('Performing forecast quantile mapping', flush=True)
+    fcst_corrected = fcst_qmapper.get_quantile_mapped_forecast(fcst=fcst_array, dates=dates, hours=hours)
+    print('Finished forecast quantile mapping', flush=True)
+    
+    with open(os.path.join(model_eval_folder, 'fcst_qmap_3.pkl'), 'wb+') as ofh:
+        pickle.dump(fcst_corrected, ofh)
+
+if os.path.isfile(os.path.join(model_eval_folder, 'cgan_qmap_2.pkl')):
+    with open(os.path.join(model_eval_folder, 'cgan_qmap_2.pkl'), 'rb') as ifh:
+        cgan_corrected = pickle.load(ifh)
+else:
+    with open(os.path.join(base_folder, 'cgan_qmapper_2.pkl'), 'rb') as ifh:
+        cgan_qmapper = pickle.load(ifh)
+    print('Performing cGAN quantile mapping', flush=True)
+
+    cgan_corrected = np.empty(shape=samples_gen_array.shape)
+    cgan_corrected[...] = np.nan
+    for en in tqdm(range(ensemble_size)):
+        print(en, flush=True)
+
+        cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
+    print('Finished cgan quantile mapping', flush=True)
+    
+    with open(os.path.join(model_eval_folder, 'cgan_qmap_2.pkl'), 'wb+') as ofh:
+        pickle.dump(cgan_corrected, ofh)
         
-        with open(os.path.join(model_eval_folder, 'fcst_qmap_15.pkl'), 'wb+') as ofh:
-            pickle.dump(fcst_corrected, ofh)
+print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
 
-    if os.path.isfile(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl')):
-        with open(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl'), 'rb') as ifh:
-            cgan_corrected = pickle.load(ifh)
-    else:
-        with open(os.path.join(base_folder, 'cgan_qmapper_1.pkl'), 'rb') as ifh:
-            cgan_qmapper = pickle.load(ifh)
-        print('Performing cGAN quantile mapping', flush=True)
+# Filter by area
+cgan_corrected = cgan_corrected[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
+fcst_corrected = fcst_corrected[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
 
-        cgan_corrected = np.empty(shape=samples_gen_array.shape)
-        cgan_corrected[...] = np.nan
-        for en in tqdm(range(ensemble_size)):
-            print(en, flush=True)
-
-            cgan_corrected[:,:,:,en] = cgan_qmapper.get_quantile_mapped_forecast(fcst=samples_gen_array[:,:,:,en], dates=dates, hours=hours)
-        print('Finished cgan quantile mapping', flush=True)
-        
-        with open(os.path.join(model_eval_folder, 'cgan_qmap_1.pkl'), 'wb+') as ofh:
-            pickle.dump(cgan_corrected, ofh)
-            
-    print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
-
-    cgan_corrected = cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
-    fcst_corrected = fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
-
-except:
-    cgan_corrected = samples_gen_array.copy()
-    fcst_corrected = fcst_array.copy()
-
+truth_array = truth_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
+samples_gen_array = samples_gen_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
+fcst_array = fcst_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1 ]
+ensmean_array = np.mean(samples_gen_array, axis=-1)[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
 
 
 
