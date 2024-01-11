@@ -26,7 +26,7 @@ special_areas = {'all': {'lat_range': None, 'abbrv': 'ALL'},
                  'west_lv_basin': {'lat_range': [-4.70,0.30], 'lon_range': [29.5,31.3],  'abbrv': 'WLVB'},
                  'east_lv_basin': {'lat_range': [-3.15, 1.55], 'lon_range': [34.5,36.0],  'abbrv': 'ELVB'},
                  'nw_ethiopian_highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30], 'abbrv': 'NWEH'},
-                 'kenya': {'lat_range': [-4.65, 5.15], 'lon_range': [33.25, 42.15], 'abbrv': 'NWEH'},
+                 'kenya': {'lat_range': [-4.65, 5.15], 'lon_range': [33.25, 42.15], 'abbrv': 'K'},
 
 }
 
@@ -299,3 +299,32 @@ def convert_namespace_to_dict(ns_obj: SimpleNamespace) -> dict:
             output_dict[k] = v.__dict__
             
     return output_dict
+
+def get_area_range(data_config, area, special_areas=special_areas):
+
+    special_areas = copy.deepcopy(special_areas)
+
+    latitude_range=np.arange( np.round(data_config.min_latitude,2), np.round(data_config.max_latitude,2), data_config.latitude_step_size)
+    longitude_range=np.arange( np.round(data_config.min_longitude,2),  np.round(data_config.max_longitude,2), data_config.longitude_step_size)
+
+    lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
+    lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
+
+    special_areas['all']['lat_range'] = [np.round(min(latitude_range),2), np.round(max(latitude_range),2)]
+    special_areas['all']['lon_range'] =  [np.round(min(longitude_range),2), np.round(max(longitude_range),2)]
+
+    for k, v in special_areas.items():
+        lat_vals = [lt for lt in lat_range_list if np.round(v['lat_range'][0],2) <=  np.round(lt,2) <= np.round(v['lat_range'][1],2)]
+        lon_vals = [ln for ln in lon_range_list if np.round(v['lon_range'][0],2) <= np.round(ln,2) <= np.round(v['lon_range'][1],2)]
+        if lat_vals and lon_vals:
+    
+            special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
+            special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
+
+    lat_range_index = special_areas[area]['lat_index_range']
+    lon_range_index = special_areas[area]['lon_index_range']
+    latitude_range=np.arange(special_areas[area]['lat_range'][0], special_areas[area]['lat_range'][-1] + data_config.latitude_step_size, data_config.latitude_step_size)
+    longitude_range=np.arange(special_areas[area]['lon_range'][0], special_areas[area]['lon_range'][-1] + data_config.longitude_step_size, data_config.longitude_step_size)
+
+    return latitude_range, lat_range_index, longitude_range, lon_range_index
+

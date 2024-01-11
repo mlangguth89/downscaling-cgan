@@ -91,6 +91,19 @@
             ]
         },
         {
+            "name": "Python: bstrap ETS",
+            "type": "python",
+            "request": "launch",
+            "module": "scripts.bootstrap_ets",
+            "justMyCode": true,
+            "args": [
+                "--log-folder", "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
+                "--model-number","217600",
+                "--n-bootstrap-samples","2",
+                "--debug"
+            ]
+        },
+        {
             "name": "Python: qmap_cv",
             "type": "python",
             "request": "launch",
@@ -139,13 +152,12 @@
             "module": "scripts.make_plots",
             "justMyCode": true,
             "args": [
-                "--log-folder",
-                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
+                "--model-eval-folder", "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
                 "--model-number",
                 "217600",
                 "--output-dir",
                 "/user/home/uz22147/repos/downscaling-cgan/plots",
-                "--diurnal",
+                "-qq",
                 "--nickname",
                 "cl100-medium-nologs"
             ]

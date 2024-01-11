@@ -24,7 +24,7 @@ HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 
 from dsrnngan.utils import read_config
-from dsrnngan.utils.utils import load_yaml_file, get_best_model_number, special_areas
+from dsrnngan.utils.utils import load_yaml_file, get_best_model_number, special_areas, get_area_range
 from dsrnngan.evaluation.plots import plot_contourf, range_dict, quantile_locs, percentiles, plot_quantiles, get_quantile_data, border_feature, disputed_border_feature
 from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONGITUDE_RANGE
 from dsrnngan.data import data
@@ -63,6 +63,7 @@ parser.add_argument('--model-eval-folder', type=str, required=True, help="Folder
 parser.add_argument('--model-number', type=int, required=True, help="Checkpoint number of model")
 parser.add_argument('--area', type=str, default='all', choices=list(special_areas.keys()), 
 help="Area to run analysis on. Defaults to 'All' which performs analysis over the whole domain")
+parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to use")
 parser.add_argument('--climatological-data-path', type=str, default='/bp1/geog-tropical/users/uz22147/east_africa_data/daily_rainfall/', help="Folder containing climatological data to load")
 metric_group = parser.add_argument_group('metrics')
 metric_group.add_argument('-ex', '--examples', action="store_true", help="Plot a selection of example precipitation forecasts")
@@ -84,6 +85,7 @@ parser.add_argument('--debug', action='store_true', help="Debug flag to use smal
 args = parser.parse_args()
 
 nickname = args.nickname
+area = args.area 
 
 all_metrics = ['examples', 'scatter','rank_hist','rmse', 'bias', 'spread_error','rapsd','quantiles','hist','crps','fss','diurnal','confusion_matrix','csi']
 metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
@@ -110,29 +112,7 @@ except FileNotFoundError:
     data_config = read_config.read_data_config(config_folder=base_folder)
 
 # Locations
-latitude_range=np.arange(data_config.min_latitude, data_config.max_latitude, data_config.latitude_step_size)
-longitude_range=np.arange(data_config.min_longitude, data_config.max_longitude, data_config.longitude_step_size)
-
-lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
-lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
-
-special_areas['all']['lat_range'] = [min(latitude_range), max(latitude_range)]
-special_areas['all']['lon_range'] =  [min(longitude_range), max(longitude_range)]
-
-for k, v in special_areas.items():
-    lat_vals = [lt for lt in lat_range_list if np.round(v['lat_range'][0],2) <= lt <= np.round(v['lat_range'][1],2)]
-    lon_vals = [ln for ln in lon_range_list if np.round(v['lon_range'][0],2) <= ln <= np.round(v['lon_range'][1],2)]
-    
-    if lat_vals and lon_vals:
- 
-        special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
-        special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
-
-area = args.area
-lat_range_index = special_areas[area]['lat_index_range']
-lon_range_index = special_areas[area]['lon_index_range']
-latitude_range=np.arange(special_areas[area]['lat_range'][0], special_areas[area]['lat_range'][-1] + data_config.latitude_step_size, data_config.latitude_step_size)
-longitude_range=np.arange(special_areas[area]['lon_range'][0], special_areas[area]['lon_range'][-1] + data_config.longitude_step_size, data_config.longitude_step_size)
+latitude_range, lat_range_index, longitude_range, lon_range_index = get_area_range(data_config, area=args.area)
 
 ###################################
 # Load arrays
@@ -143,6 +123,8 @@ with open(os.path.join(model_eval_folder, f'arrays-{model_number}.pkl'), 'rb') a
 
 if args.debug:
     n_samples = 100
+elif args.num_samples:
+    n_samples = min(args.num_samples, arrays['truth'].shape[0])
 else:
     n_samples = arrays['truth'].shape[0]
 
@@ -209,7 +191,10 @@ else:
     
     with open(os.path.join(model_eval_folder, 'cgan_qmap_2.pkl'), 'wb+') as ofh:
         pickle.dump(cgan_corrected, ofh)
-        
+
+cgan_corrected = cgan_corrected[:n_samples, ::]
+fcst_corrected = fcst_corrected[:n_samples, ::]
+
 print('shape of cgan corrected: ', cgan_corrected.shape, flush=True)
 
 # Filter by area
@@ -1094,7 +1079,7 @@ if metric_dict.get('csi'):
                     hourly_thresholds=hourly_thresholds
                     )
     
-    with open(os.path.join(args.output_dir,f'ets_{nickname}_{model_number}_{area}.pkl'), 'wb+') as ofh:
+    with open(os.path.join(args.output_dir, f'ets_{nickname}_{model_number}_{area}.pkl'), 'wb+') as ofh:
         pickle.dump(ets_results, ofh)
     
 

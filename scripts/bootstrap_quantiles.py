@@ -13,19 +13,28 @@ from argparse import ArgumentParser
 HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
-from dsrnngan.utils.utils import bootstrap_summary_statistic
+from dsrnngan.utils.utils import bootstrap_summary_statistic, get_area_range, special_areas
 from dsrnngan.utils import read_config
+
 ###########################
 # Load model data
 ###########################
 
 parser = ArgumentParser(description='Script for quantile mapping.')
 parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
+parser.add_argument('--area', type=str, default='all', choices=list(special_areas.keys()), 
+help="Area to run analysis on. Defaults to 'all' which performs analysis over the whole domain")
 parser.add_argument('--model-number', type=str, help='model number', required=True)
 parser.add_argument('--n-bootstrap-samples', type=int, default=1000,
                     help='Number of bootstrap samples to use.')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 args = parser.parse_args()
+
+# Get lat/lon range from log folder
+base_folder = '/'.join(args.log_folder.split('/')[:-1])
+data_config = read_config.read_data_config(config_folder=base_folder)
+model_config = read_config.read_model_config(config_folder=base_folder)
+
 
 
 with open(os.path.join(args.log_folder, f'arrays-{args.model_number}.pkl'), 'rb') as ifh:
@@ -40,6 +49,8 @@ persisted_fcst_array = arrays['persisted_fcst']
 ensmean_array = np.mean(arrays['samples_gen'], axis=-1)
 dates = [d[0] for d in arrays['dates']]
 hours = [h[0] for h in arrays['hours']]
+
+del arrays
 
 assert len(set(list(zip(dates, hours)))) == fcst_array.shape[0], "Degenerate date/hour combinations"
 
@@ -62,37 +73,20 @@ with open(os.path.join(args.log_folder, f'cgan_qmap_2.pkl'), 'rb') as ifh:
 
 ###########################
 
-# Get lat/lon range from log folder
-base_folder = '/'.join(args.log_folder.split('/')[:-1])
-data_config = read_config.read_data_config(config_folder=base_folder)
-model_config = read_config.read_model_config(config_folder=base_folder)
-
+# Filter by area
 
 # Locations
-latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_config=data_config)
+latitude_range, lat_range_index, longitude_range, lon_range_index = get_area_range(data_config, area=args.area)
 
-lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
-lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
+cgan_corrected = cgan_corrected[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
+fcst_corrected = fcst_corrected[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
 
+truth_array = truth_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
+samples_gen_array = samples_gen_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1,:]
+fcst_array = fcst_array[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1 ]
+ensmean_array = np.mean(samples_gen_array, axis=-1)[:, lat_range_index[0]:lat_range_index[1]+1, lon_range_index[0]:lon_range_index[1]+1]
 
-special_areas = {'Lake Victoria': {'lat_range': [-3.05,0.95], 'lon_range': [31.55, 34.55], 'abbrv': 'LV'},
-                 'Somalia': {'lat_range': [-1.05,4.05], 'lon_range': [41.65, 47.05],  'abbrv': 'S'},
-                 'Coast': {'lat_range': [-10.5,-1.05], 'lon_range': [37.75, 41.5],  'abbrv': 'C'},
-                 'West EA Rift': {'lat_range': [-4.70,0.30], 'lon_range': [27.85,31.3],  'abbrv': 'WEAR'},
-                 'East EA Rift': {'lat_range': [-3.15, 1.55], 'lon_range': [34.75,37.55],  'abbrv': 'EEAR'},
-                 'NW Ethiopian Highlands': {'lat_range': [6.10, 14.15], 'lon_range': [34.60, 40.30],  'abbrv': 'EH'}}
-
-
-for k, v in special_areas.items():
-    lat_vals = [lt for lt in lat_range_list if v['lat_range'][0] <= lt <= v['lat_range'][1]]
-    lon_vals = [ln for ln in lon_range_list if v['lon_range'][0] <= ln <= v['lon_range'][1]]
-    
-    if lat_vals and lon_vals:
- 
-        special_areas[k]['lat_index_range'] = [lat_range_list.index(lat_vals[0]), lat_range_list.index(lat_vals[-1])]
-        special_areas[k]['lon_index_range'] = [lon_range_list.index(lon_vals[0]), lon_range_list.index(lon_vals[-1])]
-     
-    
+  
     
 # calculate standard deviation and mean of
 quantile_locations = [np.round(1 - 10**(-n),n+1) for n in range(3, 9)]
@@ -111,7 +105,7 @@ bootstrap_results_dict_fcst_qmap = bootstrap_summary_statistic(calculate_quantil
 bootstrap_results_dict_cgan_qmap = bootstrap_summary_statistic(calculate_quantiles, cgan_corrected[...,0], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
 
 # Save results 
-with open(os.path.join(args.log_folder, f'bootstrap_quantile_results_n{args.n_bootstrap_samples}.pkl'), 'wb+') as ofh:
+with open(os.path.join(args.log_folder, f'bootstrap_quantile_results_n{args.n_bootstrap_samples}_{args.area}.pkl'), 'wb+') as ofh:
     pickle.dump({'obs': bootstrap_results_dict_obs, 
                  'cgan': bootstrap_results_dict_cgan_qmap, 
                  'fcst': bootstrap_results_dict_fcst_qmap}, ofh)

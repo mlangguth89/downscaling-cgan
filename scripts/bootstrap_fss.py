@@ -21,7 +21,7 @@ parser.add_argument('--n-bootstrap-samples', type=int, default=1000,
                     help='Number of bootstrap samples to use.')
 parser.add_argument('--plot', action='store_true', help='Make plots')
 parser.add_argument('--area', type=str, default='all', choices=list(special_areas.keys()), 
-help="Area to run analysis on. Defaults to 'All' which performs analysis over the whole domain")
+help="Area to run analysis on. Defaults to 'all' which performs analysis over the whole domain")
 args = parser.parse_args()
 
 # Get lat/lon range from log folder
@@ -54,7 +54,6 @@ longitude_range=np.arange(special_areas[area]['lon_range'][0], special_areas[are
 
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
-
 
 
 with open(os.path.join(args.log_folder, f'arrays-{args.model_number}.pkl'), 'rb') as ifh:
@@ -94,21 +93,26 @@ fcst_corrected = fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1
 quantile_thresholds = [0.9, 0.99, 0.999, 0.9999, 0.99999]
 hourly_thresholds = [np.quantile(truth_array, q) for q in quantile_thresholds]
 window_sizes = [1, 10, 20, 40, 60,80, 100, 150,200,300,400,500]
+
 bootstrap_results_cgan_dict = {}
 bootstrap_results_ifs_dict = {}
+bootstrap_results_raw_ifs_dict = {}
 
 for n, thr in enumerate(hourly_thresholds):
     
     bootstrap_results_cgan_dict[quantile_thresholds[n]] = {}
     bootstrap_results_ifs_dict[quantile_thresholds[n]] = {}
+    bootstrap_results_raw_ifs_dict[quantile_thresholds[n]] = {}
     
     for ws in window_sizes:
         calculate_fss = lambda obs, fcst: fss(obs_array=obs, fcst_array=fcst, scale=ws, thr=thr, mode='constant')
 
         bootstrap_results_cgan_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=cgan_corrected[:,:,:,0], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
         bootstrap_results_ifs_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=fcst_corrected, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+        bootstrap_results_raw_ifs_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=fcst_array, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
 
 # Save results 
 with open(os.path.join(args.log_folder, f'bootstrap_fss_results_n{args.n_bootstrap_samples}_{args.area}.pkl'), 'wb+') as ofh:
     pickle.dump({'cgan': bootstrap_results_cgan_dict, 
-                 'fcst': bootstrap_results_ifs_dict}, ofh)
+                 'fcst': bootstrap_results_ifs_dict,
+                 'fcst_raw': bootstrap_results_raw_ifs_dict}, ofh)
