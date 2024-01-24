@@ -96,12 +96,14 @@ window_sizes = [1, 10, 20, 40, 60,80, 100, 150,200,300,400,500]
 
 bootstrap_results_cgan_dict = {}
 bootstrap_results_ifs_dict = {}
+bootstrap_results_raw_cgan_dict = {}
 bootstrap_results_raw_ifs_dict = {}
 
 for n, thr in enumerate(hourly_thresholds):
     
     bootstrap_results_cgan_dict[quantile_thresholds[n]] = {}
     bootstrap_results_ifs_dict[quantile_thresholds[n]] = {}
+    bootstrap_results_raw_cgan_dict[quantile_thresholds[n]] = {}
     bootstrap_results_raw_ifs_dict[quantile_thresholds[n]] = {}
     
     for ws in window_sizes:
@@ -109,10 +111,12 @@ for n, thr in enumerate(hourly_thresholds):
 
         bootstrap_results_cgan_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=cgan_corrected[:,:,:,0], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
         bootstrap_results_ifs_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=fcst_corrected, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
+        bootstrap_results_raw_cgan_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=samples_gen_array[:,:,:,0], n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
         bootstrap_results_raw_ifs_dict[quantile_thresholds[n]][ws] = bootstrap_metric_function(metric_func=calculate_fss, obs_array=truth_array, fcst_array=fcst_array, n_bootstrap_samples=args.n_bootstrap_samples, time_resample=True)
 
 # Save results 
 with open(os.path.join(args.log_folder, f'bootstrap_fss_results_n{args.n_bootstrap_samples}_{args.area}.pkl'), 'wb+') as ofh:
     pickle.dump({'cgan': bootstrap_results_cgan_dict, 
                  'fcst': bootstrap_results_ifs_dict,
+                 'cgan_raw': bootstrap_results_raw_cgan_dict,
                  'fcst_raw': bootstrap_results_raw_ifs_dict}, ofh)
