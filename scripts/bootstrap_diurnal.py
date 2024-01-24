@@ -63,6 +63,30 @@ model_config = read_config.read_model_config(config_folder=base_folder)
 # Locations
 latitude_range, longitude_range=read_config.get_lat_lon_range_from_config(data_config=data_config)
 
+# Land sea mask and lake victoria
+lsm = data.load_land_sea_mask(
+                       latitude_vals=latitude_range, 
+                       longitude_vals=longitude_range)
+# lake victoria lsm
+lv_latitude_range, lv_lat_range_index, lv_longitude_range, lv_lon_range_index = get_area_range(data_config, area='lake_victoria')
+lv_lsm = lsm.copy()
+lv_lsm = 1 - lv_lsm
+lv_lsm[:lv_lat_range_index[0],:] = 0
+lv_lsm[lv_lat_range_index[1]:,:] = 0
+lv_lsm[:,:lv_lon_range_index[0]] = 0
+lv_lsm[:,lv_lon_range_index[1]:] = 0
+
+lv_area = np.ones(lsm.shape)
+lv_area[:lv_lat_range_index[0],:] = 0
+lv_area[lv_lat_range_index[1]:,:] = 0
+lv_area[:,:lv_lon_range_index[0]] = 0
+lv_area[:,lv_lon_range_index[1]:] = 0
+
+lsm_ocean = lsm.copy()
+lsm_ocean[lv_lsm>0] = 1
+lsm_ocean[:, :140] = 1
+
+
 lat_range_list = [np.round(item, 2) for item in sorted(latitude_range)]
 lon_range_list = [np.round(item, 2) for item in sorted(longitude_range)]
 
@@ -70,7 +94,12 @@ metric_types = {'quantile_999': lambda obs_array,fcst_array: np.quantile(fcst_ar
                     'quantile_9999': lambda obs_array,fcst_array: np.quantile(fcst_array, 0.9999),
                     'quantile_99999': lambda obs_array,fcst_array: np.quantile(fcst_array, 0.99999),
                 'median': lambda obs_array,fcst_array: np.quantile(fcst_array, 0.5),
-                'mean': lambda obs_array,fcst_array: np.mean(fcst_array)}
+                'mean': lambda obs_array,fcst_array: np.mean(fcst_array),
+                'mean_land': lambda obs_array,fcst_array: np.mean(fcst_array[:,lsm > 0.5]),
+                'mean_ocean': lambda obs_array,fcst_array: np.mean(fcst_array[:,lsm_ocean  < 0.5]),
+                'mean_lv_lake': lambda obs_array,fcst_array: np.mean(fcst_array[:,lv_lsm > 0.5]),
+                'mean_lv_area': lambda obs_array,fcst_array: np.mean(fcst_array[:,lv_area > 0.5])
+                }
 
 bootstrap_results_cgan_dict = {}
 bootstrap_results_ifs_dict = {}
