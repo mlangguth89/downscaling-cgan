@@ -1,4 +1,8 @@
-# Downscaling cGAN requirements:
+# Downscaling conditional Generative Adversarial Network (cGAN)
+
+Code to downscale or postprocess NWP forecasts using a cGAN. Forked from the code at https://github.com/ljharris23/public-downscaling-cgan. Main modifications
+- Making the code more generally applicable to different regions, and different domain sizes.
+- Making the data and models more config-driven.
 
 # Setup
 
