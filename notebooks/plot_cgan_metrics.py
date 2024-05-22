@@ -38,7 +38,7 @@ from string import ascii_lowercase
 from zoneinfo import ZoneInfo
 from datetime import datetime, timezone
 
-HOME = '/Users/bobbyantonio/repos/downscaling-cgan/'
+HOME = Path(os.getcwd()).parents[0]
 sys.path.insert(1, str(HOME))
 
 os.environ['ESMFMKFILE'] = "/Users/bobbyantonio/anaconda3/envs/data_analysis/lib/esmf.mk"
@@ -55,46 +55,36 @@ from dsrnngan.utils.utils import get_best_model_number, load_yaml_file, special_
 from dsrnngan.evaluation.benchmarks import QuantileMapper
 from dsrnngan.utils import read_config
 
+BASE_MODEL_PATH = '/Users/bobbyantonio/Documents/cGAN/cgan_model_data'
+
 
 # %%
-model_type = 'final-nologs-local'
+model_type = 'final-nologs-full'
 area = 'all'
 
-log_folders = {'basic': '/user/work/uz22147/logs/cgan/d9b8e8059631e76f/n1000_201806-201905_e50',
-               'full_image': '/user/work/uz22147/logs/cgan/43ae7be47e9a182e_full_image/n1000_201806-201905_e50',
-               'cropped': '/user/work/uz22147/logs/cgan/5c577a485fbd1a72_0876a13533d2542c/n4000_201806-201905_e10',
-               'small1': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl1000/n4000_201806-201905_e10',
-               'small2': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-cl2000/n4000_201806-201905_e10',
-               '2step': '/user/work/uz22147/logs/cgan/7ed5693482c955aa_small-2step-ds/n4000_201806-201905_e20',
-               'nologs': '/user/work/uz22147/logs/cgan/76b8618700c90131_medium-cl10-no-logs/n4000_201806-201905_e10',
-               'nologs_small50': '/user/work/uz22147/logs/cgan/76b8618700c90131_cl50-no-logs/n4000_201806-201905_e10',
-               'final-cl2000': {'log_folder': '/user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20', 'model_number': 262400},
-               'final-nologs': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20', 'model_number': 217600},
-               'final-nologs-full': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1', 'model_number': 217600},
-               'cl5-lv-only': {'log_folder': '/user/work/uz22147/logs/cgan/ec66788090f69890_small-cl5-lvonly/n2900_201806-201903_42e34_e1', 'model_number': 288000},
-               'final-nologs-mam2018': {'log_folder': '/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2088_201803-201805_f37bd_e1', 'model_number': 217600},
-               'final-nologs-local': {'log_folder': '/Users/bobbyantonio/cgan_model_data/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20', 'model_number': 217600},
+log_folders = {
+               'final-nologs': {'log_folder': '7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20', 'model_number': 217600},
+               'final-nologs-full': {'log_folder': '7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1', 'model_number': 217600},
+               'final-nologs-mam2018': {'log_folder': 'n2088_201803-201805_f37bd_e1', 'model_number': 217600},
 }
 
 format_lookup = {'cGAN': {'color': 'b', 'marker': '+', 'alpha': 1, 'linestyle': '--'},
-                    'IMERG': {'color': 'k'},
-                    'IFS': {'color': 'r', 'marker': '+', 'alpha': 1, 'linestyle': '--'},
-                    'IFS-qm': {'color': 'r', 'marker': 'd', 'alpha': 0.7, 'linestyle': '--'},
-                    'cGAN-qm': {'color': 'b', 'marker': 'd', 'alpha': 0.7,'linestyle': '--'}}
+                'IMERG': {'color': 'k'},
+                'IFS': {'color': 'r', 'marker': '+', 'alpha': 1, 'linestyle': '--'},
+                'IFS-qm': {'color': 'r', 'marker': 'd', 'alpha': 0.7, 'linestyle': '--'},
+                'cGAN-qm': {'color': 'b', 'marker': 'd', 'alpha': 0.7,'linestyle': '--'}}
 
 # %%
-
-
 # Get best model
 if isinstance(log_folders[model_type], str):
-    log_folder = log_folders[model_type]
+    log_folder = os.path.join(BASE_MODEL_PATH, log_folders[model_type])
 
     # model_number = get_best_model_number(log_folder=log_folder)
     model_number=268800
 else:
     
     model_number = log_folders[model_type]['model_number']
-    log_folder = log_folders[model_type]['log_folder']
+    log_folder = os.path.join(BASE_MODEL_PATH, log_folders[model_type]['log_folder'])
 
 try:
     with open(os.path.join(log_folder, f'arrays-{model_number}.pkl'), 'rb') as ifh:
@@ -128,7 +118,6 @@ except FileNotFoundError:
         cgan_corrected = np.expand_dims(cgan_corrected, axis=-1) 
          
 folder_suffix = log_folder.split('/')[-1]
-
 
 
 
