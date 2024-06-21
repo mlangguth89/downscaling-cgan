@@ -18,6 +18,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 from properscoring import crps_ensemble
 from zoneinfo import ZoneInfo
 from datetime import datetime, timezone
+from string import ascii_lowercase
 
 HOME = Path(os.getcwd()).parents[0]
 
@@ -30,7 +31,7 @@ from dsrnngan.data.data import denormalise, DEFAULT_LATITUDE_RANGE, DEFAULT_LONG
 from dsrnngan.data import data
 from dsrnngan.evaluation.rapsd import  rapsd
 from dsrnngan.evaluation.scoring import fss, get_spread_error_data, get_metric_by_hour
-from dsrnngan.evaluation.evaluation import get_diurnal_cycle
+from dsrnngan.evaluation.evaluation import get_diurnal_cycle, get_fss_scores
 from dsrnngan.evaluation.benchmarks import QuantileMapper, empirical_quantile_map, quantile_map_grid
 
 def clip_outliers(data, lower_pc=2.5, upper_pc=97.5):
@@ -64,7 +65,7 @@ parser.add_argument('--model-number', type=int, required=True, help="Checkpoint 
 parser.add_argument('--area', type=str, default='all', choices=list(special_areas.keys()), 
 help="Area to run analysis on. Defaults to 'All' which performs analysis over the whole domain")
 parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to use")
-parser.add_argument('--climatological-data-path', type=str, default='/bp1/geog-tropical/users/uz22147/east_africa_data/daily_rainfall/', help="Folder containing climatological data to load")
+parser.add_argument('--climatological-data-path', type=str, default='/network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_data/daily_rainfall', help="Folder containing climatological data to load")
 metric_group = parser.add_argument_group('metrics')
 metric_group.add_argument('-ex', '--examples', action="store_true", help="Plot a selection of example precipitation forecasts")
 metric_group.add_argument('-sc', '--scatter', action="store_true", help="Plot scatter plots of domain averaged rainfall")
@@ -85,7 +86,7 @@ parser.add_argument('--debug', action='store_true', help="Debug flag to use smal
 args = parser.parse_args()
 
 nickname = args.nickname
-area = args.area 
+area = args.area
 
 all_metrics = ['examples', 'scatter','rank_hist','rmse', 'bias', 'spread_error','rapsd','quantiles','hist','crps','fss','diurnal','confusion_matrix','csi']
 metric_dict = {metric_name: args.__getattribute__(metric_name) for metric_name in all_metrics}
@@ -723,90 +724,98 @@ if metric_dict['fss']:
     from dsrnngan.evaluation.evaluation import get_fss_scores
     from dsrnngan.evaluation.plots import plot_fss_scores
 
-    window_sizes = list(range(1,11)) + [20, 40, 60, 80, 100, 120, 150, 200, 250, 300, 350, 400, 450, 500]
+    # bootstrapping results (previously calculated using scripts/bootstrap_fss.py)
+    with open(os.path.join(model_eval_folder, f'bootstrap_fss_results_n50_{area}.pkl'), 'rb') as ifh:
+        fss_bstrap_results = pickle.load(ifh)
 
+    quantile_locs = list(fss_bstrap_results['cgan'].keys())
+    window_sizes = list(fss_bstrap_results['cgan'][0.9].keys())
+
+
+    scales = [2*w+1 for w in window_sizes]
+    n_samples = -1
     fss_data_dict = {
-                        'cgan': cgan_corrected[:n_samples, :, :, 0],
-                        'ifs': fcst_corrected[:n_samples, :, :]}
+                        'cGAN': cgan_corrected[:n_samples, :, :, 0],
+                        'IFS': fcst_corrected[:n_samples, :, :],
+                        'IFS_raw': fcst_array[:n_samples, :, :]}
 
-    # get quantiles
-    quantile_thresholds = [0.9, 0.99, 0.999, 0.9999, 0.99999]
-    hourly_thresholds = [np.quantile(truth_array, q) for q in quantile_thresholds]
-    
-    # hourly_thresholds = [1, 5, 10, 15, 20, 25, 30, 35, 40, 50]
+    # Calculate FSS
+    hourly_thresholds = np.quantile(truth_array, quantile_locs)
+    fss_results_path = os.path.join(model_eval_folder, f'fss_{model_number}_{area}.pkl')
 
-    fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
+    if os.path.exists(fss_results_path):
+        with open(fss_results_path, 'rb') as ifh:
+            fss_results = pickle.load(ifh)
+    else:
+        
+        fss_results = get_fss_scores(truth_array, fss_data_dict, hourly_thresholds, scales, n_samples)
+        with open(fss_results_path, 'wb+') as ofh:
+            pickle.dump(fss_results, ofh)
 
-    # Save results
-    with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}_{area}.pkl'), 'wb+') as ofh:
-        pickle.dump({'quantile_thresholds': quantile_thresholds,
-                     'results': fss_results}, 
-                    ofh)
+    # Plot FSS
+    plt.rcParams.update({'font.size': 11})
+    linestyles = ['solid', 'dotted', 'dashed', 'dashdot', (0, (1,10))]
+    n=0
+
+    num_cols = 3
+    num_rows = 2
+    fig = plt.figure(constrained_layout=True, figsize=(4*num_cols, 4*num_rows))
+    gs = gridspec.GridSpec(num_rows, 2*num_cols, figure=fig, 
+                    wspace=0.005)  
+        
+
+    fss_format_lookup = {'fcst': {'label': 'IFS-qm', 'color': 'r'}, 
+                        'cgan':  {'label': 'cGAN-qm', 'color': 'b'},
+                        'cgan_raw': {'label': 'cGAN', 'color': 'b', 'linestyle': '--'},
+                        'fcst_raw': {'label': 'IFS', 'color': 'r', 'linestyle': '--'}}
+
+
+    for n, thr in enumerate(fss_bstrap_results['cgan'].keys()):
+        
+        col = n%3
+        row = int(n/3)
+        
+        if row == 1:
+            ax = fig.add_subplot(gs[row, 2*col+1:2*col+3])
+        else:
+            ax = fig.add_subplot(gs[row, 2*col:2*col+2])
+        q_val_text = f'{np.round(float(thr)*100, 12)}th'.replace('.0th', 'th')
+
+        
+        for m, (name) in enumerate(fss_bstrap_results.keys()):
+            label = fss_format_lookup[name]['label']
+                
+
+            bstrap_data = fss_bstrap_results[name][thr]
+            window_sizes = list(bstrap_data.keys())
+            window_sizes_km = 11* np.array(window_sizes)
+            mean_fss_values = [item['mean'] for item in bstrap_data.values()]
+            std_fss_values = np.array([item['std'] for item in bstrap_data.values()])
+
+            ax.plot(window_sizes_km, mean_fss_values, 'o', 
+                    color=fss_format_lookup[name]['color'], 
+                    label=fss_format_lookup[name]['label'], 
+                    markersize=5,
+                    linestyle=fss_format_lookup[name].get('linestyle', '-'))
             
-    # plot_fss_scores(fss_results=fss_results, 
-    #                 output_folder=args.output_dir,
-    #                 output_suffix=f'{nickname}_{model_number}')
-    
-    
-    # # FSS for regions
-    # fss_area_results = {}
-    # for n, (area, area_range) in enumerate(special_areas.items()):
-        
-    #     lat_range_ends = area_range['lat_range']
-    #     lon_range_ends = area_range['lon_range']
-    #     lat_range_index = area_range['lat_index_range']
-    #     lon_range_index = area_range['lon_index_range']
-    #     lat_range = np.arange(lat_range_ends[0], lat_range_ends[-1]+0.0001, 0.1)
-    #     lon_range = np.arange(lon_range_ends[0], lon_range_ends[-1]+0.0001, 0.1)
-        
-    #     area_truth_array = truth_array[:,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]]
-    #     fss_data_dict = {
-    #                     'cgan': samples_gen_array[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0],
-    #                     'fcst': fcst_array[:n_samples,lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-    #                     'fcst_qmap': fcst_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1]],
-    #                     'cgan_qmap': cgan_corrected[:n_samples, lat_range_index[0]:lat_range_index[1], lon_range_index[0]:lon_range_index[1], 0]}  
-    #     fss_area_results[area] = get_fss_scores(area_truth_array, fss_data_dict, hourly_thresholds, window_sizes, n_samples)
-        
-    #     plot_fss_scores(fss_results=fss_area_results[area], 
-    #                     output_folder=args.output_dir, 
-    #                     output_suffix=f'{area}_{nickname}_{model_number}')
-    
-    # with open(os.path.join(args.output_dir,f'fss_{nickname}_{model_number}.pkl'), 'wb+') as ofh:
-    #     pickle.dump(fss_area_results, ofh)
-        
-    # Save results
-    
+            if name in ['cgan', 'fcst']:
+                ax.fill_between(window_sizes_km, y1=mean_fss_values-2*std_fss_values, y2=mean_fss_values+2*std_fss_values,
+                                    color=fss_format_lookup[name].get('color', 'black'), alpha=0.2)
 
-    # FSS for grid scale
-    # from dsrnngan.scoring import get_filtered_array
+        ax.set_title(f'({ascii_lowercase[n]}) {q_val_text}')
 
-    # mode = 'constant'
+        ax.set_ylim(0,1)
+        ax.set_xlabel('Neighbourhood width (km)')
+        ax.set_ylabel('FSS')
+        ax.set_xlim(0, 1 + 11*max(fss_bstrap_results[name][thr].keys()))
+        if thr in [0.999, 0.99999, 0.9999]:
+            ax.legend(loc='upper right', frameon=False, ncol=2)
+        else:
+            ax.legend(loc='lower right', frameon=False, ncol=2)
 
-    # for thr_index in range(len(hourly_thresholds)):
+    plot_filename = os.path.join(args.output_dir, f'fss_{model_number}_{area}.pdf')
 
-    #     thr = hourly_thresholds[thr_index] # 0 = median
-
-    #     arrays_filtered = {}
-
-    #     for size in window_sizes:
-
-    #         arrays_filtered[size] = {}
-
-    #         for k, d in tqdm(fss_data_dict.items()):  
-    #             arrays_filtered[size][k] = []
-    #             for n in range(truth_array.shape[0]):
-    #                 # Convert to binary fields with the given intensity threshold
-    #                 I = (d >= thr).astype(np.single)
-
-    #                 # Compute fractions of pixels above the threshold within a square
-    #                 # neighboring area by applying a 2D moving average to the binary fields        
-    #                 arrays_filtered[size][k].append(get_filtered_array(int_array=I, mode=mode, size=size))
-
-    #         for k in arrays_filtered[size]:
-    #             arrays_filtered[size][k] = np.stack(arrays_filtered[size][k])
-
-    # with open(f'fss_grid_{model_type}_{model_number}_thr{thr_index}.pkl', 'wb+') as ofh:
-    #     pickle.dump(arrays_filtered, ofh)  
+    plt.savefig(plot_filename, format='pdf', bbox_inches='tight')
 
 #################################################################################
 
