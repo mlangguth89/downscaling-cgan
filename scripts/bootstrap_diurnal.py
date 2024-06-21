@@ -7,9 +7,10 @@ from argparse import ArgumentParser
 HOME = Path(os.getcwd()).parents[0]
 
 sys.path.insert(1, str(HOME))
-from dsrnngan.utils.utils import bootstrap_metric_function
+from dsrnngan.utils.utils import bootstrap_metric_function, get_area_range
 from dsrnngan.utils import read_config
 from dsrnngan.evaluation.scoring import fss
+from dsrnngan.data import data
 ###########################
 # Load model data
 ###########################

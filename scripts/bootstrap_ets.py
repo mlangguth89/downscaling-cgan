@@ -14,7 +14,7 @@ from dsrnngan.evaluation.scoring import equitable_threat_score, hit_rate, false_
 # Load model data
 ###########################
 
-parser = ArgumentParser(description='Script for bootstrapping diurnal cucle.')
+parser = ArgumentParser(description='Script for bootstrapping equitable threat score.')
 parser.add_argument('--log-folder', type=str, help='model log folder', required=True)
 parser.add_argument('--model-number', type=str, help='model number', required=True)
 parser.add_argument('--n-bootstrap-samples', type=int, default=1000,
