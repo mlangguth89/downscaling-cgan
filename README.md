@@ -1,20 +1,30 @@
-# Downscaling cGAN requirements:
+# Downscaling conditional Generative Adversarial Network (cGAN)
+
+Code to downscale or postprocess NWP forecasts using a cGAN. Forked from the code at https://github.com/ljharris23/public-downscaling-cgan.
+
+Main modifications
+- Making the code more generally applicable to different regions, and different domain sizes.
+- Making the data and models more config-driven.
+- Adding extra features, like changes to input and output normalisation.
 
 # Setup
 
-Uses Python3.9. Create a new conda enviroment with:
+Uses Python3.9 and Tensorflow 2.8.2
+
+## To use with GPU (recommended) 
+
+Create a new conda enviroment with:
 
 `conda env create -f environment.yaml`
 
-Then run:
 
-`pip install tensorflow-gpu==2.8.2`
+## To use with CPU
 
-To use with a gpu (recommended) or:
+Create a new conda enviroment with:
 
-`pip install tensorflow==2.8.2`
+`conda env create -f environment_cpu.yaml`
 
-To use with a CPU (for some reason, tensorflow installation on conda doesn't seem to work)
+## Notes
 
 Works on Linux, possibly not on Windows.
 
@@ -24,8 +34,6 @@ I found that there were often problems with conda accessing libraries, which was
 
 
 [^1]: If numba is not available, we suggest you replace `from properscoring import crps_ensemble` to `from crps import crps_ensemble` in `evaluation.py` and `run_benchmarks.py`. This is because properscoring will fall back to an inefficient and memory-heavy CRPS implementation in this case.
-
-
 
 
 # Preparing the data

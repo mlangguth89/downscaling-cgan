@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "evaluation timing",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.evaluation_timing",
             "justMyCode": true,
@@ -16,7 +16,7 @@
         },
         {
             "name": "Python: imerg_download_official",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.imerg_download_official",
             "justMyCode": true,
@@ -26,7 +26,7 @@
         },
         {
             "name": "Python: Download IMERG",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.download_imerg",
             "justMyCode": true,
@@ -40,8 +40,8 @@
             ]
         },
         {
-            "name": "Python: Quantile map IFS input",
-            "type": "python",
+            "name": "debugpy: Quantile map IFS input",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.quantile_map_ifs_input",
             "justMyCode": true,
@@ -56,8 +56,8 @@
             ]
         },
         {
-            "name": "Python: Permutation Feature Importance",
-            "type": "python",
+            "name": "debugpy: Permutation Feature Importance",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.permutation_feature_importance",
             "justMyCode": true,
@@ -73,26 +73,24 @@
         },
         {
             "name": "Python: quantile_mapping",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.quantile_mapping",
             "justMyCode": true,
             "args": [
                 "--num-lat-lon-chunks",
-                "1",
-                "--log-folder",
-                "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs",
+                "2",
+                "--model-eval-folder",
+                "/network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_data/7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1",
                 "--model-number",
                 "217600",
-                "--output-folder",
-                "plots/quantile_map_plots",
-                "--plot",
-                "--debug"
+                "--debug",
+                "--save-data"
             ]
         },
         {
             "name": "Python: bstrap ETS",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.bootstrap_ets",
             "justMyCode": true,
@@ -105,14 +103,14 @@
         },
         {
             "name": "Python: qmap_cv",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.qmap_cv",
             "justMyCode": true
         },
         {
             "name": "Python: setupdata",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "dsrnngan.data.setupdata",
             "justMyCode": true,
@@ -125,7 +123,7 @@
         },
         {
             "name": "Python: imerg monthly",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.imerg_monthly_rainfall",
             "justMyCode": true,
@@ -136,7 +134,7 @@
         },
         {
             "name": "Python: ifs monthly",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.ifs_monthly_rainfall",
             "justMyCode": true,
@@ -147,31 +145,31 @@
         },
         {
             "name": "Python: make plots",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.make_plots",
             "justMyCode": true,
             "args": [
-                "--model-eval-folder", "/user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n4000_202010-202109_45682_e20",
+                "--model-eval-folder", "/network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_data/7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1",
                 "--model-number",
                 "217600",
                 "--output-dir",
-                "/user/home/uz22147/repos/downscaling-cgan/plots",
+                "/network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_plots",
                 "-qq",
                 "--nickname",
-                "cl100-medium-nologs"
+                "test"
             ]
         },
         {
             "name": "Python: fss stats",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.fss_stats",
             "justMyCode": true
         },
         {
             "name": "Python: unpack IFS",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "scripts.unpack_ifs_data",
             "justMyCode": false,
@@ -184,7 +182,7 @@
         },
         {
             "name": "Python: data.py",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "dsrnngan.data.data",
             "justMyCode": false,
@@ -212,7 +210,7 @@
         },
         {
             "name": "Python: main.py train",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "dsrnngan.main",
             "justMyCode": true,
@@ -233,7 +231,7 @@
         },
         {
             "name": "Python: main.py eval",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "dsrnngan.main",
             "justMyCode": true,
@@ -254,7 +252,7 @@
         },
         {
             "name": "Python: tfrecords",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "justMyCode": true,
             "module": "dsrnngan.data.tfrecords_generator",

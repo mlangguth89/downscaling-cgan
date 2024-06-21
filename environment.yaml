@@ -2,6 +2,7 @@ name: cgan
 channels:
   - conda-forge
 dependencies:
+  - pip
   - python=3.9
   - cudnn=8.1.0
   - cudatoolkit=11.2
@@ -25,10 +26,14 @@ dependencies:
   - black
   - pytest
   - numpy
+  - esmf=8.4.1
+  - esmpy=8.4.1
   - xesmf
   - gitpython
   - wandb
   - timezonefinder
   - metpy
   - gitpython
-
+  - jupytext
+  pip:
+    - tensorflow-gpu=2.8.2

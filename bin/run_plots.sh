@@ -5,11 +5,8 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --job-name=plots
-#SBATCH --partition short,dmm,compute,cnu
+#SBATCH --partition shared
 #SBATCH --output=logs/plots-%A.out
-
-# source ~/.bashrc
-# source ~/.initConda.sh
 
 echo Running on host `hostname`
 echo Time is `date`
@@ -23,6 +20,8 @@ echo running plots for cgan
 dt=$(date '+%d/%m/%Y %H:%M:%S');
 echo "$dt"
 
+srun python -m scripts.make_plots --nickname cl100-medium-nologs-fullyear --model-eval-folder /network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_data/7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1 --model-number 217600 --output-dir /network/group/aopp/predict/HMC005_ANTONIO_EERIE/cgan_plots --diurnal -ex -qq -rapsd -hist -csi -fss;
+
 # srun python -m scripts.make_plots --nickname cl100-small-nologs --log-folder /user/work/uz22147/logs/cgan/a4822ed35a44475d_small-cl100-nologs/n2900_201806-201903_42e34_e1 --model-number 57600 --diurnal -ex -qq -rapsd -hist -csi --output-dir /user/home/uz22147/repos/downscaling-cgan/plots
 # srun python -m scripts.make_plots --nickname cl100-small-nologs-nocrop --log-folder /user/work/uz22147/logs/cgan/a4822ed35a44475d_small-cl100-nologs-nocrop/n2900_201806-201903_42e34_e1 --model-number 52800 --diurnal -ex -qq -rapsd -hist -csi --output-dir /user/home/uz22147/repos/downscaling-cgan/plots
 # srun python -m scripts.make_plots --nickname cl200-small-nologs-nocrop --log-folder /user/work/uz22147/logs/cgan/a4822ed35a44475d_small-cl200-nologs-nocrop/n2900_201806-201903_42e34_e1 --model-number 67200 --diurnal -ex -qq -rapsd -hist -csi --output-dir /user/home/uz22147/repos/downscaling-cgan/plots
@@ -31,7 +30,7 @@ echo "$dt"
 # srun python -m scripts.make_plots --nickname cl2000-medium --log-folder /user/work/uz22147/logs/cgan/457221781d3b7cc9_medium-cl2000-final/n2900_201806-201903_42e34_e20 --model-number 262400 --diurnal -ex -qq -rapsd -hist -csi --output-dir /user/home/uz22147/repos/downscaling-cgan/plots
 # srun python -m scripts.make_plots --nickname cl100-medium-nologs --log-folder /user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n8640_202010-202109_45682_e1 --model-number 217600 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots  --diurnal -ex -qq -rapsd -hist -csi -fss
 # srun python -m scripts.make_plots --nickname cl100-medium-nologs --log-folder /user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n1000_202010-202109_45682_e100 --model-number 217600 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots -rh 
-srun python -m scripts.make_plots --nickname cl100-medium-nologs --log-folder /user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2088_201803-201805_f37bd_e1 --model-number 217600 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots --diurnal -ex -qq -rapsd -hist -csi -fss
+# srun python -m scripts.make_plots --nickname cl100-medium-nologs --log-folder /user/work/uz22147/logs/cgan/7c4126e641f81ae0_medium-cl100-final-nologs/n2088_201803-201805_f37bd_e1 --model-number 217600 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots --diurnal -ex -qq -rapsd -hist -csi -fss
 
 # srun python -m scripts.make_plots --nickname cl5-lv-only --log-folder /user/work/uz22147/logs/cgan/ec66788090f69890_small-cl5-lvonly/n2900_201806-201903_42e34_e1 --model-number 288000 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots -fss
 # srun python -m scripts.make_plots --nickname cl50-lv-only --log-folder /user/work/uz22147/logs/cgan/ec66788090f69890_small-cl50-lvonly/n2900_201806-201903_42e34_e1 --model-number 230400 --output-dir /user/home/uz22147/repos/downscaling-cgan/plots -fss
