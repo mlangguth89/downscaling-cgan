@@ -20,7 +20,7 @@ tz_finder = TimezoneFinder()
 from_zone = tz.gettz('UTC')
 
 special_areas = {'all': {'lat_range': None, 'abbrv': 'ALL'},
-                 'lake_victoria': {'lat_range': [-3.25,0.95], 'lon_range': [30.55, 35.55], 'abbrv': 'LV'},
+                 'lake_victoria': {'lat_range': [-5.05,3.05], 'lon_range': [29.05, 37.05], 'abbrv': 'LV'},
                  'somalia': {'lat_range': [-1.05,4.05], 'lon_range': [40.0, 44.05],  'abbrv': 'S'},
                  'coast': {'lat_range': [-11.05, -4.70 ], 'lon_range': [38.0,39.0],  'abbrv': 'C'},
                  'west_lv_basin': {'lat_range': [-4.70,0.30], 'lon_range': [29.5,31.3],  'abbrv': 'WLVB'},
