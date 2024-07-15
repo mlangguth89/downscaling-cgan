@@ -8,6 +8,7 @@ import logging
 from argparse import ArgumentParser
 from tqdm import tqdm
 import git
+import pandas as pd
 
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data.data import file_exists, denormalise
@@ -342,6 +343,7 @@ def write_data(year_month_ranges: list,
                hours: list,
                data_config: dict=None,
                debug: bool=False,
+               sampling_in_files: str="daily",
                num_shards: int=1) -> str:
     """
     Function to write training data to TF records
@@ -355,6 +357,7 @@ def write_data(year_month_ranges: list,
         data_paths (dict, optional): Dict of paths to the data sources. Defaults to DATA_PATHS.
         longitude_range (list, optional): Longitude range to use. Defaults to None.
         debug (bool, optional): Debug mode. Defaults to False.
+        sampling_in_files (str, optional): Sampling method in files from which to process. Defaults to "daily".
         config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
         num_shards (int, optional): Number of shards to split each tfrecord into (to make sure records are not too big)
 
@@ -394,7 +397,7 @@ def write_data(year_month_ranges: list,
     if isinstance(year_month_ranges[0], str):
         year_month_ranges = [year_month_ranges]
     
-    # Create file handles
+    # Create file handles (TFRecords are splitted by hour and class)
     fle_hdles = {}
     for hour in hours:
         fle_hdles[hour] = {}
@@ -408,17 +411,111 @@ def write_data(year_month_ranges: list,
         
         dates = date_range_from_year_month_range(year_month_range)
         start_date = dates[0]
+        # ML: To-Do: Adapt file_exists-method for sampling_in_files="monthly"
         dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
                                                             month=item.month, day=item.day,
                                                             data_paths=data_paths)]
-        if dates:
+        if not dates:
+            print('No dates found')
+            continue
+
+        if sampling_in_files == "daily":
+            process_daily_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
+        elif sampling_in_files == "monthly":
+            process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
+        else:
+            raise ValueError(f"Sampling method {sampling_in_files} not supported")
+
+    # close file handles        
+    for hour in hours:
+        for cl, fhs in fle_hdles[hour].items():
+            for fh in fhs:
+                fh.close()
+    
+                            
+    return hash_dir
+
+def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug=False):
+
+    yr_m = list(set([date.strftime("%Y%m") for date in dates]))
+
+    for year_month in yr_m:
+
+        month_now = pd.to_datetime(year_month, format='%Y%m')
+        all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
+        all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
+        
+        dgs = DataStore(data_config, month_now)
+
+        for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
+
+            hour = t.hour
+            logger.debug(f"Try loading data for {t.strftime('%Y%m%d %H:%M')}")
             
+            try:
+                sample = dgs.__getitem__(t)
+                (depth, width, height) = sample[1]['output'].shape
+            
+                for k in range(depth):
+                
+                    observations = sample[1]['output'][k,...].flatten()
+                    forecast = sample[0]['lo_res_inputs'][k,...].flatten()
+                    const = sample[0]['hi_res_inputs'][k,...].flatten()
+
+                    # Check no Null values
+                    if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+                        raise ValueError('Unexpected NaN values in data')
+                    
+                    # Check for empty data
+                    if forecast.sum() == 0 or const.sum() == 0:
+                        raise ValueError('one or more of arrays is all zeros')
+                    
+                    # Check hi res data has same dimensions
+                        
+                    feature = {
+                        'generator_input': _float_feature(forecast),
+                        'constants': _float_feature(const),
+                        'generator_output': _float_feature(observations)
+                    }
+
+                    features = tf.train.Features(feature=feature)
+                    example = tf.train.Example(features=features)
+                    example_to_string = example.SerializeToString()
+                    
+                    # If provided, bin data according to bin boundaries (typically quartiles)
+                    if data_config.class_bin_boundaries is not None:
+                                                
+                        threshold = 0.1
+                        if data_config.output_normalisation is not None:
+                            rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
+                        else:
+                            rainy_pixel_fraction = (observations > threshold).mean()
+
+                        clss = np.digitize(rainy_pixel_fraction, right=False)
+                        
+                    else:
+                        clss = random.choice(range(data_config.num_classes))
+                        
+                    # Choose random shard
+                    fh = random.choice(fle_hdles[hour][clss])
+
+                    fh.write(example_to_string)
+            except FileNotFoundError as e:
+                logger.debug(f"Error loading for {t.strftime('%Y%m%d %H:%M')}")
+
+
+
+
+
+
+def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=False):
+        # loop over hours 
+        for hour in hours:          
                 
             if not dates[0] == start_date and not debug:
                 # Means there likely isn't forecast data for the day before
                 dates = dates[1:]
         
-            
             if data_config.class_bin_boundaries is not None:
                 print(f'Data will be bundled according to class bin boundaries provided: {data_config.class_bin_boundaries}')
                 num_class = len(data_config.class_bin_boundaries) + 1
@@ -495,13 +592,7 @@ def write_data(year_month_ranges: list,
         else:
             print('No dates found')
             
-    for hour in hours:
-        for cl, fhs in fle_hdles[hour].items():
-            for fh in fhs:
-                fh.close()
-    
-                            
-    return hash_dir
+
 
 def write_train_test_data(*args, training_range,
                           validation_range=None,

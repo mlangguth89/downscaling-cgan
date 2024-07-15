@@ -15,7 +15,8 @@ fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 class DataGenerator(Sequence):
     def __init__(self, dates: list, batch_size: int, data_config: SimpleNamespace,
                  shuffle: bool=True, hour: Union[int, str, list, np.ndarray]='random',
-                 downsample: bool=False, repeat_data: bool=False, seed: int=None):
+                 downsample: bool=False, repeat_data: bool=False, seed: int=None, 
+                 monthly_data: bool=False):
         
         if seed is not None:
             random.seed(seed)
@@ -67,6 +68,8 @@ class DataGenerator(Sequence):
 
         self.downsample = downsample
         self.latitude_range, self.longitude_range = get_lat_lon_range_from_config(data_config)
+
+        self.monthly_data = monthly_data
                
         if self.downsample:
             # read downscaling factor from file
@@ -81,6 +84,7 @@ class DataGenerator(Sequence):
                                                   data_paths=self.data_paths['GENERAL'],
                                                   batch_size=self.batch_size,
                                                   latitude_vals=self.latitude_range, longitude_vals=self.longitude_range)
+            
     def __len__(self):
         # Number of batches in dataset
         return len(self.dates) // self.batch_size
@@ -138,6 +142,7 @@ class DataGenerator(Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             self.shuffle_data()
+  
 
 class PermutedDataGenerator(Sequence):
     """
