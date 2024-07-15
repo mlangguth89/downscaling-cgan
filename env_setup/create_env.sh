@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
 # __authors__ = Michael Langguth
-# __date__  = '2022-01-21'
-# __update__= '2022-02-28'
+# __date__  = '2024-06-01'
+# __update__= '2024-07-15'
 #
 # **************** Description ****************
-# This script can be used for setting up the virtual environment needed for downscaling with the U-net architecture
-# as being implemented for the Tier-1 dataset in MAELSTROM (see https://www.maelstrom-eurohpc.eu/content/docs/uploads/doc6.pdf) 
+# This script can be used for setting up the virtual environment needed for the downscaling-cgan repository at the Jülich HPC failiities 
+# that was forked from https://github.com/bobbyantonio/downscaling-cgan.
+# The Harris WGAN implementation serves as a baseline for downscaling with AtmoRep.
 # **************** Description ****************
 #
 ### auxiliary-function S ###
