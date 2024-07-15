@@ -328,3 +328,12 @@ def get_area_range(data_config, area, special_areas=special_areas):
 
     return latitude_range, lat_range_index, longitude_range, lon_range_index
 
+# ML: Added auxiliary function 
+def last_day_of_month(any_day):
+    """
+    Returns the last day of a month
+    :param any_day : datetime object with any day of the month
+    :return: datetime object of lat day of month
+    """
+    next_month = any_day.replace(day=28) + dt.timedelta(days=4)  # this will never fail
+    return next_month - dt.timedelta(days=next_month.day)
