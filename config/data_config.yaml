@@ -1,4 +1,4 @@
-data_paths: "BLUE_PEBBLE"  # Choose which paths version to use in PATHS
+data_paths: "JSC"  # Choose which paths version to use in PATHS
 fcst_data_source: "ifs"
 obs_data_source: "imerg"
 normalisation_year: 2017
@@ -86,6 +86,8 @@ paths:
       GENERAL:
           IMERG: '/bp1/geog-tropical/users/uz22147/east_africa_data/IMERG/half_hourly/final/'
           ERA5: '/bp1/geog-tropical/data/ERA-5/day'
+          ERA5_monthly: '/bp1/geog-tropical/data/ERA-5/monthly'     # Path to data at JSC
+          CERRA_monthly: '/bp1/geog-tropical/data/CERRA/monthly'    # 
           IFS: '/bp1/geog-tropical/users/uz22147/east_africa_data/IFS'
           OROGRAPHY: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/h_HRES_EAfrica.nc'
           LSM: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants/lsm_HRES_EAfrica.nc'
@@ -94,3 +96,17 @@ paths:
           CONSTANTS: '/bp1/geog-tropical/users/uz22147/east_africa_data/constants'
       TFRecords:
           tfrecords_path: '/user/work/uz22147/tfrecords/'
+  JSC:      # Paths for running on JSC-clusters
+    GENERAL: 
+          IMERG: ''
+          ERA5: ''
+          ERA5_MONTHLY: '/p/data1/slmet/met_data/ecmwf/era5_reduced_level/ml_levels/'     # Path to data at JSC
+          CERRA_MONTHLY: '/p/scratch/atmo-rep/data/cerra/regridded'    # 
+          IFS: ''
+          OROGRAPHY: ''
+          LSM: ''
+          LAKES: ''
+          SEA: ''
+          CONSTANTS: ''
+      TFRecords:
+          tfrecords_path: ''

@@ -34,6 +34,14 @@ IFS_PATH = DATA_PATHS["GENERAL"].get("IFS", '')
 OROGRAPHY_PATH = DATA_PATHS["GENERAL"].get("OROGRAPHY")
 LSM_PATH = DATA_PATHS["GENERAL"].get("LSM")
 CONSTANTS_PATH = DATA_PATHS["GENERAL"].get("CONSTANTS")
+### For processing data on JSC cluster ###
+
+# monthly files of CERRA and ERA5
+CERRA_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("CERRA_MONTHLY", '')
+ERA5_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("ERA5_MONTHLY", '')
+NORMALISATION_STRATEGY = data_config.input_normalisation_strategy
+
+### For processing data on JSC cluster ###
 
 FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
                               'cp': 'sfc',
@@ -783,9 +791,9 @@ def load_ifs_raw(field: str,
 
 def load_ifs(field: str, 
              date, hour: int,
+             fcst_dir: str,
              normalisation_strategy: dict,
              norm: bool=False, 
-             fcst_dir: str=IFS_PATH,
              latitude_vals: list=None, 
              longitude_vals: list=None, 
              constants_path: str=CONSTANTS_PATH):
@@ -841,7 +849,7 @@ def load_ifs(field: str,
 
 def load_fcst_stack(data_source: str, fields: list, 
                     date: str, hour: int, 
-                    fcst_dir: str, 
+                    fcstdir_or_dslist: Union[str, List[xr.Dataset]], 
                     normalisation_strategy: dict,
                     constants_dir:str=CONSTANTS_PATH,
                     norm:bool=False,
@@ -854,7 +862,7 @@ def load_fcst_stack(data_source: str, fields: list,
         fields (list): list of fields to load
         date (str): YYYYMMDD date string to forecast for
         hour (int): hour to forecast for
-        fcst_dir (str): folder with forecast data in
+        fcstdir_or_dslist (str): folder with forecast data files or list of datasets (for load_<dataset>_monthly-methods)
         normalisation_strategy (dict): normalisation strategy
         constants_dir (str, optional): folder with constants data in. Defaults to CONSTANTS_PATH.
         norm (bool, optional): whether or not to normalise the data. Defaults to False.
@@ -870,11 +878,15 @@ def load_fcst_stack(data_source: str, fields: list,
         load_function = load_ifs
     elif data_source == 'era5':
         load_function = load_era5
+    elif data_source == 'era5_monthly":
+        load_function = load_era5_monthly
+    elif data_source == 'cerra_monthly':
+        load_function = load_cerra_monthly
     else:
         raise ValueError(f'Unknown data source {data_source}')
 
     for f in fields:
-        field_arrays.append(load_function(f, date, hour, fcst_dir=fcst_dir,
+        field_arrays.append(load_function(f, date, hour, fcstdir_or_dslist,
                                           latitude_vals=latitude_vals, longitude_vals=longitude_vals,
                                           constants_path=constants_dir, norm=norm,
                                           normalisation_strategy=normalisation_strategy))
@@ -940,6 +952,105 @@ def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_
 
     return stats
 
+### Functions that work with ERA5 and CERRA data at JSC (from the AtmoRep-project)
+
+def get_era5_monthly_path(variable, lvl, year_month, era5_basedir=ERA5_MONTHLY_PATH, var_name_lookup=VAR_LOOKUP_ERA5_JSC):
+    """"
+    Get path to monthly ERA5-data grib-files as organized in JSC's file system.
+    :param variable: str, variable name
+    :param lvl: int, model level of variable
+    :param year_month: datetime, year and month of data
+    :param era5_basedir: str, base directory of ERA5 data
+    :param var_name_lookup: dict, lookup table for retrieving longmanes variables
+    :return: str, path to grib-file
+    """
+    
+    varname_long = var_name_lookup[variable]['longname']
+    ym_str = year_month.strftime("y%Y_m%m")
+    lvl_str = f"ml{int(lvl)}"
+
+    return os.path.join(era5_basedir, varname_long, lvl_str, f"era5_{varname_long}_{ym_str}_{lvl_str}.grib")
+
+def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
+    
+    ym_str = year_month.strftime("y%Y_m%m")
+
+    return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
+    
+def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, norm: bool = True, cerra_datadir=CERRA_MONTHLY_PATH):
+    """
+    Load data from monthly CERRA files. Note that all variables are available in a single monthly file (unlike the ERA5 data files)
+    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter 
+    :param longitude_vals: list, longitude values to filter
+    :param norm: bool, whether to normalise the data
+    :param cerra_datadir: str, path to CERRA data
+    :return: xr.Dataset, dataset containing the requested variables where model level data is stored in separate variables, example: "t_ml106", "t_ml101"
+    """
+
+    fname = get_cerra_monthly_path(year_month, cerra_datadir)
+
+    # open data-file
+    ds_cerra = xr.open_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
+
+    # filter spatially (if wanted)
+    if latitude_vals is not None and longitude_vals is not None:
+        ds_cerra = filter_by_lat_lon(ds_cerra, lon_range=longitude_vals, lat_range=latitude_vals)
+        
+
+    # retrieve variables of interest while handling level-dimension 
+    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
+    da_dict = {}
+    for var, mls in variables.items():
+        for ml in mls:
+            data = ds[var].sel({"hybrid": ml}).squeeze().drop_vars("hybrid")
+            if norm:
+                data = normalise_data(data, var, ml, NORMALISATION_STRATEGY)
+
+            da_dict[f"{var}_ml{ml}"] = data
+
+    ds_new = xr.Dataset(da_dict)
+    ds_cerra.close()
+
+    return ds_new
+
+def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, norm: bool = True, era5_datadir=ERA5_MONTHLY_PATH):
+    """
+    Load data from monthly ERA5 files. Note that the data for all variables and levels are stored in separate files (unlike the CERRA data files)
+    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param norm: bool, whether to normalise the data
+    :param era5_datadir: str, path to ERA5 data
+    """
+
+    # retrieve variables of interest while handling level-dimension 
+    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
+    # Note that the data for all variables and levels are stored in separate files
+    da_dict = {}
+    for var, mls in variables.items():
+        for ml in mls:
+            fname = get_era5_monthly_path(var, ml, year_month, era5_datadir)
+            ds_era5 = xr.open_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
+
+            if latitude_vals is not None and longitude_vals is not None:
+                ds_era5 = filter_by_lat_lon(ds_era5, lon_range=longitude_vals, lat_range=latitude_vals)
+
+            data = ds_era5[var].squeeze().drop_vars("level")
+            if norm:
+                data = normalise_data(data, var, ml, NORMALISATION_STRATEGY)
+
+            da_dict[f"{var}_ml{ml}"] = data
+            ds_era5.close()
+
+
+
+
+
+
+
 
 ### Functions that work with the ERA5 data in University of Bristol
 
@@ -961,6 +1072,7 @@ def get_era5_path(variable, year, month, era_data_dir=ERA5_PATH, var_name_lookup
         return f'{suffix}_{year}{month}.nc'
     else:
         return f'{suffix}_{year}{int(month):02d}.nc'
+
 
 
 def load_era5_month_raw(variable, year, month, latitude_vals=None, longitude_vals=None,
@@ -1054,7 +1166,7 @@ def get_era5_stats(variable: str, longitude_vals: list, latitude_vals: list,
     return stats
 
 
-def load_era5(ifield, date, hour=0, log_precip=False, norm=False, fcst_dir=ERA5_PATH,
+def load_era5(ifield, date, hour=0, fcst_dir=ERA5_PATH, log_precip=False, norm=False,
               latitude_vals=None, longitude_vals=None, var_name_lookup=VAR_LOOKUP_ERA5,
               constants_path=CONSTANTS_PATH):
     """
