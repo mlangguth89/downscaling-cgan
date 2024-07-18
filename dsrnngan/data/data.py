@@ -2,13 +2,14 @@
 from genericpath import isfile
 import os
 import re
+from pathlib import Path
 import pickle
 import logging
 import netCDF4
 from calendar import monthrange
 from tqdm import tqdm
 from glob import glob
-from typing import Iterable
+from typing import Iterable, Union, List, Dict, Tuple
 
 from datetime import datetime, timedelta, date
 import numpy as np
@@ -878,9 +879,9 @@ def load_fcst_stack(data_source: str, fields: list,
         load_function = load_ifs
     elif data_source == 'era5':
         load_function = load_era5
-    elif data_source == 'era5_monthly":
+    elif data_source == "era5_monthly":
         load_function = load_era5_monthly
-    elif data_source == 'cerra_monthly':
+    elif data_source == "cerra_monthly":
         load_function = load_cerra_monthly
     else:
         raise ValueError(f'Unknown data source {data_source}')
@@ -977,14 +978,13 @@ def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
 
     return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
     
-def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, norm: bool = True, cerra_datadir=CERRA_MONTHLY_PATH):
+def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, cerra_datadir=CERRA_MONTHLY_PATH):
     """
     Load data from monthly CERRA files. Note that all variables are available in a single monthly file (unlike the ERA5 data files)
     :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
     :param year_month: datetime, year and month of data
     :param latitude_vals: list, latitude values to filter 
     :param longitude_vals: list, longitude values to filter
-    :param norm: bool, whether to normalise the data
     :param cerra_datadir: str, path to CERRA data
     :return: xr.Dataset, dataset containing the requested variables where model level data is stored in separate variables, example: "t_ml106", "t_ml101"
     """
@@ -1004,28 +1004,22 @@ def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitud
     da_dict = {}
     for var, mls in variables.items():
         for ml in mls:
-            data = ds[var].sel({"hybrid": ml}).squeeze().drop_vars("hybrid")
-            if norm:
-                data = normalise_data(data, var, ml, NORMALISATION_STRATEGY)
-
-            da_dict[f"{var}_ml{ml}"] = data
+            da_dict[f"{var}_ml{ml}"] = ds[var].sel({"hybrid": ml}).squeeze().drop_vars("hybrid")
 
     ds_new = xr.Dataset(da_dict)
     ds_cerra.close()
 
     return ds_new
 
-def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, norm: bool = True, era5_datadir=ERA5_MONTHLY_PATH):
+def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, era5_datadir=ERA5_MONTHLY_PATH):
     """
     Load data from monthly ERA5 files. Note that the data for all variables and levels are stored in separate files (unlike the CERRA data files)
     :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
     :param year_month: datetime, year and month of data
     :param latitude_vals: list, latitude values to filter
     :param longitude_vals: list, longitude values to filter
-    :param norm: bool, whether to normalise the data
     :param era5_datadir: str, path to ERA5 data
     """
-
     # retrieve variables of interest while handling level-dimension 
     # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
     # Note that the data for all variables and levels are stored in separate files
@@ -1033,19 +1027,180 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
     for var, mls in variables.items():
         for ml in mls:
             fname = get_era5_monthly_path(var, ml, year_month, era5_datadir)
+            logger.info(f"Read file {fname}...")
             ds_era5 = xr.open_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
             if latitude_vals is not None and longitude_vals is not None:
                 ds_era5 = filter_by_lat_lon(ds_era5, lon_range=longitude_vals, lat_range=latitude_vals)
 
-            data = ds_era5[var].squeeze().drop_vars("level")
-            if norm:
-                data = normalise_data(data, var, ml, NORMALISATION_STRATEGY)
-
-            da_dict[f"{var}_ml{ml}"] = data
+            da_dict[f"{var}_ml{ml}"] = ds_era5[var].squeeze().drop_vars("hybrid")
             ds_era5.close()
+            
+    ds_new = xr.Dataset(da_dict)
+    ds_era5.close()
+    
+    return ds_new
 
+def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Path, str], loader_monthly, dataset_name: str,
+                   latitude_vals: Tuple[float, float], longitude_vals: Tuple[float, float], output_dir: Union[Path, str], 
+                   use_cached: bool = True, mean_dims: List[str] = None):
+    
+    def calculate_statistics(data: Union[xr.DataArray, xr.Dataset], dims: List[str] = None) -> Dict[str, float]:
+        return {
+            'min': data.min(dim=dims),
+            'max': data.max(dim=dims),
+            'mean': data.mean(dim=dims),
+            'std': data.std(dim=dims)
+        }
+    
+    fp = Path(f"{output_dir}/{dataset_name}_norm_{norm_year}.pkl")
+    
+    if use_cached and fp.is_file():
+        logger.info(f'Loading stats from file {fp}...')
 
+        with open(fp, 'rb') as f:
+            norms = pickle.load(f)
+    else:
+        # get list of months for normalization year
+        logger.info(f"Calculate stats for year {norm_year}...") 
+        ds_m = []
+        all_m = list(pd.date_range(start=f'{norm_year}-01-01', end=f'{norm_year+1}-01-01' , freq='M'))
+        
+        for m in all_m[0:3]:
+            logger.debug(f"Process data for {m.strftime('%Y-%m')}...")
+            ds_m.append(loader_monthly(variables, m, latitude_vals, longitude_vals, data_dir))
+            
+        logger.debug(f"Concatenate {len(ds_m)} datasets...")
+        ds_all = xr.concat(ds_m, dim="time")
+        
+        logger.debug("Calculate statistics...")
+        norms = calculate_statistics(ds_all, mean_dims)
+        
+        if not fp.is_file():
+            logger.info("Save statistics derived from year {norm_year} to file '{fp}'...")
+            with open(fp, 'wb') as f:
+                pickle.dump(norms, f, pickle.HIGHEST_PROTOCOL)
+        else:
+            logger.info(f"Normalisation file '{fp}' already exists. Derived normalisation data remains unsafed.")
+            
+    return norms
+            
+    
+def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
+    """
+    Normalise variables in dataset.
+    Note that log and sqrt normalisation are followed by standardisation.
+    :param ds: xr.Dataset, dataset containing data
+    :param var_suffices: dict, dict containing suffices of variable names
+    :param stat_dict: dict, dict of values required for normalisation
+    :param norm_strategy: dict, dict containing normalisation strategy for each variable
+    :return: xr.Dataset, dataset with normalized data
+    """
+
+    # read suffices of variable names which should correspond to variable names in the normalization_strategy-dictionary
+    vars = var_suffices.keys()
+
+    # get unique list of required normalization techniwues applied to data
+    norm = list(set([norm_strategy[var].get("normalisation") for var in vars]))
+    data_vars = list(ds.data_vars)
+    nvars = len(data_vars)
+    varcount = 0
+
+    logger.info(f"Normalize {nvars} variables with {len(norm)} normalization techniques...")
+
+    # apply each identified normalization to the variables
+    for n in norm:
+        # get variables that should be normalized with current technique n
+        var_suffix_now = [var for var, info in norm_strategy.items() if info.get("normalisation") == n]
+        vars_now = []
+        for suffix in var_suffix_now:
+            vars_now += [var for var in data_vars if var.startswith(f"{suffix}_")]
+        logger.debug(f"Apply {n} to the following variables: {', '.join(vars_now)}")
+
+        if n == 'standardise':
+            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+
+        elif n == 'minmax':
+            ds[vars_now] = (ds[vars_now] - stat_dict['min'][vars_now]) / (stat_dict['max'][vars_now] - stat_dict['min'][vars_now])
+
+        elif n == 'log':
+            ds[vars_now] = log_plus_1(ds[vars_now])
+            # additional standardisation
+            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+        elif n == 'max':
+            ds[vars_now] = ds[vars_now] / stat_dict['max'][vars]
+            
+        elif n == 'sqrt':
+            ds[vars_now] = np.sqrt(ds[vars_now])
+            # additional standardisation
+            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+        else:
+            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {", ".join(vars_now)}")
+
+        varcount += len(vars_now)
+
+    # snaity check that all variables have been normalized
+    assert varcount == nvars, f"Not all variables have been normalized ({nvars-varcount} are missing)."
+    
+    return ds
+
+def denormalise_data(ds: xr.Dataset, var_suffices: Dict, stat_dict: Dict, norm_strategy: Dict):
+    """
+    Denormalise variables in dataset.
+    Note that standardisation has been applied after log and sqrt normalisation (cf. normalise_data-method).
+    :param ds: xr.Dataset, dataset containing data
+    :param var_suffices: dict, dict containing suffices of variable names
+    :param stat_dict: dict, dict of values required for normalisation
+    :param norm_strategy: dict, dict containing normalisation strategy for each variable
+    :return: xr.Dataset, dataset with denormalized data
+    """
+    # read suffices of variable names which should correspond to variable names in the normalization_strategy-dictionary
+    vars = var_suffices.keys()
+
+    # get unique list of required normalization techniwues applied to data
+    norm = list(set([norm_strategy[var].get("normalisation") for var in vars]))
+    data_vars = list(ds.data_vars)
+    nvars = len(data_vars)
+    varcount = 0
+
+    logger.info(f"Denormalize {nvars} variables according to {len(norm)} normalization techniques...")
+
+    # apply each identified denormalization to the variables
+    for n in norm:
+        # get variables that should be normalized with current technique n
+        var_suffix_now = [var for var, info in norm_strategy.items() if info.get("normalisation") == n]
+        vars_now = []
+        for suffix in var_suffix_now:
+            vars_now += [var for var in data_vars if var.startswith(f"{suffix}_")]
+        logger.debug(f"Invert {n} normalisation to the following variables: {', '.join(vars_now)}")
+
+        if n == 'standardise':
+            ds[vars_now] = ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+
+        elif n == 'minmax':
+            ds[vars_now] = ds[vars_now] * (stat_dict['max'][vars_now] - stat_dict['min'][vars_now]) + stat_dict['min'][vars_now]
+
+        elif n == 'log':
+            # invert standardisation
+            ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+            # invert log-transformation
+            ds[vars_now] = np.exp(ds[vars_now]) - 1
+        elif n == 'max':
+            ds[vars_now] = ds[vars_now] * stat_dict['max'][vars_now]
+        elif n == 'sqrt':
+            # invert standardisation
+            ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+            # invert sqrt-transformation
+            ds[vars_now] = ds[vars_now] ** 2
+        else:
+            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {", ".join(vars_now)}")
+
+        varcount += len(vars_now)
+
+    # snaity check that all variables have been denormalized
+    assert varcount == nvars, f"Not all variables have been denormalized ({nvars-varcount} are missing)."
+    
+    return ds
 
 
 
