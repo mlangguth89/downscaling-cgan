@@ -36,6 +36,9 @@ input_fields:
 constant_fields:
     - orography
     - lsm
+# To-Do: Add observation/target fields
+target_fields:
+    - dummy
 input_normalisation_strategy:
     tpq:
       negative_vals: False
