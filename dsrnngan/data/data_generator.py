@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
-from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, all_ifs_fields, all_era5_fields, 
+from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, all_ifs_fields, all_era5_fields 
 from dsrnngan.data.data import load_era5_monthly, load_cerra_monthly, get_norm_stats, normalise_data 
 from dsrnngan.utils.read_config import read_model_config, get_data_paths, get_lat_lon_range_from_config
 from dsrnngan.utils.utils import all_same_month 

@@ -56,6 +56,10 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
                               #   'cdir': 'missing',
                               #   'tcrw': 'missing'
                               }
+VAR_LOOKUP_ERA5_JSC = {"t": {"longname": "temperature"}, 
+                       "u": {"longname": "velocity_u"},
+                       "v": {"longname": "velocity_v"},
+                       "q": {"longname": "specific_humidity"}}
 
 # 'cin', Left out for the moment as contains a lot of nulls
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
