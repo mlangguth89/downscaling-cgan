@@ -603,8 +603,8 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           fcst_fields: list, 
                           fcst_data_source: str, 
                           obs_data_source: str, 
-                          fcst_dir: str,
-                          obs_data_dir: str,
+                          fcstdir_or_ds: Union[str, xr.Dataset],
+                          data_dir_or_ds: Union[str, xr.Dataset],
                           normalisation_strategy: dict,
                           latitude_range: Iterable[float]=None,
                           longitude_range: Iterable[float]=None,
@@ -630,14 +630,14 @@ def load_fcst_radar_batch(batch_dates: Iterable,
     for i, date in enumerate(batch_dates):
         h = hours[i]
         batch_x.append(load_fcst_stack(fcst_data_source, fcst_fields, date, h,
-                                       latitude_vals=latitude_range, longitude_vals=longitude_range, fcst_dir=fcst_dir,
+                                       latitude_vals=latitude_range, longitude_vals=longitude_range, fcstdir_or_ds=fcstdir_or_ds,
                                        norm=normalise_inputs, constants_dir=constants_dir,
                                        normalisation_strategy=normalisation_strategy))
         
         if obs_data_source is not None:
             batch_y.append(load_observational_data(obs_data_source, date, h, normalisation_type=output_normalisation,
                                                 latitude_vals=latitude_range, longitude_vals=longitude_range,
-                                                data_dir=obs_data_dir))
+                                                data_dir_or_ds=data_dir_or_ds))
     if constant_fields is None:
         return np.array(batch_x), np.array(batch_y)
     else:
@@ -850,7 +850,7 @@ def load_ifs(field: str,
 
 def load_fcst_stack(data_source: str, fields: list, 
                     date: str, hour: int, 
-                    fcstdir_or_dslist: Union[str, List[xr.Dataset]], 
+                    fcstdir_or_ds: Union[str, xr.Dataset], 
                     normalisation_strategy: dict,
                     constants_dir:str=CONSTANTS_PATH,
                     norm:bool=False,
@@ -863,7 +863,7 @@ def load_fcst_stack(data_source: str, fields: list,
         fields (list): list of fields to load
         date (str): YYYYMMDD date string to forecast for
         hour (int): hour to forecast for
-        fcstdir_or_dslist (str): folder with forecast data files or list of datasets (for load_<dataset>_monthly-methods)
+        fcstdir_or_ds (str): folder with forecast data files or list of datasets (for load_<dataset>_monthly-methods)
         normalisation_strategy (dict): normalisation strategy
         constants_dir (str, optional): folder with constants data in. Defaults to CONSTANTS_PATH.
         norm (bool, optional): whether or not to normalise the data. Defaults to False.
@@ -875,23 +875,30 @@ def load_fcst_stack(data_source: str, fields: list,
     """
     field_arrays = []
 
+    append_fields = True
     if data_source == 'ifs':
         load_function = load_ifs
     elif data_source == 'era5':
         load_function = load_era5
     elif data_source == "era5_monthly":
-        load_function = load_era5_monthly
+        load_function = load_era5_from_ds
+        append_fields = False
     elif data_source == "cerra_monthly":
-        load_function = load_cerra_monthly
+        load_function = load_cerra_from_ds
+        append_fields = False
     else:
         raise ValueError(f'Unknown data source {data_source}')
 
-    for f in fields:
-        field_arrays.append(load_function(f, date, hour, fcstdir_or_dslist,
-                                          latitude_vals=latitude_vals, longitude_vals=longitude_vals,
-                                          constants_path=constants_dir, norm=norm,
-                                          normalisation_strategy=normalisation_strategy))
-    return np.stack(field_arrays, -1)
+    if append_fields:
+        for f in fields:
+            field_arrays.append(load_function(f, date, hour, fcstdir_or_ds,
+                                            latitude_vals=latitude_vals, longitude_vals=longitude_vals,
+                                            constants_path=constants_dir, norm=norm,
+                                            normalisation_strategy=normalisation_strategy))
+        return np.stack(field_arrays, -1)
+    else:
+        return load_function(fields, date, hour, fcstdir_or_ds, latitude_vals=latitude_vals, longitude_vals=longitude_vals,
+                             constants_path=constants_dir, norm=norm, normalisation_strategy=normalisation_strategy)
 
 
 def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_dir: str=None, 
@@ -973,7 +980,12 @@ def get_era5_monthly_path(variable, lvl, year_month, era5_basedir=ERA5_MONTHLY_P
     return os.path.join(era5_basedir, varname_long, lvl_str, f"era5_{varname_long}_{ym_str}_{lvl_str}.grib")
 
 def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
-    
+    """
+    Get path to monthly CERRA-data grib-files as organized in JSC's file system.
+    :param year_month: datetime, year and month of data
+    :param cerra_basedir: str, base directory of CERRA data
+    :return: str, path to grib-file
+    """
     ym_str = year_month.strftime("y%Y_m%m")
 
     return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
@@ -1040,6 +1052,90 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
     ds_era5.close()
     
     return ds_new
+
+def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=False, norm=False,
+                      latitude_vals=None, longitude_vals=None, var_name_lookup=None,
+                      constants_path=CONSTANTS_PATH):
+    """
+    Function to fetch a sample from a xr.Dataset providing monthly ERA5 data,
+    designed to match the structure of the load_fcst function, so they can be interchanged.
+    :param variables: List[str], variables to load (obsolete, but retained for compatibility)
+    :param date: datetime, date of data
+    :param hour: int, hour of data
+    :param ds_era5: xr.Dataset, dataset containing ERA5 data
+    :param log_precip: Boolean, whether to take logs of the data (Obsolete for this case as using config)
+    :param norm: Boolean, whether to normalise (obsolete in this case as using config)
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param var_name_lookup: dict, lookup table for retrieving longmanes variables (obsolete, but retained for compatibility)
+    :param constants_path: str, path to constants
+    :return: np.ndarray, array of sample data
+    """
+    date_now = date.replace(hour=hour)
+    ds_now = ds_era5.sel({"time": date_now})
+    logger.info(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    
+    lat_name, lon_name = infer_lat_lon_names(ds_now)
+
+    if norm:
+        logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+                     "Consider to use normalized monthly data as input for the load_era5_from_ds-method.")
+
+        norm_stats = get_norm_stats(variables, NORMALISATION_YEAR, data_dir=ERA5_PATH, loader_monthly=load_era5_monthly, dataset_name="era5",
+                                    latitude_vals=latitude_vals, longitude_vals=longitude_vals, output_dir=constants_path)
+        
+        ds_now = normalise_data(ds_now, variables, norm_stats, NORMALISATION_STRATEGY)
+
+    # convert xr.Dataset to xr.DataArray
+    da_now = ds_now.to_array().squeeze() 
+
+    da_now = da_now.transpose(lat_name, lon_name, "variable")
+
+    # return as numpy array
+    return da_now.values
+
+
+def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra: xr.Dataset, 
+                       log_precip: bool=False, norm: bool=False, latitude_vals=None, longitude_vals=None,
+                       var_name_lookup=None, constants_path=CONSTANTS_PATH):
+    """
+    Function to fetch a sample from a xr.Dataset providing monthly CERRA data,
+    designed to match the structure of the load_fcst function, so they can be interchanged.
+    :param variables: List[str], variables to load (obsolete, but retained for compatibility)
+    :param date: datetime, date of data
+    :param hour: int, hour of data
+    :param ds_era5: xr.Dataset, dataset containing CERRA data
+    :param log_precip: Boolean, whether to take logs of the data (Obsolete for this case as using config)
+    :param norm: Boolean, whether to normalise (obsolete in this case as using config)
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param var_name_lookup: dict, lookup table for retrieving longmanes variables (obsolete, but retained for compatibility)
+    :param constants_path: str, path to constants
+    :return: np.ndarray, array of sample data
+    """
+    date_now = date.replace(hour=hour)
+    ds_now = ds_cerra.sel({"time": date_now})
+    logger.info(f"Set CERRA sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    
+    lat_name, lon_name = infer_lat_lon_names(ds_now)
+
+    if norm:
+        logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+                     "Consider to use normalized monthly data as input for the load_cerra_from_ds-method.")
+
+        norm_stats = get_norm_stats(variables, NORMALISATION_YEAR, data_dir=CERRA_MONTHLY_PATH, loader_monthly=load_cerra_monthly, dataset_name="cerra",
+                                    latitude_vals=latitude_vals, longitude_vals=longitude_vals, output_dir=constants_path)
+        
+        ds_now = normalise_data(ds_now, variables, norm_stats, NORMALISATION_STRATEGY)
+
+    # convert xr.Dataset to xr.DataArray
+    da_now = ds_now.to_array().squeeze() 
+
+    da_now = da_now.transpose(lat_name, lon_name, "variable")
+
+    # return as numpy array
+    return da_now.values
+
 
 def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Path, str], loader_monthly, dataset_name: str,
                    latitude_vals: Tuple[float, float], longitude_vals: Tuple[float, float], output_dir: Union[Path, str], 
@@ -1201,11 +1297,6 @@ def denormalise_data(ds: xr.Dataset, var_suffices: Dict, stat_dict: Dict, norm_s
     assert varcount == nvars, f"Not all variables have been denormalized ({nvars-varcount} are missing)."
     
     return ds
-
-
-
-
-
 
 ### Functions that work with the ERA5 data in University of Bristol
 
