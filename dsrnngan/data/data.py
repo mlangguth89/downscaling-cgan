@@ -37,9 +37,10 @@ LSM_PATH = DATA_PATHS["GENERAL"].get("LSM")
 CONSTANTS_PATH = DATA_PATHS["GENERAL"].get("CONSTANTS")
 ### For processing data on JSC cluster ###
 
-# monthly files of CERRA and ERA5
+# monthly files of CERRA, ERA5 and IMERG
 CERRA_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("CERRA_MONTHLY", '')
 ERA5_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("ERA5_MONTHLY", '')
+IMERG_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("IMERG_MONTHLY", '')
 NORMALISATION_STRATEGY = data_config.input_normalisation_strategy
 
 ### For processing data on JSC cluster ###
@@ -476,6 +477,8 @@ def load_observational_data(data_source: str, *args, **kwargs):
     """
     if data_source.lower() == 'imerg':
         return load_imerg(*args, **kwargs)
+    elif data_source.lower() == 'imerg_monthly':
+        return load_imerg_from_ds(*args, **kwargs)
     else:
         raise NotImplementedError(f'Data source {data_source} not implemented yet')
 
@@ -993,6 +996,17 @@ def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
     ym_str = year_month.strftime("y%Y_m%m")
 
     return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
+
+def get_imerg_monthly_path(year_month, imerg_basedir=IMERG_MONTHLY_PATH):
+    """
+    Get path to monthly IMERG-data grib-files as organized in JSC's file system.
+    :param year_month: datetime, year and month of data
+    :param imerg_basedir: str, base directory of IMERG data
+    :return: str, path to grib-file
+    """
+    ym_str = year_month.strftime("y%Y_m%m")
+
+    return os.path.join(imerg_basedir, f"3B-HHR.MS.MRG.3IMERG.{ym_str}.nc")
     
 def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, cerra_datadir=CERRA_MONTHLY_PATH):
     """
@@ -1056,6 +1070,25 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
     ds_era5.close()
     
     return ds_new
+
+def load_imerg_monthly(year_month, latitude_vals=None, longitude_vals=None, imerg_datadir=IMERG_MONTHLY_PATH):
+    """
+    Load data from monthly IMERG files. Note that these files only provide precipitation data.
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param imerg_datadir: str, path to IMERG data
+    :return: xr.Dataset, dataset containing the requested IMERG data
+    """
+    fname = get_imerg_monthly_path(year_month, imerg_datadir)
+    logger.info(f"Read file {fname}...")
+    ds_imerg = xr.open_dataset(fname)
+
+    if latitude_vals is not None and longitude_vals is not None:
+        ds_imerg = filter_by_lat_lon(ds_imerg, lon_range=longitude_vals, lat_range=latitude_vals)
+
+    return ds_imerg
+
 
 def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=False, norm=False,
                       latitude_vals=None, longitude_vals=None, var_name_lookup=None,
@@ -1139,6 +1172,64 @@ def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra
 
     # return as numpy array
     return da_now.values
+
+
+def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
+               latitude_vals: list=None, longitude_vals: list=None,
+               normalisation_type: str=None):
+    """
+
+     Function to fetch iMERG data, designed to match the structure of the load_radar function, so they can be
+     interchanged
+
+     Args:
+         date: str, date in form YYYYMMDD
+         hour: int or list, hour or hours to fetch from (Obsolete in this case as only daily data)
+         log_precip: Boolean, whether to take logs of the data (Obsolete for this case as using config)
+         radar_dir: str, directory where imerg data is stored
+
+     Returns:
+
+     """
+    if isinstance(date, str):
+        date = datetime.strptime(date, '%Y%m%d')
+        
+    ds = load_imerg_raw(year=date.year, month=date.month, day=date.day, hour=hour,
+                        latitude_vals=latitude_vals, longitude_vals=longitude_vals, imerg_data_dir=data_dir)
+
+    # Take mean since data may be half hourly
+    precip = ds['precipitationCal'].values
+    ds.close()
+    
+    if normalisation_type is not None:
+        precip = normalise_precipitation(precip, normalisation_type=normalisation_type)
+
+    return precip
+
+def load_imerg_from_ds(date: datetime, hour: int, ds_imerg: xr.Dataset, latitude_vals: list=None, longitude_vals: list=None, 
+                       normalisation_type: str=None):
+    """
+    Function to fetch a sample from a xr.Dataset providing monthly IMERG data,
+    designed to match the structure of the load_observational_data function, so they can be interchanged.
+    """
+    date_now = date.replace(hour=hour)
+    varname = 'precipitationCal'
+    da_now = ds_imerg[varname].sel({"time": date_now})
+    logger.info(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    
+    lat_name, lon_name = infer_lat_lon_names(da_now)
+
+    if normalisation_type is not None:
+        logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+                     "Consider to use normalized monthly data as input for the load_imerg_from_ds-method.")
+
+        norm_stats = get_norm_stats([varname], NORMALISATION_YEAR, data_dir=IMERG_MONTHLY_PATH, loader_monthly=load_imerg_monthly, dataset_name="imerg",
+                                    latitude_vals=latitude_vals, longitude_vals=longitude_vals, output_dir=constants_path)
+        
+        ds_now = normalise_data(ds_now, [varname], norm_stats, normalisation_type)
+
+    # return as numpy array
+    return da_now.values    
 
 
 def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Path, str], loader_monthly, dataset_name: str,
