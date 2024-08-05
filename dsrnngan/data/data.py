@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, date
 import numpy as np
 import pandas as pd
 import xarray as xr
-import xesmf as xe
 from argparse import ArgumentParser
 
 logger = logging.getLogger(__file__)
@@ -340,7 +339,7 @@ def interpolate_dataset_on_lat_lon(ds: xr.Dataset,
                                    longitude_vals: list,
                                    interp_method:str ='bilinear'):
     """
-    Interpolate dataset to new lat/lon values
+    Interpolate dataset to new lat/lon values. Requires xesmf-package.
 
     Args:
         ds (xr.Dataset): Datast to interpolate
@@ -351,6 +350,7 @@ def interpolate_dataset_on_lat_lon(ds: xr.Dataset,
     Returns:
         xr,Dataset: interpolated dataset
     """
+    import xesmf as xe
     
     lat_var_name, lon_var_name = infer_lat_lon_names(ds)
     
@@ -1317,14 +1317,16 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
         elif n == 'log':
             ds[vars_now] = log_plus_1(ds[vars_now])
             # additional standardisation
-            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+            # This is not done in original paper, cf. Section 2.1 of https://doi.org/10.1029/2022MS003120
+            # ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
         elif n == 'max':
             ds[vars_now] = ds[vars_now] / stat_dict['max'][vars]
             
         elif n == 'sqrt':
             ds[vars_now] = np.sqrt(ds[vars_now])
             # additional standardisation
-            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+            # This is not in the original code
+            # ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
         else:
             raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {", ".join(vars_now)}")
 
