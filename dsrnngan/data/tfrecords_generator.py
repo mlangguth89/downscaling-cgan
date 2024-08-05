@@ -12,6 +12,7 @@ import pandas as pd
 
 from dsrnngan.utils import read_config, utils
 from dsrnngan.data.data import file_exists, denormalise
+from .data_generator import DataGenerator as DataGeneratorPreprocess
 from dsrnngan.utils.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 from dsrnngan.utils.read_config import get_data_paths
 
@@ -364,8 +365,6 @@ def write_data(year_month_ranges: list,
     Returns:
         str: Name of directory that records have been written to
     """
-
-    from .data_generator import DataGenerator
     logger.info('Start of write data')
     logger.info(locals())
     
@@ -445,7 +444,7 @@ def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
-        dgs = DataStore(data_config, month_now)
+        dgs = DataGeneratorPreprocess(dates=month_now, data_config=data_config, batch_size=1, shuffle=False)
 
         for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
 
@@ -525,7 +524,7 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                 
             print('Hour = ', hour)
 
-            dgc = DataGenerator(data_config=data_config,
+            dgc = DataGeneratorPreprocess(data_config=data_config,
                                 dates=[item.strftime('%Y%m%d') for item in dates],
                                 batch_size=1,
                                 shuffle=False,
