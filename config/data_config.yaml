@@ -105,6 +105,7 @@ paths:
           ERA5: ''
           ERA5_MONTHLY: '/p/data1/slmet/met_data/ecmwf/era5_reduced_level/ml_levels/'     # Path to data at JSC
           CERRA_MONTHLY: '/p/scratch/atmo-rep/data/cerra/regridded'    # 
+          IMERG_MONTHLY: '/p/scratch/atmo-rep/data/imerg_regridded'    #
           IFS: ''
           OROGRAPHY: ''
           LSM: ''
