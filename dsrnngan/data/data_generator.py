@@ -8,7 +8,7 @@ from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
 from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, all_ifs_fields, all_era5_fields 
-from dsrnngan.data.data import load_era5_monthly, load_cerra_monthly, get_norm_stats, normalise_data 
+from dsrnngan.data.data import load_era5_monthly, load_cerra_monthly, load_imerg_monthly, get_norm_stats, normalise_data 
 from dsrnngan.utils.read_config import read_model_config, get_data_paths, get_lat_lon_range_from_config
 from dsrnngan.utils.utils import all_same_month 
 
@@ -109,7 +109,8 @@ class DataGenerator(Sequence):
                 loader_obs = load_cerra_monthly
                 obs_datadir = self.data_paths['GENERAL']['CEERA_MONTHLY']
             elif self.observational_data_source == "imerg_monthly":
-                raise NotImplementedError("IMERG monthly data not yet implemented")
+                loader_obs = load_imerg_monthly
+                obs_datadir = self.data_paths['GENERAL']['IMERG_MONTHLY']
             else:
                 raise ValueError(f"Unsupported observation data source for monthly data '{self.forecast_data_source}'")
             
