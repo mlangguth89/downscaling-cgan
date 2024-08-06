@@ -1328,7 +1328,7 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
             # This is not in the original code
             # ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
         else:
-            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {", ".join(vars_now)}")
+            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {', '.join(vars_now)}")
 
         varcount += len(vars_now)
 
