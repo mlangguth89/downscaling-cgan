@@ -1,0 +1,21 @@
+############################################################################################################################################################
+# CERRA reanalysis                                                                                                                                         #
+# Infos see: https://confluence.ecmwf.int/display/CKB/Copernicus+European+Regional+ReAnalysis+%28CERRA%29%3A+product+user+guide#CopernicusEuropeanRegional #
+# ReAnalysis(CERRA):productuserguide-TheCERRAgriddescription                                                                                               #
+############################################################################################################################################################
+
+gridtype  = projection
+gridsize  = 1142761
+xsize     = 1069
+ysize     = 1069
+xname     = x
+xunits    = "meters"
+yname     = y
+yunits    = "meters"
+xfirst    = 0
+xinc      = 5500
+yfirst    = 0
+yinc      = 5500
+grid_mapping = Lambert_Conformal
+grid_mapping_name = lambert_conformal_conic
+proj_params = "+proj=lcc +lat_0=50. +lon_0=8. +lat_1=50. +x_0=2937000.045080065 +y_0=2937000.009455892 +R=6371229.0 +units=m +no_defs"
