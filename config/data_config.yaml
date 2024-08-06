@@ -107,8 +107,8 @@ paths:
           CERRA_MONTHLY: '/p/scratch/atmo-rep/data/cerra/regridded'    # 
           IMERG_MONTHLY: '/p/scratch/atmo-rep/data/imerg_regridded'    #
           IFS: ''
-          OROGRAPHY: ''
-          LSM: ''
+          OROGRAPHY: '/p/scratch/atmo-rep/data/cerra/const/'
+          LSM: '/p/scratch/atmo-rep/data/cerra/const/'
           LAKES: ''
           SEA: ''
           CONSTANTS: ''
