@@ -307,6 +307,33 @@ def file_exists(data_source: str, year: int,
         raise ValueError(f'Unrecognised data source: {data_source}')
     
     return False
+
+def check_monthly_files(year_month: datetime, data_config: Dict, data_paths = DATA_PATHS):
+    """
+    Check if monthly files exist for both forecast and observational data sources.
+    :param year_month: year and month for which to check
+    :param data_config: data configuration
+    :param data_paths: data paths dictionary for all data sources
+    :return: True if both files exist
+    """
+    data_src_list = [data_config.fcst_data_source, data_config.obs_data_source]
+    
+    for data_src in data_src_list:
+        if data_src == "era5_monthly":
+            path_constructor = get_era5_monthly_path
+        elif data_src == "cerra_monthly":
+            path_constructor = get_cerra_monthly_path
+        elif data_src == "imerg_monthly":
+            path_constructor = get_imerg_monthly_path
+        else:
+            raise ValueError(f"Unsupported data source {data_src}")
+            
+        fname = path_constructor(year_month, data_paths["GENERAL"][data_src.upper()])
+        
+        if not os.path.isfile(fname):
+            raise ValueError(f"Failed to find requested data file for {data_src}: '{fname}'")
+            
+    return True
                 
 def filter_by_lat_lon(ds: xr.Dataset, 
                       lon_range: list, 
