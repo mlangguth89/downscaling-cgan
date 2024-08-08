@@ -474,6 +474,8 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
                     forecast = sample[0]['lo_res_inputs'][k,...].flatten()
                     const = sample[0]['hi_res_inputs'][k,...].flatten()
 
+                    assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hour']}, expected: {hour})"
+
                     # Check no Null values
                     if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
                         raise ValueError('Unexpected NaN values in data')
@@ -504,6 +506,7 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
                             rainy_pixel_fraction = (observations > threshold).mean()
 
                         clss = np.digitize(rainy_pixel_fraction, right=False)
+                        logger.info(f"Sample {batch} is part of class {clss}")
                         
                     else:
                         clss = random.choice(range(data_config.num_classes))
