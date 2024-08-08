@@ -209,7 +209,7 @@ class DataGenerator(Sequence):
     def get_data_dims(self):
         obs_vars, fcst_vars = list(self.month_obs_data.data_vars), list(self.month_fcst_data.data_vars) 
         var_obs, var_fcst = obs_vars[0], fcst_vars[0]
-        obs_sh, fcst_sh = list(dgs.month_obs_data[var_obs].shape[1::]), list(dgs.month_fcst_data[var_fcst].shape[1::])
+        obs_sh, fcst_sh = list(self.month_obs_data[var_obs].shape[1::]), list(self.month_fcst_data[var_fcst].shape[1::])
 
         # add number of predictors to dimension
         fcst_sh = fcst_sh + [len(fcst_vars)]
