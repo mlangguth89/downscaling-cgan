@@ -364,10 +364,7 @@ def write_data(year_month_ranges: list,
 
     Returns:
         str: Name of directory that records have been written to
-    """
-    logger.info('Start of write data')
-    logger.info(locals())
-    
+    """    
     if not data_config:
         data_config = read_config.read_config(config_filename='data_config.yaml')
 
@@ -383,6 +380,16 @@ def write_data(year_month_ranges: list,
     if not os.path.isdir(hash_dir):
         os.makedirs(hash_dir, exist_ok=True)
     
+   # Create a file handler for the logger
+    file_handler = logging.FileHandler(os.path.join(hash_dir, 'write_data.log'))
+
+    # Create a formatter and set it for the handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    logger.info('Start of write data')
+    logger.info(locals())
+
     print(f'Output folder will be {hash_dir}')
         
     # Write params in directory
@@ -437,18 +444,17 @@ def write_data(year_month_ranges: list,
 
 def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug=False):
 
-    data_paths=get_data_paths(data_config=data_config)
+    # data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
 
     for year_month in yr_m:
 
         month_now = pd.to_datetime(year_month, format='%Y%m')
-        _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
-
+        # _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
-        dgs = DataGeneratorPreprocess(dates=all_times, data_config=data_config, batch_size=1, shuffle=False)
+        dgs = DataGeneratorPreprocess(dates=all_times, data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
 
         for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
 
@@ -456,7 +462,7 @@ def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug
             logger.debug(f"Try loading data for {t.strftime('%Y%m%d %H:%M')}")
             
             try:
-                sample = dgs.__getitem__(t)
+                sample = dgs.__getitem__(batch)
                 (depth, width, height) = sample[1]['output'].shape
             
                 for k in range(depth):
@@ -532,7 +538,7 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                                 dates=[item.strftime('%Y%m%d') for item in dates],
                                 batch_size=1,
                                 shuffle=False,
-                                hour=hour)
+                                hour=hour, monthly_data=False)
             print('Fetching batches')
             for batch, date in tqdm(enumerate(dates), total=len(dates), position=0, leave=True):
                 
