@@ -59,7 +59,14 @@ FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
 VAR_LOOKUP_ERA5_JSC = {"t": {"longname": "temperature"}, 
                        "u": {"longname": "velocity_u"},
                        "v": {"longname": "velocity_v"},
-                       "q": {"longname": "specific_humidity"}}
+                       "q": {"longname": "specific_humidity"},
+                       "cape": {"longname": "cape"},
+                       "sp": {"longname": "surface_pressure"},
+                       "cp": {"longname": "convective_precip"},
+                       "tisr": {"longname": "toa_solar_rad"},
+                       "tclw": {"longname": "total_cloud_liquid_water"},
+                       "tcwv":{"longname": "vertically_int_water_vapour"},
+                       "tp": {"longname": "total_precip"}}
 
 # 'cin', Left out for the moment as contains a lot of nulls
 all_ifs_fields = ['2t', 'cape',  'cp', 'r200', 'r700', 'r950', 
@@ -486,7 +493,8 @@ def load_observational_data(data_source: str, *args, **kwargs):
 def load_orography(filepath: str=OROGRAPHY_PATH, 
                    latitude_vals: list=None, 
                    longitude_vals: list=None,
-                   interpolate: bool=True):
+                   varname_oro: str = "orog",
+                   interpolate: bool=False):
     """
     Load orography values
 
@@ -494,6 +502,7 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
         filepath (str, optional): path to orography data. Defaults to OROGRAPHY_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
+        varname_oro (str, optional): name of orography variable. Defaults to "orog".
         interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
 
     Returns:
@@ -503,7 +512,7 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
     
     # Note that this assumes the orography is somewhat filtered already 
     # If it is worldwide orography then normalised values will probably be too small!
-    max_val = ds['h'].values.max()
+    max_val = ds[varname_oro].values.max()
        
     if latitude_vals is not None and longitude_vals is not None:
         if interpolate:
@@ -516,7 +525,7 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
     ds = make_dataset_consistent(ds)
 
     # Normalise and clip below to remove spectral artefacts
-    h_vals = ds['h'].values[0, :, :]
+    h_vals = ds[varname_oro].values[0, :, :]
     h_vals[h_vals < 5] = 5.0
     h_vals = h_vals / max_val
 
@@ -527,7 +536,8 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
 def load_land_sea_mask(filepath=LSM_PATH, 
                        latitude_vals=None, 
                        longitude_vals=None,
-                       interpolate=True):
+                       varname_lsm:str = "lsm",
+                       interpolate=False):
     """
     Load land-sea mask values
 
@@ -535,6 +545,7 @@ def load_land_sea_mask(filepath=LSM_PATH,
         filepath (str, optional): path to land-sea masj data. Defaults to LSM_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
+        varname_lsm (str, optional): name of land-sea mask variable. Defaults to "lsm".
         interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
 
     Returns:
@@ -552,7 +563,7 @@ def load_land_sea_mask(filepath=LSM_PATH,
             
     ds = make_dataset_consistent(ds)
     
-    lsm = ds['lsm'].values[0, :, :]
+    lsm = ds[varname_lsm].values[0, :, :]
     
     ds.close()
     
@@ -611,13 +622,13 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           fcst_data_source: str, 
                           obs_data_source: str, 
                           fcstdir_or_ds: Union[str, xr.Dataset],
-                          data_dir_or_ds: Union[str, xr.Dataset],
+                          obsdir_or_ds: Union[str, xr.Dataset],
                           normalisation_strategy: dict,
                           latitude_range: Iterable[float]=None,
                           longitude_range: Iterable[float]=None,
                           constants_dir: str=CONSTANTS_PATH,
                           constant_fields: list=None, 
-                          hour: int=0, 
+                          hour: Union[str, int] = 0, 
                           normalise_inputs: bool=False,
                           output_normalisation: bool=False):
     batch_x = []
@@ -642,9 +653,8 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                                        normalisation_strategy=normalisation_strategy))
         
         if obs_data_source is not None:
-            batch_y.append(load_observational_data(obs_data_source, date, h, normalisation_type=output_normalisation,
-                                                latitude_vals=latitude_range, longitude_vals=longitude_range,
-                                                data_dir_or_ds=data_dir_or_ds))
+            batch_y.append(load_observational_data(obs_data_source, date, h, obsdir_or_ds, normalisation_type=output_normalisation,
+                                                latitude_vals=latitude_range, longitude_vals=longitude_range))
     if constant_fields is None:
         return np.array(batch_x), np.array(batch_y)
     else:
@@ -967,24 +977,28 @@ def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_
 
     return stats
 
-### Functions that work with ERA5 and CERRA data at JSC (from the AtmoRep-project)
+### Functions that work with ERA5, CERRA and IMERG data at JSC (from the AtmoRep-project)
 
 def get_era5_monthly_path(variable, lvl, year_month, era5_basedir=ERA5_MONTHLY_PATH, var_name_lookup=VAR_LOOKUP_ERA5_JSC):
     """"
     Get path to monthly ERA5-data grib-files as organized in JSC's file system.
     :param variable: str, variable name
-    :param lvl: int, model level of variable
+    :param lvl: str, level string of variable (e.g. ml0 for surface data, 'ml137' for model level 137 or 'pl700' for 700 hPa pressure level)
     :param year_month: datetime, year and month of data
     :param era5_basedir: str, base directory of ERA5 data
     :param var_name_lookup: dict, lookup table for retrieving longmanes variables
     :return: str, path to grib-file
     """
-    
+    assert isinstance(lvl, str), f"level parameter lvl must be a string, e.g. 'ml0', 'ml137' or 'pl700', but is of type: {type(lvl)}"
     varname_long = var_name_lookup[variable]['longname']
     ym_str = year_month.strftime("y%Y_m%m")
-    lvl_str = f"ml{int(lvl)}"
 
-    return os.path.join(era5_basedir, varname_long, lvl_str, f"era5_{varname_long}_{ym_str}_{lvl_str}.grib")
+    fname = os.path.join(era5_basedir, varname_long, lvl, f"era5_{varname_long}_{ym_str}_{lvl}.nc")
+    if not os.path.exists(fname):
+        fname = fname.replace(".nc", ".grib")
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"Could not find the following data file: {fname.replace('.grib', '')}[.nc, .grib]")
+    return fname
 
 def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
     """
@@ -1008,6 +1022,45 @@ def get_imerg_monthly_path(year_month, imerg_basedir=IMERG_MONTHLY_PATH):
 
     return os.path.join(imerg_basedir, f"3B-HHR.MS.MRG.3IMERG.{ym_str}.nc")
     
+def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, era5_datadir=ERA5_MONTHLY_PATH):
+    """
+    Load data from monthly ERA5 files. Note that the data for all variables and levels are stored in separate files (unlike the CERRA data files)
+    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param era5_datadir: str, path to ERA5 data
+    """
+    # retrieve variables of interest while handling level-dimension 
+    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
+    # Note that the data for all variables and levels are stored in separate files
+    da_dict = {}
+    for var, vls in variables.items():
+        for vl in vls:
+            fname = get_era5_monthly_path(var, vl, year_month, era5_datadir)
+            logger.info(f"Read file {fname}...")
+            print(f"Read file {fname}...")
+            if fname.endswith(".grib"):
+                engine = "cfgrib"
+                backend_kwargs = backend_kwargs={"indexpath": ""}
+            else:
+                engine, backend_kwargs = None, None
+                
+            with xr.open_dataset(fname, engine=engine, backend_kwargs=backend_kwargs) as ds_era5:
+                ds_era5 = make_dataset_consistent(ds_era5)
+        
+                if latitude_vals is not None and longitude_vals is not None:
+                    ds_era5 = filter_by_lat_lon(ds_era5, lon_range=longitude_vals, lat_range=latitude_vals)
+                
+                da_dict[var] = ds_era5[var].squeeze().load()#.drop_vars("hybrid")
+                if var in ["cp", "tp"]:
+                    print(f"Scale {var}...")
+                    da_dict[var] = xr.where(da_dict[var] < 1.e-05, 0., da_dict[var] * 1000.)                    
+            
+    ds_new = xr.Dataset(da_dict)
+    
+    return ds_new
+
 def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, cerra_datadir=CERRA_MONTHLY_PATH):
     """
     Load data from monthly CERRA files. Note that all variables are available in a single monthly file (unlike the ERA5 data files)
@@ -1041,37 +1094,7 @@ def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitud
 
     return ds_new
 
-def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, era5_datadir=ERA5_MONTHLY_PATH):
-    """
-    Load data from monthly ERA5 files. Note that the data for all variables and levels are stored in separate files (unlike the CERRA data files)
-    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
-    :param year_month: datetime, year and month of data
-    :param latitude_vals: list, latitude values to filter
-    :param longitude_vals: list, longitude values to filter
-    :param era5_datadir: str, path to ERA5 data
-    """
-    # retrieve variables of interest while handling level-dimension 
-    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
-    # Note that the data for all variables and levels are stored in separate files
-    da_dict = {}
-    for var, mls in variables.items():
-        for ml in mls:
-            fname = get_era5_monthly_path(var, ml, year_month, era5_datadir)
-            logger.info(f"Read file {fname}...")
-            ds_era5 = xr.open_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
-
-            if latitude_vals is not None and longitude_vals is not None:
-                ds_era5 = filter_by_lat_lon(ds_era5, lon_range=longitude_vals, lat_range=latitude_vals)
-
-            da_dict[f"{var}_ml{ml}"] = ds_era5[var].squeeze().drop_vars("hybrid")
-            ds_era5.close()
-            
-    ds_new = xr.Dataset(da_dict)
-    ds_era5.close()
-    
-    return ds_new
-
-def load_imerg_monthly(year_month, latitude_vals=None, longitude_vals=None, imerg_datadir=IMERG_MONTHLY_PATH):
+def load_imerg_monthly(variables: List[str], year_month, latitude_vals=None, longitude_vals=None, imerg_datadir=IMERG_MONTHLY_PATH):
     """
     Load data from monthly IMERG files. Note that these files only provide precipitation data.
     :param year_month: datetime, year and month of data
@@ -1082,15 +1105,19 @@ def load_imerg_monthly(year_month, latitude_vals=None, longitude_vals=None, imer
     """
     fname = get_imerg_monthly_path(year_month, imerg_datadir)
     logger.info(f"Read file {fname}...")
+    print(f"Read file {fname}...")
     ds_imerg = xr.open_dataset(fname)
+    da_imerg = ds_imerg[variables]
 
     if latitude_vals is not None and longitude_vals is not None:
-        ds_imerg = filter_by_lat_lon(ds_imerg, lon_range=longitude_vals, lat_range=latitude_vals)
+        da_imerg = filter_by_lat_lon(da_imerg, lon_range=longitude_vals, lat_range=latitude_vals)
 
-    return ds_imerg
+    ds_imerg.close()
+    return da_imerg
 
 
 def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=False, norm=False,
+                      normalisation_strategy: Dict = None,
                       latitude_vals=None, longitude_vals=None, var_name_lookup=None,
                       constants_path=CONSTANTS_PATH):
     """
@@ -1111,17 +1138,20 @@ def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=Fals
     date_now = date.replace(hour=hour)
     ds_now = ds_era5.sel({"time": date_now})
     logger.info(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    print(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
     
     lat_name, lon_name = infer_lat_lon_names(ds_now)
 
     if norm:
         logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
                      "Consider to use normalized monthly data as input for the load_era5_from_ds-method.")
+        print("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+                     "Consider to use normalized monthly data as input for the load_era5_from_ds-method.")
 
         norm_stats = get_norm_stats(variables, NORMALISATION_YEAR, data_dir=ERA5_PATH, loader_monthly=load_era5_monthly, dataset_name="era5",
                                     latitude_vals=latitude_vals, longitude_vals=longitude_vals, output_dir=constants_path)
         
-        ds_now = normalise_data(ds_now, variables, norm_stats, NORMALISATION_STRATEGY)
+        ds_now = normalise_data(ds_now, variables, norm_stats, normalisation_strategy)
 
     # convert xr.Dataset to xr.DataArray
     da_now = ds_now.to_array().squeeze() 
@@ -1173,63 +1203,40 @@ def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra
     # return as numpy array
     return da_now.values
 
-
-def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
-               latitude_vals: list=None, longitude_vals: list=None,
-               normalisation_type: str=None):
-    """
-
-     Function to fetch iMERG data, designed to match the structure of the load_radar function, so they can be
-     interchanged
-
-     Args:
-         date: str, date in form YYYYMMDD
-         hour: int or list, hour or hours to fetch from (Obsolete in this case as only daily data)
-         log_precip: Boolean, whether to take logs of the data (Obsolete for this case as using config)
-         radar_dir: str, directory where imerg data is stored
-
-     Returns:
-
-     """
-    if isinstance(date, str):
-        date = datetime.strptime(date, '%Y%m%d')
-        
-    ds = load_imerg_raw(year=date.year, month=date.month, day=date.day, hour=hour,
-                        latitude_vals=latitude_vals, longitude_vals=longitude_vals, imerg_data_dir=data_dir)
-
-    # Take mean since data may be half hourly
-    precip = ds['precipitationCal'].values
-    ds.close()
-    
-    if normalisation_type is not None:
-        precip = normalise_precipitation(precip, normalisation_type=normalisation_type)
-
-    return precip
-
 def load_imerg_from_ds(date: datetime, hour: int, ds_imerg: xr.Dataset, latitude_vals: list=None, longitude_vals: list=None, 
-                       normalisation_type: str=None):
+                       normalisation_type: str=None, constants_path=CONSTANTS_PATH):
     """
     Function to fetch a sample from a xr.Dataset providing monthly IMERG data,
     designed to match the structure of the load_observational_data function, so they can be interchanged.
+    :param date: datetime, date of data
+    :param hour: int, hour of data
+    :param ds_imerg: xr.Dataset, dataset containing IMERG data
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param normalisation_type: str, type of normalisation
+    :param constants_path: str, path to constants
     """
     date_now = date.replace(hour=hour)
-    varname = 'precipitationCal'
+    varname = 'precipitation'
     da_now = ds_imerg[varname].sel({"time": date_now})
     logger.info(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    print(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
     
     lat_name, lon_name = infer_lat_lon_names(da_now)
 
     if normalisation_type is not None:
-        logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+        logger.debug(f"Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
+                     "Consider to use normalized monthly data as input for the load_imerg_from_ds-method.")
+        print(f"Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
                      "Consider to use normalized monthly data as input for the load_imerg_from_ds-method.")
 
         norm_stats = get_norm_stats([varname], NORMALISATION_YEAR, data_dir=IMERG_MONTHLY_PATH, loader_monthly=load_imerg_monthly, dataset_name="imerg",
                                     latitude_vals=latitude_vals, longitude_vals=longitude_vals, output_dir=constants_path)
         
-        ds_now = normalise_data(ds_now, [varname], norm_stats, normalisation_type)
+        da_now = normalise_data(da_now, [varname], norm_stats, normalisation_type)
 
     # return as numpy array
-    return da_now.values    
+    return da_now.values  
 
 
 def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Path, str], loader_monthly, dataset_name: str,
@@ -1248,16 +1255,19 @@ def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Pa
     
     if use_cached and fp.is_file():
         logger.info(f'Loading stats from file {fp}...')
+        print(f'Loading stats from file {fp}...')
 
         with open(fp, 'rb') as f:
             norms = pickle.load(f)
     else:
         # get list of months for normalization year
         logger.info(f"Calculate stats for year {norm_year}...") 
+        print(f"Calculate stats for year {norm_year}...") 
         ds_m = []
         all_m = list(pd.date_range(start=f'{norm_year}-01-01', end=f'{norm_year+1}-01-01' , freq='M'))
         
         for m in all_m[0:3]:
+            print("Reduced number of months in deriving stats!!!")
             logger.debug(f"Process data for {m.strftime('%Y-%m')}...")
             ds_m.append(loader_monthly(variables, m, latitude_vals, longitude_vals, data_dir))
             
@@ -1268,15 +1278,15 @@ def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Pa
         norms = calculate_statistics(ds_all, mean_dims)
         
         if not fp.is_file():
-            logger.info("Save statistics derived from year {norm_year} to file '{fp}'...")
+            logger.info(f"Save statistics derived from year {norm_year} to file '{fp}'...")
+            print(f"Save statistics derived from year {norm_year} to file '{fp}'...")
             with open(fp, 'wb') as f:
                 pickle.dump(norms, f, pickle.HIGHEST_PROTOCOL)
         else:
             logger.info(f"Normalisation file '{fp}' already exists. Derived normalisation data remains unsafed.")
             
     return norms
-            
-    
+
 def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
     """
     Normalise variables in dataset.
@@ -1287,50 +1297,65 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
     :param norm_strategy: dict, dict containing normalisation strategy for each variable
     :return: xr.Dataset, dataset with normalized data
     """
-
-    # read suffices of variable names which should correspond to variable names in the normalization_strategy-dictionary
-    vars = var_suffices.keys()
-
-    # get unique list of required normalization techniwues applied to data
-    norm = list(set([norm_strategy[var].get("normalisation") for var in vars]))
     data_vars = list(ds.data_vars)
     nvars = len(data_vars)
     varcount = 0
+    
+    # read suffices of variable names which should correspond to variable names in the normalization_strategy-dictionary
+    if isinstance(norm_strategy, dict):
+        vars = var_suffices.keys()
 
-    logger.info(f"Normalize {nvars} variables with {len(norm)} normalization techniques...")
+        # get unique list of required normalization techniwues applied to data
+        norm = list(set([norm_strategy[var].get("normalisation") for var in vars]))
+        logger.info(f"Normalize {nvars} variables with {len(norm)} normalization techniques...")
+    else:
+        assert isinstance(norm_strategy, str)
+        
+        norm = [norm_strategy]
+        
+        logger.debug(f"Apply {norm_strategy} to the following variables: {', '.join(data_vars)}")
+        print(f"Apply {norm_strategy} to the following variables: {', '.join(data_vars)}")
 
     # apply each identified normalization to the variables
     for n in norm:
         # get variables that should be normalized with current technique n
-        var_suffix_now = [var for var, info in norm_strategy.items() if info.get("normalisation") == n]
-        vars_now = []
-        for suffix in var_suffix_now:
-            vars_now += [var for var in data_vars if var.startswith(f"{suffix}_")]
-        logger.debug(f"Apply {n} to the following variables: {', '.join(vars_now)}")
+        if isinstance(norm_strategy, dict):
+            var_norm = [var for var, info in norm_strategy.items() if info.get("normalisation") == n]
+            vars2norm = []
+        
+            for suffix in var_norm:
+                vars2norm += [var for var in data_vars if var == suffix or var.startswith(f"{suffix}_")]
+                
+            logger.debug(f"Apply {n} to the following variables: {', '.join(vars2norm)}")
+            print(f"Apply {n} to the following variables: {', '.join(vars2norm)}")
+        else:
+            vars2norm = data_vars        
 
+        # dataset will be updated in place
         if n == 'standardise':
-            ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+            ds.update((ds[vars2norm] - stat_dict['mean'][vars2norm]) / stat_dict['std'][vars2norm])
 
         elif n == 'minmax':
-            ds[vars_now] = (ds[vars_now] - stat_dict['min'][vars_now]) / (stat_dict['max'][vars_now] - stat_dict['min'][vars_now])
+            ds.update((ds[vars2norm] - stat_dict['min'][vars2norm]) / (stat_dict['max'][vars2norm] - stat_dict['min'][vars2norm]))
 
         elif n == 'log':
-            ds[vars_now] = log_plus_1(ds[vars_now])
+            print(ds[vars2norm])
+            ds.update(log_plus_1(ds[vars2norm]))
             # additional standardisation
             # This is not done in original paper, cf. Section 2.1 of https://doi.org/10.1029/2022MS003120
-            # ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+            # ds.update((ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now])
         elif n == 'max':
-            ds[vars_now] = ds[vars_now] / stat_dict['max'][vars]
+            ds.update(ds[vars2norm] / stat_dict['max'][vars2norm])
             
         elif n == 'sqrt':
-            ds[vars_now] = np.sqrt(ds[vars_now])
+            ds.update(np.sqrt(ds[vars2norm]))
             # additional standardisation
             # This is not in the original code
-            # ds[vars_now] = (ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now]
+            # ds.update((ds[vars_now] - stat_dict['mean'][vars_now]) / stat_dict['std'][vars_now])
         else:
-            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {', '.join(vars_now)}")
+            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {', '.join(vars2norm)}")
 
-        varcount += len(vars_now)
+        varcount += len(vars2norm)
 
     # snaity check that all variables have been normalized
     assert varcount == nvars, f"Not all variables have been normalized ({nvars-varcount} are missing)."
@@ -1368,25 +1393,25 @@ def denormalise_data(ds: xr.Dataset, var_suffices: Dict, stat_dict: Dict, norm_s
         logger.debug(f"Invert {n} normalisation to the following variables: {', '.join(vars_now)}")
 
         if n == 'standardise':
-            ds[vars_now] = ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+            ds.update(ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now])
 
         elif n == 'minmax':
-            ds[vars_now] = ds[vars_now] * (stat_dict['max'][vars_now] - stat_dict['min'][vars_now]) + stat_dict['min'][vars_now]
+            ds.update(ds[vars_now] * (stat_dict['max'][vars_now] - stat_dict['min'][vars_now]) + stat_dict['min'][vars_now])
 
         elif n == 'log':
             # invert standardisation
-            ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+            # ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
             # invert log-transformation
-            ds[vars_now] = np.exp(ds[vars_now]) - 1
+            ds.update(np.exp(ds[vars_now]) - 1)
         elif n == 'max':
-            ds[vars_now] = ds[vars_now] * stat_dict['max'][vars_now]
+            ds.update(ds[vars_now] * stat_dict['max'][vars_now])
         elif n == 'sqrt':
             # invert standardisation
-            ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now]
+            # ds.update(ds[vars_now] * stat_dict['std'][vars_now] + stat_dict['mean'][vars_now])
             # invert sqrt-transformation
-            ds[vars_now] = ds[vars_now] ** 2
+            ds.update(ds[vars_now] ** 2)
         else:
-            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {", ".join(vars_now)}")
+            raise ValueError(f"Unrecognised normalisation type {n} for variable(-s) {', '.join(vars_now)}")
 
         varcount += len(vars_now)
 
@@ -1647,7 +1672,7 @@ def load_imerg(date: datetime, hour: int=18, data_dir: str=IMERG_PATH,
     if normalisation_type is not None:
         precip = normalise_precipitation(precip, normalisation_type=normalisation_type)
 
-    return precip
+    return precip  
 
 
 if __name__ == '__main__':
