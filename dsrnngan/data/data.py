@@ -1039,14 +1039,14 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
         for vl in vls:
             fname = get_era5_monthly_path(var, vl, year_month, era5_datadir)
             logger.info(f"Read file {fname}...")
-            print(f"Read file {fname}...")
+
             if fname.endswith(".grib"):
                 engine = "cfgrib"
                 backend_kwargs = backend_kwargs={"indexpath": ""}
             else:
                 engine, backend_kwargs = None, None
                 
-            with xr.open_dataset(fname, engine=engine, backend_kwargs=backend_kwargs) as ds_era5:
+            with xr.load_dataset(fname, engine=engine, backend_kwargs=backend_kwargs) as ds_era5:
                 ds_era5 = make_dataset_consistent(ds_era5)
         
                 if latitude_vals is not None and longitude_vals is not None:
@@ -1054,7 +1054,7 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
                 
                 da_dict[var] = ds_era5[var].squeeze().load()#.drop_vars("hybrid")
                 if var in ["cp", "tp"]:
-                    print(f"Scale {var}...")
+                    logger.debug(f"Scale {var}...")
                     da_dict[var] = xr.where(da_dict[var] < 1.e-05, 0., da_dict[var] * 1000.)                    
             
     ds_new = xr.Dataset(da_dict)
@@ -1075,7 +1075,7 @@ def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitud
     fname = get_cerra_monthly_path(year_month, cerra_datadir)
 
     # open data-file
-    ds_cerra = xr.open_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
+    ds_cerra = xr.load_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
     # filter spatially (if wanted)
     if latitude_vals is not None and longitude_vals is not None:
@@ -1105,8 +1105,8 @@ def load_imerg_monthly(variables: List[str], year_month, latitude_vals=None, lon
     """
     fname = get_imerg_monthly_path(year_month, imerg_datadir)
     logger.info(f"Read file {fname}...")
-    print(f"Read file {fname}...")
-    ds_imerg = xr.open_dataset(fname)
+
+    ds_imerg = xr.load_dataset(fname)
     da_imerg = ds_imerg[variables]
 
     if latitude_vals is not None and longitude_vals is not None:
@@ -1138,14 +1138,11 @@ def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=Fals
     date_now = date.replace(hour=hour)
     ds_now = ds_era5.sel({"time": date_now})
     logger.info(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
-    print(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
     
     lat_name, lon_name = infer_lat_lon_names(ds_now)
 
     if norm:
         logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
-                     "Consider to use normalized monthly data as input for the load_era5_from_ds-method.")
-        print("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
                      "Consider to use normalized monthly data as input for the load_era5_from_ds-method.")
 
         norm_stats = get_norm_stats(variables, NORMALISATION_YEAR, data_dir=ERA5_PATH, loader_monthly=load_era5_monthly, dataset_name="era5",
@@ -1220,14 +1217,9 @@ def load_imerg_from_ds(date: datetime, hour: int, ds_imerg: xr.Dataset, latitude
     varname = 'precipitation'
     da_now = ds_imerg[varname].sel({"time": date_now})
     logger.info(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
-    print(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
-    
-    lat_name, lon_name = infer_lat_lon_names(da_now)
 
     if normalisation_type is not None:
         logger.debug(f"Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
-                     "Consider to use normalized monthly data as input for the load_imerg_from_ds-method.")
-        print(f"Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
                      "Consider to use normalized monthly data as input for the load_imerg_from_ds-method.")
 
         norm_stats = get_norm_stats([varname], NORMALISATION_YEAR, data_dir=IMERG_MONTHLY_PATH, loader_monthly=load_imerg_monthly, dataset_name="imerg",
@@ -1255,19 +1247,16 @@ def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Pa
     
     if use_cached and fp.is_file():
         logger.info(f'Loading stats from file {fp}...')
-        print(f'Loading stats from file {fp}...')
 
         with open(fp, 'rb') as f:
             norms = pickle.load(f)
     else:
         # get list of months for normalization year
         logger.info(f"Calculate stats for year {norm_year}...") 
-        print(f"Calculate stats for year {norm_year}...") 
         ds_m = []
         all_m = list(pd.date_range(start=f'{norm_year}-01-01', end=f'{norm_year+1}-01-01' , freq='M'))
         
-        for m in all_m[0:3]:
-            print("Reduced number of months in deriving stats!!!")
+        for m in all_m:
             logger.debug(f"Process data for {m.strftime('%Y-%m')}...")
             ds_m.append(loader_monthly(variables, m, latitude_vals, longitude_vals, data_dir))
             
@@ -1279,7 +1268,6 @@ def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Pa
         
         if not fp.is_file():
             logger.info(f"Save statistics derived from year {norm_year} to file '{fp}'...")
-            print(f"Save statistics derived from year {norm_year} to file '{fp}'...")
             with open(fp, 'wb') as f:
                 pickle.dump(norms, f, pickle.HIGHEST_PROTOCOL)
         else:
@@ -1314,7 +1302,6 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
         norm = [norm_strategy]
         
         logger.debug(f"Apply {norm_strategy} to the following variables: {', '.join(data_vars)}")
-        print(f"Apply {norm_strategy} to the following variables: {', '.join(data_vars)}")
 
     # apply each identified normalization to the variables
     for n in norm:
@@ -1327,7 +1314,6 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
                 vars2norm += [var for var in data_vars if var == suffix or var.startswith(f"{suffix}_")]
                 
             logger.debug(f"Apply {n} to the following variables: {', '.join(vars2norm)}")
-            print(f"Apply {n} to the following variables: {', '.join(vars2norm)}")
         else:
             vars2norm = data_vars        
 
@@ -1339,7 +1325,6 @@ def normalise_data(ds, var_suffices, stat_dict, norm_strategy):
             ds.update((ds[vars2norm] - stat_dict['min'][vars2norm]) / (stat_dict['max'][vars2norm] - stat_dict['min'][vars2norm]))
 
         elif n == 'log':
-            print(ds[vars2norm])
             ds.update(log_plus_1(ds[vars2norm]))
             # additional standardisation
             # This is not done in original paper, cf. Section 2.1 of https://doi.org/10.1029/2022MS003120
