@@ -344,7 +344,6 @@ def write_data(year_month_ranges: list,
                hours: list,
                data_config: dict=None,
                debug: bool=False,
-               sampling_in_files: str="daily",
                num_shards: int=1) -> str:
     """
     Function to write training data to TF records
@@ -358,7 +357,6 @@ def write_data(year_month_ranges: list,
         data_paths (dict, optional): Dict of paths to the data sources. Defaults to DATA_PATHS.
         longitude_range (list, optional): Longitude range to use. Defaults to None.
         debug (bool, optional): Debug mode. Defaults to False.
-        sampling_in_files (str, optional): Sampling method in files from which to process. Defaults to "daily".
         config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
         num_shards (int, optional): Number of shards to split each tfrecord into (to make sure records are not too big)
 
@@ -386,11 +384,17 @@ def write_data(year_month_ranges: list,
     # Create a formatter and set it for the handler
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
+    # add the file handler to the logger
+    logger.addHandler(file_handler)
 
     logger.info('Start of write data')
     logger.info(locals())
 
     print(f'Output folder will be {hash_dir}')
+    # infer sampling method from data sources
+    sources = [data_config.fcst_data_source, data_config.obs_data_source]
+    sampling_in_files = "monthly" if all([src.endswith("_monthly") for src in sources]) else "daily"
+    logger.info(f"Sampling in files: {sampling_in_files}")
         
     # Write params in directory
     write_to_yaml(os.path.join(hash_dir, 'data_config.yaml'), data_config_dict)
@@ -612,10 +616,10 @@ def write_train_test_data(*args, training_range,
                data_label='train', **kwargs)
     
     if validation_range:
-        pass # Not using this at the moment
-        # print('\n*** Writing validation data')
-        # write_data(validation_range, *args,
-        #        data_label='validation', **kwargs)
+        #pass # Not using this at the moment
+        print('\n*** Writing validation data')
+        write_data(validation_range, *args,
+                   data_label='validation', **kwargs)
         
     if test_range:
         print('\n*** Writing test data')
@@ -657,6 +661,8 @@ if __name__ == '__main__':
     parser.add_argument('--records-folder', type=str, default=None)
     parser.add_argument('--data-config-path', type=str, default=None)
     parser.add_argument('--model-config-path', type=str, default=None)
+    parser.add_argument('--num_shards', dest="num_shards", type=int, default=1, 
+                        help='Number of shards to split dataset into multiple (to make sure records are not too big)')
     parser.add_argument('--debug',action='store_true')
     args = parser.parse_args()
     
@@ -691,7 +697,8 @@ if __name__ == '__main__':
                 eval_range =  model_config.eval.eval_range
     
     write_train_test_data(training_range=training_range,
-                            validation_range=val_range,
-                            test_range=eval_range,
-                            data_config=data_config,
-                            hours=args.fcst_hours)
+                          validation_range=val_range,
+                          test_range=eval_range,
+                          data_config=data_config,
+                          hours=args.fcst_hours,
+                          num_shards=args.num_shards)
