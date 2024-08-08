@@ -446,7 +446,7 @@ def write_data(year_month_ranges: list,
                             
     return hash_dir
 
-def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug=False):
+def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug=False):
 
     # data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
