@@ -1,44 +1,32 @@
 data_paths: "JSC"  # Choose which paths version to use in PATHS
-fcst_data_source: "ifs"
-obs_data_source: "imerg"
-normalisation_year: 2017
+fcst_data_source: "era5_monthly"
+obs_data_source: "imerg_monthly"
+normalisation_year: 2004
 num_samples: 320000
 normalise_inputs: True
 output_normalisation: "log"
 num_classes: 4 # Number of bins to split data into
-min_latitude: -11.95
-max_latitude: 15.05
-latitude_step_size: 0.1
-min_longitude: 25.05
-max_longitude: 51.45
-longitude_step_size: 0.1
+min_latitude: 24.916
+max_latitude: 73.833
+latitude_step_size: 0.25
+min_longitude: -19.085
+max_longitude: 35.083
+longitude_step_size: 0.25
 input_fields: 
-    - 2t
-    - cape
-    - cp
-    - r200
-    - r700
-    - r950
-    - sp
-    - t200
-    - t700
-    - tclw
-    - tcwv
-    - tisr
-    - tp
-    - u200
-    - u700
-    - v200
-    - v700
-    - w200
-    - w500
-    - w700
+    tp:
+      - ml0
+    cp: 
+      - ml0
+    cape:
+      - ml0
+    sp:
+      - ml0
 constant_fields:
     - orography
     - lsm
 # To-Do: Add observation/target fields
 target_fields:
-    - dummy
+    - precipitation
 input_normalisation_strategy:
     tpq:
       negative_vals: False
@@ -100,17 +88,17 @@ paths:
       TFRecords:
           tfrecords_path: '/user/work/uz22147/tfrecords/'
   JSC:      # Paths for running on JSC-clusters
-    GENERAL: 
+      GENERAL: 
           IMERG: ''
           ERA5: ''
-          ERA5_MONTHLY: '/p/data1/slmet/met_data/ecmwf/era5_reduced_level/ml_levels/'     # Path to data at JSC
+          ERA5_MONTHLY: '/p/scratch/atmo-rep/data/era5/new_structure/'     # Path to data at JSC
           CERRA_MONTHLY: '/p/scratch/atmo-rep/data/cerra/regridded'    # 
           IMERG_MONTHLY: '/p/scratch/atmo-rep/data/imerg_regridded'    #
           IFS: ''
-          OROGRAPHY: '/p/scratch/atmo-rep/data/cerra/const/'
-          LSM: '/p/scratch/atmo-rep/data/cerra/const/'
+          OROGRAPHY: '/p/scratch/atmo-rep/data/cerra/const/cerra_const_regridded.nc'
+          LSM: '/p/scratch/atmo-rep/data/cerra/const/cerra_const_regridded.nc'
           LAKES: ''
           SEA: ''
-          CONSTANTS: ''
+          CONSTANTS: '/p/scratch/atmo-rep/data/cerra/const/'
       TFRecords:
           tfrecords_path: ''
