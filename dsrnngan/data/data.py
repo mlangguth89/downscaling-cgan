@@ -17,8 +17,7 @@ import pandas as pd
 import xarray as xr
 from argparse import ArgumentParser
 
-logger = logging.getLogger(__file__)
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(f"tfrecords_generator.{__name__}")
 
 from dsrnngan.utils import read_config
 

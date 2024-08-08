@@ -124,6 +124,10 @@ class DataGenerator(Sequence):
                 self.output_normalisation = None
 
             self.month_obs_data =ds_obs
+            self.obs_sh, self.fcst_sh = self.get_data_dims()
+        else:
+            self.month_obs_data, self.month_fcst_data = None, None
+            self.obs_sh, self.fcst_sh = None, None
                
         if self.downsample:
             # read downscaling factor from file
@@ -190,11 +194,27 @@ class DataGenerator(Sequence):
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
 
+        if self.monthly_data:
+            # shape are known a priori for monthly data only
+            assert data_x_batch.shape == (self.batch_size, *self.fcst_sh), \
+               f"Unexpected shape of forecast data: {data_x_batch.shape}, expected shape {(self.batch_size, *self.fcst_sh)}" 
+            assert data_y_batch.shape == (self.batch_size, *self.obs_sh), \
+               f"Unexpected shape of observation data: {data_x_batch.shape}, expected shape {(self.batch_size, *self.obs_sh)}"
+
         return {"lo_res_inputs": data_x_batch,
                 "hi_res_inputs": self.constants,
                 "dates": dates_batch, "hours": hours_batch},\
                 {"output": data_y_batch}
 
+    def get_data_dims(self):
+        obs_vars, fcst_vars = list(self.month_obs_data.data_vars), list(self.month_fcst_data.data_vars) 
+        var_obs, var_fcst = obs_vars[0], fcst_vars[0]
+        obs_sh, fcst_sh = list(dgs.month_obs_data[var_obs].shape[1::]), list(dgs.month_fcst_data[var_fcst].shape[1::])
+
+        # add number of predictors to dimension
+        fcst_sh = fcst_sh + [len(fcst_vars)]
+
+        return tuple(obs_sh), tuple(fcst_sh)
 
     def shuffle_data(self):
         assert len(self.hours) == len(self.dates)
