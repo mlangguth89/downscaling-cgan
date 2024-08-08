@@ -458,7 +458,7 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
-        dgs = DataGeneratorPreprocess(dates=all_times, data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
+        dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
 
         for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
 
