@@ -16,7 +16,7 @@ from .data_generator import DataGenerator as DataGeneratorPreprocess
 from dsrnngan.utils.utils import hash_dict, write_to_yaml, date_range_from_year_month_range
 from dsrnngan.utils.read_config import get_data_paths
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(os.path.basename(__file__).rstrip(".py"))
 logger.setLevel(logging.DEBUG)
 
 return_dic = True
@@ -448,7 +448,7 @@ def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
-        dgs = DataGeneratorPreprocess(dates=month_now, data_config=data_config, batch_size=1, shuffle=False)
+        dgs = DataGeneratorPreprocess(dates=all_times, data_config=data_config, batch_size=1, shuffle=False)
 
         for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
 
