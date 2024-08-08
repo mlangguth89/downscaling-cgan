@@ -410,13 +410,14 @@ def write_data(year_month_ranges: list,
         
         dates = date_range_from_year_month_range(year_month_range)
         start_date = dates[0]
-        # ML: To-Do: Adapt file_exists-method for sampling_in_files="monthly"
-        dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
-                                                            month=item.month, day=item.day,
-                                                            data_paths=data_paths)]
-        if not dates:
-            print('No dates found')
-            continue
+
+        # check file existence for daily sampling; for montly sampling, the check is done in the process_monthly_data-method
+        if sampling_in_files == "daily":
+            dates = [item for item in dates if file_exists(data_source=data_config.fcst_data_source, year=item.year,
+                                                           month=item.month, day=item.day, data_paths=data_paths)]
+            if not dates:
+                print('No dates found')
+                continue
 
         if sampling_in_files == "daily":
             process_daily_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
@@ -436,11 +437,14 @@ def write_data(year_month_ranges: list,
 
 def process_monthly_data(data_config, hours, dates, start_date, fle_hdles, debug=False):
 
+    data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
 
     for year_month in yr_m:
 
         month_now = pd.to_datetime(year_month, format='%Y%m')
+        _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
+
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
