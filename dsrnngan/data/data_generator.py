@@ -74,7 +74,6 @@ class DataGenerator(Sequence):
         self.monthly_data = monthly_data
 
         if self.monthly_data:        
-            self.normalise_inputs = False
             # Check that all dates are from the same month
             if not all_same_month(self.dates):
                 raise ValueError("All dates must be from the same month to use monthly_data=True")
@@ -115,14 +114,14 @@ class DataGenerator(Sequence):
                 raise ValueError(f"Unsupported observation data source for monthly data '{self.forecast_data_source}'")
             
             # raw observation data
-            ds_obs = loader_obs(self.fcst_fields, self.dates[0], self.latitude_range, self.longitude_range)
+            ds_obs = loader_obs(self.obs_fields, self.dates[0], self.latitude_range, self.longitude_range)
             if self.output_normalisation:
             # normalise observation data
                 norm_stats = get_norm_stats(self.obs_fields, data_config.normalisation_year, data_dir=obs_datadir, loader_monthly=loader_obs, 
                                             dataset_name=self.observational_data_source.split('_')[0], latitude_vals=self.latitude_range,
                                             longitude_vals=self.longitude_range, output_dir=self.data_paths["GENERAL"].get("CONSTANTS"))
-                ds_obs = normalise_data(ds_obs, self.fcst_fields, norm_stats, data_config.input_normalisation_strategy)
-                self.output_normalisation = False
+                ds_obs = normalise_data(ds_obs, self.fcst_fields, norm_stats, data_config.output_normalisation)
+                self.output_normalisation = None
 
             self.month_obs_data =ds_obs
                
@@ -173,8 +172,8 @@ class DataGenerator(Sequence):
         # Load and return this batch of images
         data_x_batch, data_y_batch = load_fcst_radar_batch(
             dates_batch,
-            fcst_dir=fcstdir_or_ds,
-            obs_data_dir=obsdir_or_ds,
+            fcstdir_or_ds=fcstdir_or_ds,
+            obsdir_or_ds=obsdir_or_ds,
             constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
             constant_fields=None, # These are already loaded separately
             fcst_fields=self.fcst_fields,
