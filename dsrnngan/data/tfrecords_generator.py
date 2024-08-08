@@ -460,10 +460,9 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
         
         dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
 
-        for batch, t in tqdm(enumerate(all_times), total=len(all_times), position=0, leave=True):
+        for batch, hour in tqdm(enumerate(dgs.hours), total=len(dgs.hours), position=0, leave=True):
 
-            hour = t.hour
-            logger.debug(f"Try loading data for {t.strftime('%Y%m%d %H:%M')}")
+            logger.debug(f"Load data for {dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
             
             try:
                 sample = dgs.__getitem__(batch)
