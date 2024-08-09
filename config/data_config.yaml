@@ -25,6 +25,16 @@ input_fields:
       - ml0
     sp:
       - ml0
+    tisr:
+      - ml0
+    tclw:
+      - ml0
+    tcwv:
+      - ml0
+    u:
+      - pl700
+    v:
+      - pl700        
 constant_fields:
     - orography
     - lsm
