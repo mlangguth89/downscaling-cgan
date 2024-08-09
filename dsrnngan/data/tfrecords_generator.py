@@ -343,6 +343,8 @@ def write_data(year_month_ranges: list,
                data_label: str,
                hours: list,
                data_config: dict=None,
+               model_config: dict=None,
+               make_patches: bool=False,
                debug: bool=False,
                num_shards: int=1) -> str:
     """
@@ -357,6 +359,7 @@ def write_data(year_month_ranges: list,
         hours (list): List of hours to include
         data_paths (dict, optional): Dict of paths to the data sources. Defaults to DATA_PATHS.
         longitude_range (list, optional): Longitude range to use. Defaults to None.
+        make_patches (bool, optional): Whether to make patches of data or not. Defaults to False.
         debug (bool, optional): Debug mode. Defaults to False.
         config (dict, optional): Config dict. Defaults to None. If None then will read from default config location
         num_shards (int, optional): Number of shards to split each tfrecord into (to make sure records are not too big)
@@ -366,6 +369,9 @@ def write_data(year_month_ranges: list,
     """    
     if not data_config:
         data_config = read_config.read_config(config_filename='data_config.yaml')
+
+    if not model_config:
+        model_config = read_config.read_model_config()
 
     data_paths=get_data_paths(data_config=data_config)
     records_folder = data_paths['TFRecords']["tfrecords_path"]
@@ -434,7 +440,8 @@ def write_data(year_month_ranges: list,
         if sampling_in_files == "daily":
             process_daily_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
         elif sampling_in_files == "monthly":
-            process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
+            process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, 
+                                 make_patches=make_patches, debug=debug)
         else:
             raise ValueError(f"Sampling method {sampling_in_files} not supported")
 
@@ -447,11 +454,16 @@ def write_data(year_month_ranges: list,
                             
     return hash_dir
 
-def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug=False):
+def process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, make_patches, debug=False):
 
     # data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
     yr_m = sorted(yr_m, key=lambda x: pd.to_datetime(x, format='%Y%m'))
+
+    if make_patches:
+        logger.debug(f"Data patches will be wriiten to TFRecords.")
+    else:
+        logger.debug(f"Full data will be written to TFRecords
 
     for year_month in yr_m:
 
@@ -460,66 +472,25 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
         # _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         
-        dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
+        dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, hour = hours, batch_size=1, shuffle=False, monthly_data=True)
 
         for batch, hour in tqdm(enumerate(dgs.hours), total=len(dgs.hours), position=0, leave=True):
-
-            logger.debug(f"Load data for {dgs.dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
+            t_now = pd.to_datetime(f"{dgs.dates[batch].strftime('%Y%m%d')} {hour:02d}", format='%Y%m%d %H')
+            logger.debug(f"Load data for {t_now.strftime('%Y-%m-%d %H:00')} UTC")
             
             try:
                 sample = dgs.__getitem__(batch)
-                (depth, width, height) = sample[1]['output'].shape
-            
-                for k in range(depth):
+                # sanity check
+                assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hours']}, expected: {hour})"
                 
-                    observations = sample[1]['output'][k,...].flatten()
-                    forecast = sample[0]['lo_res_inputs'][k,...].flatten()
-                    const = sample[0]['hi_res_inputs'][k,...].flatten()
+                if make_patches:
+                    write_patches(sample, data_config, model_config, dgs.fcst_sh, fle_hdles)
+                else:     
+                    write_full_data(sample, data_config, fle_hdles)    
 
-                    assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hours']}, expected: {hour})"
-
-                    # Check no Null values
-                    if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
-                        raise ValueError('Unexpected NaN values in data')
-                    
-                    # Check for empty data
-                    if forecast.sum() == 0 or const.sum() == 0:
-                        raise ValueError('one or more of arrays is all zeros')
-                    
-                    # Check hi res data has same dimensions
-                        
-                    feature = {
-                        'generator_input': _float_feature(forecast),
-                        'constants': _float_feature(const),
-                        'generator_output': _float_feature(observations)
-                    }
-
-                    features = tf.train.Features(feature=feature)
-                    example = tf.train.Example(features=features)
-                    example_to_string = example.SerializeToString()
-                    
-                    # If provided, bin data according to bin boundaries (typically quartiles)
-                    if data_config.class_bin_boundaries is not None:
-                                                
-                        threshold = 0.1
-                        if data_config.output_normalisation is not None:
-                            rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
-                        else:
-                            rainy_pixel_fraction = (observations > threshold).mean()
-
-                        # ML: Bug in old version due to missing shift
-                        clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
-                        logger.debug(f"Sample {batch} with rainy fraction {rainy_pixel_fraction} is part of class {clss} from {data_config.num_classes}")
-                        
-                    else:
-                        clss = random.choice(range(data_config.num_classes))
-                        
-                    # Choose random shard
-                    fh = random.choice(fle_hdles[hour][clss])
-
-                    fh.write(example_to_string)
             except FileNotFoundError as e:
-                logger.debug(f"Error loading for {t.strftime('%Y%m%d %H:%M')}")
+                logger.debug(f"Error loading for {t_now.strftime('%Y%m%d %H:%M')}")
+
 
 
 def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=False):
@@ -550,7 +521,6 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                 logger.debug(f"hour={hour}, batch={batch}")
                 
                 try:
-                    
                     sample = dgc.__getitem__(batch)
                     # ML: Incorrect handling of shape since data is supposed to be orderd as (depth, height, width), cf. order_coordinates-method in data.py 
                     (depth, width, height) = sample[1]['output'].shape
@@ -566,8 +536,8 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                             raise ValueError('Unexpected NaN values in data')
                         
                         # Check for empty data
-                        if forecast.sum() == 0 or const.sum() == 0:
-                            raise ValueError('one or more of arrays is all zeros')
+                        #if forecast.sum() == 0 or const.sum() == 0:
+                        #    raise ValueError('one or more of arrays is all zeros')
                         
                         # Check hi res data has same dimensions
                             
@@ -608,27 +578,145 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
         else:
             print('No dates found')
             
+def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdles):
+    # chosen to approximately cover the full image, but can be changed!
+    scaling_factor = model_config.downscaling_factor
+    img_chunk_width = model_config.train.img_chunk_width
+    assert np.all(img_chunk_width < np.array(lo_res_input_shape[:2])), \
+       f"Chunk size for input data ({model_config.train.img_chunk_width}) must be smaller than number of grid points " + \
+       f"in spatial dimensions of input data ({', '.join([str(num) for num in lo_res_input_shape[:2]])})"
+    
+    # ML: from original code
+    nsamples = np.prod(lo_res_input_shape[:2]) // (img_chunk_width**2)
+
+    (depth, height_out, width_out) = sample[1]['output'].shape
+    (depth, height_in, width_in, _) = sample[0]['lo_res_inputs'].shape
+
+    assert height_in*scaling_factor == height_out, f"Inconsistent ny for input ({height_in}) and output ({height_out}) data."
+    assert width_in*scaling_factor == width_out, f"Inconsistent ny for input ({width_in}) and output ({width_out}) data."
+
+    for k in range(depth):
+        for ii in range(nsamples):
+            # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
+            idh = random.randint(0, height_in-img_chunk_width)
+            idw = random.randint(0, width_in-img_chunk_width)
+
+            output = sample[1]['output'][k,
+                                        idh*scaling_factor:(idh+img_chunk_width)*scaling_factor,
+                                        idw*scaling_factor:(idw+img_chunk_width)*scaling_factor].flatten()
+
+            const = sample[0]['hi_res_inputs'][k,
+                                            idh*scaling_factor:(idh+img_chunk_width)*scaling_factor,
+                                            idw*scaling_factor:(idw+img_chunk_width)*scaling_factor,
+                                            :].flatten()
+            
+            forecast = sample[0]['lo_res_inputs'][k,
+                                                idh:idh+img_chunk_width,
+                                                idw:idw+img_chunk_width,
+                                                :].flatten()
+            
+            feature = {
+                'generator_input': _float_feature(forecast),
+                'constants': _float_feature(const),
+                'generator_output': _float_feature(output)
+            }
+            features = tf.train.Features(feature=feature)
+            example = tf.train.Example(features=features)
+            example_to_string = example.SerializeToString()
+
+            # If provided, bin data according to bin boundaries (typically quartiles)
+            if data_config.class_bin_boundaries is not None:               
+                threshold = 0.1
+                if data_config.output_normalisation is not None:
+                    rainy_pixel_fraction = (denormalise(output, normalisation_type=data_config.output_normalisation) > threshold).mean()
+                else:
+                    rainy_pixel_fraction = (output > threshold).mean()
+
+                # ML: Bug in old version due to missing shift
+                clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
+                
+            else:
+                clss = random.choice(range(data_config.num_classes))
+                
+            # Choose random shard
+            fh = random.choice(fle_hdles[sample[0]['hours']][clss])
+
+            fh.write(example_to_string)
+
+def write_full_data(sample, data_config, fle_hdles):
+    """
+    Write full data to tfrecords, i.e. without patching.
+    """
+    # ML: from Bobby Antonio's code
+
+    (depth, _, _) = sample[1]['output'].shape   
+    for k in range(depth):         
+        observations = sample[1]['output'][k,...].flatten()
+        forecast = sample[0]['lo_res_inputs'][k,...].flatten()
+        const = sample[0]['hi_res_inputs'][k,...].flatten()
+
+        # Check no Null values
+        if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
+            raise ValueError('Unexpected NaN values in data')
+        
+        # Check for empty data
+        if forecast.sum() == 0 or const.sum() == 0:
+            raise ValueError('one or more of arrays is all zeros')
+        
+        # Check hi res data has same dimensions
+            
+        feature = {
+            'generator_input': _float_feature(forecast),
+            'constants': _float_feature(const),
+            'generator_output': _float_feature(observations)
+        }
+
+        features = tf.train.Features(feature=feature)
+        example = tf.train.Example(features=features)
+        example_to_string = example.SerializeToString()
+        
+        # If provided, bin data according to bin boundaries (typically quartiles)
+        if data_config.class_bin_boundaries is not None:
+                                    
+            threshold = 0.1
+            if data_config.output_normalisation is not None:
+                rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
+            else:
+                rainy_pixel_fraction = (observations > threshold).mean()
+
+            # ML: Bug in old version due to missing shift
+            clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1            
+        else:
+            clss = random.choice(range(data_config.num_classes))
+            
+        # Choose random shard
+        fh = random.choice(fle_hdles[sample[0]['hours']][clss])
+
+        fh.write(example_to_string)
 
 
 def write_train_test_data(*args, training_range,
                           validation_range=None,
                           test_range=None, **kwargs):
+    """
+    ML: Added make_pathces argument to write_data to allow for writing of patches of data
+    """
     
     
     write_data(training_range, *args,
-               data_label='train', **kwargs)
+               data_label='train', make_patches = True, **kwargs)
     
     if validation_range:
         #pass # Not using this at the moment
         print('\n*** Writing validation data')
         write_data(validation_range, *args,
-                   data_label='validation', **kwargs)
+                   data_label='validation', make_patches = False, **kwargs)
         
     if test_range:
         print('\n*** Writing test data')
 
         write_data(test_range, *args,
-                   data_label='test', **kwargs)
+                   data_label='test', make_patches = False, **kwargs)
 
 
 def save_dataset(tfrecords_dataset, flename, max_batches=None):
@@ -703,5 +791,6 @@ if __name__ == '__main__':
                           validation_range=val_range,
                           test_range=eval_range,
                           data_config=data_config,
+                          model_config=model_config,
                           hours=args.fcst_hours,
                           num_shards=args.num_shards)
