@@ -1,8 +1,8 @@
 data_paths: "JSC"  # Choose which paths version to use in PATHS
 fcst_data_source: "era5_monthly"
 obs_data_source: "imerg_monthly"
-normalisation_year: 2004
-num_samples: 320000
+normalisation_year: 2012
+num_samples: 420000      # corresponds to three epochs for the 17 years of training data (2003 - 2021 excl. two years for val and test dataset) 
 normalise_inputs: True
 output_normalisation: "log"
 num_classes: 4 # Number of bins to split data into
