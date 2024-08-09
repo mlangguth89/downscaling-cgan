@@ -642,7 +642,8 @@ def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdl
                 logger.debug(f"Sample {ii} is randomly categorized into bin {clss}")
                 
             # Choose random shard
-            fh = random.choice(fle_hdles[sample[0]['hours']][clss])
+            hour = int(sample[0]['hours'])
+            fh = random.choice(fle_hdles[hour][clss])
 
             fh.write(example_to_string)
 
@@ -693,7 +694,8 @@ def write_full_data(sample, data_config, fle_hdles):
             clss = random.choice(range(data_config.num_classes))
             
         # Choose random shard
-        fh = random.choice(fle_hdles[sample[0]['hours']][clss])
+        hour = int(sample[0]['hours'])
+        fh = random.choice(fle_hdles[hour][clss])
 
         fh.write(example_to_string)
 
