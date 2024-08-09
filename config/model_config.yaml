@@ -21,10 +21,10 @@ discriminator:
     learning_rate_disc: 1e-5
 
 train:
-    training_range: ['201603', '201802'] # Start and end of training period, in YYYYMM format
+    training_range: ['200301', '201912'] # Start and end of training period, in YYYYMM format
     training_weights: [0.25, 0.25, 0.25, 0.25]
     num_epochs: 5
-    steps_per_checkpoint: 3200
+    steps_per_checkpoint: 4200
     batch_size: 2  # can use 400x16 without CL, or 3200x2 with CL
     kl_weight: 1e-8  # used for VAEGAN
     ensemble_size: 8  # size of pred ensemble for content loss
@@ -33,6 +33,8 @@ train:
     img_chunk_width: 40
 
 val:
-    val_range: ['201806', '201905'] # cannot pass a list if using create_fixed_dataset
+    val_range: ['202001', '202012'] # cannot pass a list if using create_fixed_dataset
     val_size: 100
     ensemble_size: 20
+
+
