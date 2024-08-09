@@ -422,7 +422,8 @@ def write_data(year_month_ranges: list,
             fle_hdles[hour][cl] = []
             for shard in range(num_shards):
                 flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
-                fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename))
+                options = tf.io.TFRecordOptions(compression_type="GZIP")
+                fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
     
     for year_month_range in year_month_ranges:  
         
