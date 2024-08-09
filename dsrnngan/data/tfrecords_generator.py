@@ -450,17 +450,19 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
 
     # data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
+    yr_m = sorted(yr_m, key=lambda x: pd.to_datetime(x, format='%Y%m'))
 
     for year_month in yr_m:
 
         month_now = pd.to_datetime(year_month, format='%Y%m')
+        logger.info(f"****** Start processing data from {month_now.strftime('%Y-%m')} ******")
         # _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
         all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
         dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
 
-        for batch, hour in tqdm(enumerate(dgs.hours), total=len(dgs.hours), position=0, leave=True):
+        for batch, hour in tqdm(enumerate(dgs.hours[:10]), total=len(dgs.hours[:10]), position=0, leave=True):
 
             logger.debug(f"Load data for {dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
             
@@ -505,8 +507,9 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
                         else:
                             rainy_pixel_fraction = (observations > threshold).mean()
 
-                        clss = np.digitize(rainy_pixel_fraction, right=False)
-                        logger.info(f"Sample {batch} is part of class {clss}")
+                        # ML: Bug in old version due to missing shift
+                        clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
+                        logger.debug(f"Sample {batch} with rainy fraction {rainy_pixel_fraction} is part of class {clss} from {data_config.num_classes}")
                         
                     else:
                         clss = random.choice(range(data_config.num_classes))
@@ -590,7 +593,8 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                             else:
                                 rainy_pixel_fraction = (observations > threshold).mean()
 
-                            clss = np.digitize(rainy_pixel_fraction, right=False)
+                            # ML: Bug in old version due to missing shift
+                            clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
                             
                         else:
                             clss = random.choice(range(data_config.num_classes))
