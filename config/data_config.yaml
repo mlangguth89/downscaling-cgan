@@ -6,6 +6,10 @@ num_samples: 320000
 normalise_inputs: True
 output_normalisation: "log"
 num_classes: 4 # Number of bins to split data into
+class_bin_boundaries: 
+   - 0.25
+   - 0.5
+   - 0.75
 min_latitude: 24.916
 max_latitude: 73.833
 latitude_step_size: 0.25
