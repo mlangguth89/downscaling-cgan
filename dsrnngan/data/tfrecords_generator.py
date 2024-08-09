@@ -347,6 +347,7 @@ def write_data(year_month_ranges: list,
                num_shards: int=1) -> str:
     """
     Function to write training data to TF records
+    ML: Changes to handle data from monthly files.
 
     Args:
         year_month_range (list): List of date strings in YYYYMM format, or a list of lists of date strings for non contiguous date ranges. The code will take all dates between the maximum and minimum year months (inclusive)
@@ -458,11 +459,10 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
         logger.info(f"****** Start processing data from {month_now.strftime('%Y-%m')} ******")
         # _ = check_monthly_files(year_month, data_config, data_paths=data_paths)
         all_days_month = pd.date_range(month_now, utils.last_day_of_month(month_now))
-        all_times = [day.replace(hour=hour) for day in all_days_month for hour in hours]
         
         dgs = DataGeneratorPreprocess(dates=list(all_days_month), data_config=data_config, batch_size=1, shuffle=False, monthly_data=True)
 
-        for batch, hour in tqdm(enumerate(dgs.hours[:10]), total=len(dgs.hours[:10]), position=0, leave=True):
+        for batch, hour in tqdm(enumerate(dgs.hours), total=len(dgs.hours), position=0, leave=True):
 
             logger.debug(f"Load data for {dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
             
@@ -522,10 +522,6 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
                 logger.debug(f"Error loading for {t.strftime('%Y%m%d %H:%M')}")
 
 
-
-
-
-
 def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=False):
         # loop over hours 
         for hour in hours:          
@@ -556,6 +552,7 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                 try:
                     
                     sample = dgc.__getitem__(batch)
+                    # ML: Incorrect handling of shape since data is supposed to be orderd as (depth, height, width), cf. order_coordinates-method in data.py 
                     (depth, width, height) = sample[1]['output'].shape
                 
                     for k in range(depth):

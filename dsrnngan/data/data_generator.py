@@ -15,6 +15,10 @@ from dsrnngan.utils.utils import all_same_month
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
+    """"
+    Data generator class for full-image evaluation of precipitation downscaling network
+    ML: Changes to enable processing of monthly data, cf. monthly_data-flag
+    """
     def __init__(self, dates: list, batch_size: int, data_config: SimpleNamespace,
                  shuffle: bool=True, hour: Union[int, str, list, np.ndarray]='random',
                  downsample: bool=False, repeat_data: bool=False, seed: int=None, 
