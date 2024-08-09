@@ -464,7 +464,7 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
 
         for batch, hour in tqdm(enumerate(dgs.hours), total=len(dgs.hours), position=0, leave=True):
 
-            logger.debug(f"Load data for {dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
+            logger.debug(f"Load data for {dgs.dates[batch].strftime('%Y-%m-%d')} {hour:02d}:00 UTC")
             
             try:
                 sample = dgs.__getitem__(batch)
@@ -476,7 +476,7 @@ def process_monthly_data(data_config, dates, hours, start_date, fle_hdles, debug
                     forecast = sample[0]['lo_res_inputs'][k,...].flatten()
                     const = sample[0]['hi_res_inputs'][k,...].flatten()
 
-                    assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hour']}, expected: {hour})"
+                    assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hours']}, expected: {hour})"
 
                     # Check no Null values
                     if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
