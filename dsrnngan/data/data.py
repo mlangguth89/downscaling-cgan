@@ -41,7 +41,7 @@ ERA5_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("ERA5_MONTHLY", '')
 IMERG_MONTHLY_PATH = DATA_PATHS["GENERAL"].get("IMERG_MONTHLY", '')
 NORMALISATION_STRATEGY = data_config.input_normalisation_strategy
 
-### For processing data on JSC cluster ###
+### ML: For processing data on JSC cluster ###
 
 FIELD_TO_HEADER_LOOKUP_IFS = {'tp': 'sfc',
                               'cp': 'sfc',
@@ -183,20 +183,30 @@ def order_coordinates(ds: xr.Dataset):
     else:
         return ds.transpose(lat_var_name, lon_var_name)
 
-def make_dataset_consistent(ds: xr.Dataset):
+def make_dataset_consistent(ds: Union[xr.Dataset, xr.DataArray], transpose: bool = False):
     """
-    Ensure longitude and latitude are ordered in ascending order
+    ML: Modified, but backwards compatible with original function as transposing is disabled by default
+    Ensure latitude and longitude are ordered in ascending order
+    and that they are stacked along the last two dimensions (first latitude, then longitude). 
+    If the Dataset/DataArray has a variable-dimension, this will be the last dimension.
 
     Args:
-        ds (xr.Dataset): dataset
+        ds (xr.Dataset, xr.DataArray): dataset or data array
+        transpose (bool, optional): Whether or not to transpose. Defaults to False.
 
     Returns:
-        xr.Dataset: Dataset with data reordered
+        xr.Dataset, xr.DataArray: Dataset/DataArray with data reordered
     """
     
     latitude_var, longitude_var = infer_lat_lon_names(ds)
     ds = ds.sortby(latitude_var, ascending=True)
     ds = ds.sortby(longitude_var, ascending=True)
+
+    if transpose:
+        if "variable" in ds.dims:
+            ds = ds.transpose(..., latitude_var, longitude_var, "variable")
+        else:
+            ds = ds.transpose(..., latitude_var, longitude_var)
     
     return ds
 
@@ -309,6 +319,7 @@ def file_exists(data_source: str, year: int,
 
 def check_monthly_files(year_month: datetime, data_config: Dict, data_paths = DATA_PATHS):
     """
+    ML: Does not work properly yet -> don't use
     Check if monthly files exist for both forecast and observational data sources.
     :param year_month: year and month for which to check
     :param data_config: data configuration
@@ -501,6 +512,7 @@ def preprocess(variable: str,
 def load_observational_data(data_source: str, *args, **kwargs):
     """
     Function to pick between various different sources of observational data
+    ML: Changed to load data from monthly IMERG files
 
     Args:
         data_source (str): anme of data source
@@ -523,13 +535,13 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
                    interpolate: bool=False):
     """
     Load orography values
+    ML: Changed default to not interpolate; ensure consistent order of dimensions
 
     Args:
         filepath (str, optional): path to orography data. Defaults to OROGRAPHY_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
-        varname_oro (str, optional): name of orography variable. Defaults to "orog".
-        interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
+        interpolate (bool, optional): Whether or not to interpolate. Defaults to False.
 
     Returns:
         np.ndarray: orography data array
@@ -548,16 +560,18 @@ def load_orography(filepath: str=OROGRAPHY_PATH,
         else:
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
 
-    ds = make_dataset_consistent(ds)
+    #ds = make_dataset_consistent(ds)
 
     # Normalise and clip below to remove spectral artefacts
-    h_vals = ds[varname_oro].values[0, :, :]
-    h_vals[h_vals < 5] = 5.0
+    h_vals = ds[varname_oro][0, :, :]
+    h_vals = xr.where(h_vals < 5, 5., h_vals)
     h_vals = h_vals / max_val
+    
+    h_vals = make_dataset_consistent(h_vals, transpose=True)
 
     ds.close()
 
-    return h_vals
+    return h_vals.values
 
 def load_land_sea_mask(filepath=LSM_PATH, 
                        latitude_vals=None, 
@@ -565,14 +579,14 @@ def load_land_sea_mask(filepath=LSM_PATH,
                        varname_lsm:str = "lsm",
                        interpolate=False):
     """
-    Load land-sea mask values
+    Load land-sea mask values.
+    ML: Changed default to not interpolate; ensure consistent order of dimensions
 
     Args:
         filepath (str, optional): path to land-sea masj data. Defaults to LSM_PATH.
         latitude_vals (list, optional): list of latitude values to filter/interpolate to. Defaults to None.
         longitude_vals (list, optional): list of longitude values to filter/interpolate to. Defaults to None.
-        varname_lsm (str, optional): name of land-sea mask variable. Defaults to "lsm".
-        interpolate (bool, optional): Whether or not to interpolate. Defaults to True.
+        interpolate (bool, optional): Whether or not to interpolate. Defaults to False.
 
     Returns:
         np.ndarray: land-sea mask data array
@@ -586,14 +600,13 @@ def load_land_sea_mask(filepath=LSM_PATH,
                                                 interp_method='bilinear')
         else:
             ds = filter_by_lat_lon(ds, lon_range=longitude_vals, lat_range=latitude_vals)
-            
-    ds = make_dataset_consistent(ds)
     
-    lsm = ds[varname_lsm].values[0, :, :]
+    lsm = ds[varname_lsm][0, :, :]
+    lsm = make_dataset_consistent(lsm, transpose=True)  
     
     ds.close()
     
-    return lsm
+    return lsm.values
 
 
 def load_hires_constants(
@@ -629,6 +642,7 @@ def load_hires_constants(
         raise ValueError(f'Unrecognised constant field names: {unrecognised_fields}')
     
     constant_data = []
+    logger.info(f"Load the following constant variables: {', '.join(list(fields))}")
     for field in fields:
         tmp_array = function_lookup[field.lower()](filepath=data_paths[field.upper()],
                                                             latitude_vals=latitude_vals,
@@ -657,6 +671,10 @@ def load_fcst_radar_batch(batch_dates: Iterable,
                           hour: Union[str, int] = 0, 
                           normalise_inputs: bool=False,
                           output_normalisation: bool=False):
+    """
+    Load batch of forecast and observational data.
+    ML: Modified to allow parsing/handling of cached monthly data, i.e. fcsdir_or_ds and obsdir_or_ds are Datasets then.
+    """
     batch_x = []
     batch_y = []
 
@@ -900,6 +918,7 @@ def load_fcst_stack(data_source: str, fields: list,
                     latitude_vals:list=None, longitude_vals:list=None):
     """
     Load forecast 'stack' of all variables
+    ML: Modified to enable loading from monthly datasets
 
     Args:
         data_source (str): source of data (e.g. ifs)
@@ -1003,7 +1022,7 @@ def get_ifs_stats(field: str, latitude_vals: list, longitude_vals: list, output_
 
     return stats
 
-### Functions that work with ERA5, CERRA and IMERG data at JSC (from the AtmoRep-project)
+### ML: Functions that work with ERA5, CERRA and IMERG data at JSC (from the AtmoRep-project)
 
 def get_era5_monthly_path(variable, lvl, year_month, era5_basedir=ERA5_MONTHLY_PATH, var_name_lookup=VAR_LOOKUP_ERA5_JSC):
     """"
@@ -1024,30 +1043,9 @@ def get_era5_monthly_path(variable, lvl, year_month, era5_basedir=ERA5_MONTHLY_P
         fname = fname.replace(".nc", ".grib")
         if not os.path.exists(fname):
             raise FileNotFoundError(f"Could not find the following data file: {fname.replace('.grib', '')}[.nc, .grib]")
+
     return fname
 
-def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
-    """
-    Get path to monthly CERRA-data grib-files as organized in JSC's file system.
-    :param year_month: datetime, year and month of data
-    :param cerra_basedir: str, base directory of CERRA data
-    :return: str, path to grib-file
-    """
-    ym_str = year_month.strftime("y%Y_m%m")
-
-    return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
-
-def get_imerg_monthly_path(year_month, imerg_basedir=IMERG_MONTHLY_PATH):
-    """
-    Get path to monthly IMERG-data grib-files as organized in JSC's file system.
-    :param year_month: datetime, year and month of data
-    :param imerg_basedir: str, base directory of IMERG data
-    :return: str, path to grib-file
-    """
-    ym_str = year_month.strftime("y%Y_m%m")
-
-    return os.path.join(imerg_basedir, f"3B-HHR.MS.MRG.3IMERG.{ym_str}.nc")
-    
 def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, era5_datadir=ERA5_MONTHLY_PATH):
     """
     Load data from monthly ERA5 files. Note that the data for all variables and levels are stored in separate files (unlike the CERRA data files)
@@ -1065,82 +1063,27 @@ def load_era5_monthly(variables: dict, year_month, latitude_vals=None, longitude
         for vl in vls:
             fname = get_era5_monthly_path(var, vl, year_month, era5_datadir)
             logger.info(f"Read file {fname}...")
-
             if fname.endswith(".grib"):
                 engine = "cfgrib"
                 backend_kwargs = backend_kwargs={"indexpath": ""}
             else:
                 engine, backend_kwargs = None, None
                 
-            with xr.load_dataset(fname, engine=engine, backend_kwargs=backend_kwargs) as ds_era5:
-                ds_era5 = make_dataset_consistent(ds_era5)
+            with xr.open_dataset(fname, engine=engine, backend_kwargs=backend_kwargs) as ds_era5:
+                ds_era5 = make_dataset_consistent(ds_era5, transpose=False)      # no transpose to avoid loading all data from file here
         
                 if latitude_vals is not None and longitude_vals is not None:
                     ds_era5 = filter_by_lat_lon(ds_era5, lon_range=longitude_vals, lat_range=latitude_vals)
                 
-                da_dict[var] = ds_era5[var].squeeze().load()#.drop_vars("hybrid")
+                da_now = ds_era5[var].squeeze().load()
+                da_dict[var] = make_dataset_consistent(da_now, transpose=True)
+                
                 if var in ["cp", "tp"]:
-                    logger.debug(f"Scale {var}...")
                     da_dict[var] = xr.where(da_dict[var] < 1.e-05, 0., da_dict[var] * 1000.)                    
             
     ds_new = xr.Dataset(da_dict)
     
     return ds_new
-
-def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, cerra_datadir=CERRA_MONTHLY_PATH):
-    """
-    Load data from monthly CERRA files. Note that all variables are available in a single monthly file (unlike the ERA5 data files)
-    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
-    :param year_month: datetime, year and month of data
-    :param latitude_vals: list, latitude values to filter 
-    :param longitude_vals: list, longitude values to filter
-    :param cerra_datadir: str, path to CERRA data
-    :return: xr.Dataset, dataset containing the requested variables where model level data is stored in separate variables, example: "t_ml106", "t_ml101"
-    """
-
-    fname = get_cerra_monthly_path(year_month, cerra_datadir)
-
-    # open data-file
-    ds_cerra = xr.load_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
-
-    # filter spatially (if wanted)
-    if latitude_vals is not None and longitude_vals is not None:
-        ds_cerra = filter_by_lat_lon(ds_cerra, lon_range=longitude_vals, lat_range=latitude_vals)
-        
-
-    # retrieve variables of interest while handling level-dimension 
-    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
-    da_dict = {}
-    for var, mls in variables.items():
-        for ml in mls:
-            da_dict[f"{var}_ml{ml}"] = ds[var].sel({"hybrid": ml}).squeeze().drop_vars("hybrid")
-
-    ds_new = xr.Dataset(da_dict)
-    ds_cerra.close()
-
-    return ds_new
-
-def load_imerg_monthly(variables: List[str], year_month, latitude_vals=None, longitude_vals=None, imerg_datadir=IMERG_MONTHLY_PATH):
-    """
-    Load data from monthly IMERG files. Note that these files only provide precipitation data.
-    :param year_month: datetime, year and month of data
-    :param latitude_vals: list, latitude values to filter
-    :param longitude_vals: list, longitude values to filter
-    :param imerg_datadir: str, path to IMERG data
-    :return: xr.Dataset, dataset containing the requested IMERG data
-    """
-    fname = get_imerg_monthly_path(year_month, imerg_datadir)
-    logger.info(f"Read file {fname}...")
-
-    ds_imerg = xr.load_dataset(fname)
-    da_imerg = ds_imerg[variables]
-
-    if latitude_vals is not None and longitude_vals is not None:
-        da_imerg = filter_by_lat_lon(da_imerg, lon_range=longitude_vals, lat_range=latitude_vals)
-
-    ds_imerg.close()
-    return da_imerg
-
 
 def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=False, norm=False,
                       normalisation_strategy: Dict = None,
@@ -1164,8 +1107,6 @@ def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=Fals
     date_now = date.replace(hour=hour)
     ds_now = ds_era5.sel({"time": date_now})
     logger.info(f"Set ERA5 sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
-    
-    lat_name, lon_name = infer_lat_lon_names(ds_now)
 
     if norm:
         logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
@@ -1179,11 +1120,55 @@ def load_era5_from_ds(variables: List[str], date, hour, ds_era5, log_precip=Fals
     # convert xr.Dataset to xr.DataArray
     da_now = ds_now.to_array().squeeze() 
 
-    da_now = da_now.transpose(lat_name, lon_name, "variable")
+    # ensure that variables are stacked along the last dimension
+    da_now = make_dataset_consistent(da_now, transpose=True)
 
     # return as numpy array
     return da_now.values
 
+def get_cerra_monthly_path(year_month, cerra_basedir=CERRA_MONTHLY_PATH):
+    """
+    Get path to monthly CERRA-data grib-files as organized in JSC's file system.
+    :param year_month: datetime, year and month of data
+    :param cerra_basedir: str, base directory of CERRA data
+    :return: str, path to grib-file
+    """
+    ym_str = year_month.strftime("y%Y_m%m")
+
+    return os.path.join(cerra_basedir, f"cerra_{ym_str}.grib")
+
+def load_cerra_monthly(variables: dict, year_month, latitude_vals=None, longitude_vals=None, cerra_datadir=CERRA_MONTHLY_PATH):
+    """
+    Load data from monthly CERRA files. Note that all variables are available in a single monthly file (unlike the ERA5 data files)
+    :param variables: dict, variables to load with corresponding model levels, example: {"t": [106, 101]}
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter 
+    :param longitude_vals: list, longitude values to filter
+    :param cerra_datadir: str, path to CERRA data
+    :return: xr.Dataset, dataset containing the requested variables where model level data is stored in separate variables, example: "t_ml106", "t_ml101"
+    """
+
+    fname = get_cerra_monthly_path(year_month, cerra_datadir)
+
+    # open data-file
+    ds_cerra = xr.load_dataset(fname, engine="cfgrib", backend_kwargs={"indexpath": ""})
+    ds_cerra = make_dataset_consistent(ds_cerra, transpose=False)      # no transpose to avoid loading all data from file here
+
+    # filter spatially (if wanted)
+    if latitude_vals is not None and longitude_vals is not None:
+        ds_cerra = filter_by_lat_lon(ds_cerra, lon_range=longitude_vals, lat_range=latitude_vals)
+
+    # retrieve variables of interest while handling level-dimension 
+    # (e.g. {"t": [106, 101]} results into variables named "t_ml106" and "t_ml101", respectively)
+    da_dict = {}
+    for var, mls in variables.items():
+        for ml in mls:
+            da_dict[f"{var}_ml{ml}"] = ds[var].sel({"hybrid": ml}).squeeze().drop_vars("hybrid")
+
+    ds_new = xr.Dataset(da_dict)
+    ds_cerra.close()
+
+    return ds_new
 
 def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra: xr.Dataset, 
                        log_precip: bool=False, norm: bool=False, latitude_vals=None, longitude_vals=None,
@@ -1206,8 +1191,6 @@ def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra
     date_now = date.replace(hour=hour)
     ds_now = ds_cerra.sel({"time": date_now})
     logger.info(f"Set CERRA sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
-    
-    lat_name, lon_name = infer_lat_lon_names(ds_now)
 
     if norm:
         logger.debug("Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
@@ -1221,28 +1204,68 @@ def load_cerra_from_ds(variables: List[str], date: datetime, hour: int, ds_cerra
     # convert xr.Dataset to xr.DataArray
     da_now = ds_now.to_array().squeeze() 
 
-    da_now = da_now.transpose(lat_name, lon_name, "variable")
+    da_now = make_dataset_consistent(da_now, transpose=True)
 
     # return as numpy array
     return da_now.values
+
+def get_imerg_monthly_path(year_month, imerg_basedir=IMERG_MONTHLY_PATH):
+    """
+    Get path to monthly IMERG-data grib-files as organized in JSC's file system.
+    :param year_month: datetime, year and month of data
+    :param imerg_basedir: str, base directory of IMERG data
+    :return: str, path to grib-file
+    """
+    ym_str = year_month.strftime("y%Y_m%m")
+
+    return os.path.join(imerg_basedir, f"3B-HHR.MS.MRG.3IMERG.{ym_str}.nc")
+
+def load_imerg_monthly(variables: List[str], year_month, latitude_vals=None, longitude_vals=None, imerg_datadir=IMERG_MONTHLY_PATH):
+    """
+    Load data from monthly IMERG files. Note that these files only provide precipitation data.
+    :param year_month: datetime, year and month of data
+    :param latitude_vals: list, latitude values to filter
+    :param longitude_vals: list, longitude values to filter
+    :param imerg_datadir: str, path to IMERG data
+    :return: xr.Dataset, dataset containing the requested IMERG data
+    """
+    fname = get_imerg_monthly_path(year_month, imerg_datadir)
+    
+    logger.info(f"Read file {fname}...")
+    ds_imerg = xr.open_dataset(fname)
+    da_imerg = ds_imerg[variables]
+    
+    da_imerg = make_dataset_consistent(da_imerg, transpose=False)     # no transpose to avoid loading all data from file here
+
+    if latitude_vals is not None and longitude_vals is not None:
+        da_imerg = filter_by_lat_lon(da_imerg, lon_range=longitude_vals, lat_range=latitude_vals)
+
+    da_imerg = make_dataset_consistent(da_imerg.load())
+    # close dataset to avoid data leaks
+    ds_imerg.close()
+
+    return da_imerg
+
 
 def load_imerg_from_ds(date: datetime, hour: int, ds_imerg: xr.Dataset, latitude_vals: list=None, longitude_vals: list=None, 
                        normalisation_type: str=None, constants_path=CONSTANTS_PATH):
     """
     Function to fetch a sample from a xr.Dataset providing monthly IMERG data,
     designed to match the structure of the load_observational_data function, so they can be interchanged.
-    :param date: datetime, date of data
+    :param date: datetime, date of data (format: YYYYMMDD)
     :param hour: int, hour of data
     :param ds_imerg: xr.Dataset, dataset containing IMERG data
     :param latitude_vals: list, latitude values to filter
     :param longitude_vals: list, longitude values to filter
-    :param normalisation_type: str, type of normalisation
+    :param normalisation_type: str, type of normalisation to apply
     :param constants_path: str, path to constants
+    :return: np.ndarray, array of sample data
     """
     date_now = date.replace(hour=hour)
     varname = 'precipitation'
     da_now = ds_imerg[varname].sel({"time": date_now})
     logger.info(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
+    print(f"Set IMERG sample data for {date_now.strftime('%Y-%m-%d %H:00')} UTC...")
 
     if normalisation_type is not None:
         logger.debug(f"Normalise data for sample {date_now.strftime('%Y-%m-%d %H:00')} UTC." + 
@@ -1254,7 +1277,7 @@ def load_imerg_from_ds(date: datetime, hour: int, ds_imerg: xr.Dataset, latitude
         da_now = normalise_data(da_now, [varname], norm_stats, normalisation_type)
 
     # return as numpy array
-    return da_now.values  
+    return da_now.values
 
 
 def get_norm_stats(variables: List[str], norm_year: datetime, data_dir: Union[Path, str], loader_monthly, dataset_name: str,
