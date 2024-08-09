@@ -463,7 +463,7 @@ def process_monthly_data(data_config, model_config, dates, hours, start_date, fl
     if make_patches:
         logger.debug(f"Data patches will be wriiten to TFRecords.")
     else:
-        logger.debug(f"Full data will be written to TFRecords
+        logger.debug(f"Full data will be written to TFRecords.")
 
     for year_month in yr_m:
 
@@ -635,8 +635,10 @@ def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdl
                 # ML: Bug in old version due to missing shift
                 clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
                 
+                logger.debug(f"Sample {ii} with rainy fraction {rainy_pixel_fraction:.3f} is categorized into bin {clss}")
             else:
                 clss = random.choice(range(data_config.num_classes))
+                logger.debug(f"Sample {ii} is randomly categorized into bin {clss}")
                 
             # Choose random shard
             fh = random.choice(fle_hdles[sample[0]['hours']][clss])
