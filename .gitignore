@@ -16,6 +16,7 @@ test-logs/
 system_tests/data/constants/
 system_tests/data/tfrecords/
 system_tests/data/tmp_model_test/
+virtual_envs/
 */tmp
 */*/tmp
 *.o

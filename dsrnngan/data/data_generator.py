@@ -7,15 +7,22 @@ from types import SimpleNamespace
 from typing import Union, Iterable
 from tensorflow.keras.utils import Sequence
 
-from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, DATA_PATHS, all_ifs_fields, all_era5_fields, input_fields
+from dsrnngan.data.data import load_fcst_radar_batch, load_hires_constants, all_fcst_hours, all_ifs_fields, all_era5_fields 
+from dsrnngan.data.data import load_era5_monthly, load_cerra_monthly, load_imerg_monthly, get_norm_stats, normalise_data 
 from dsrnngan.utils.read_config import read_model_config, get_data_paths, get_lat_lon_range_from_config
+from dsrnngan.utils.utils import all_same_month 
 
 fields_lookup = {'ifs': all_ifs_fields, 'era5': all_era5_fields}
 
 class DataGenerator(Sequence):
+    """"
+    Data generator class for full-image evaluation of precipitation downscaling network
+    ML: Changes to enable processing of monthly data, cf. monthly_data-flag
+    """
     def __init__(self, dates: list, batch_size: int, data_config: SimpleNamespace,
                  shuffle: bool=True, hour: Union[int, str, list, np.ndarray]='random',
-                 downsample: bool=False, repeat_data: bool=False, seed: int=None):
+                 downsample: bool=False, repeat_data: bool=False, seed: int=None, 
+                 monthly_data: bool=False):
         
         if seed is not None:
             random.seed(seed)
@@ -58,6 +65,7 @@ class DataGenerator(Sequence):
         self.repeat_data = repeat_data
 
         self.fcst_fields = data_config.input_fields
+        self.obs_fields = data_config.target_fields 
         self.constant_fields = data_config.constant_fields
         self.shuffle = shuffle
         self.hour = hour
@@ -67,6 +75,63 @@ class DataGenerator(Sequence):
 
         self.downsample = downsample
         self.latitude_range, self.longitude_range = get_lat_lon_range_from_config(data_config)
+        self.monthly_data = monthly_data
+
+        if self.monthly_data:        
+            # Check that all dates are from the same month
+            if not all_same_month(self.dates):
+                raise ValueError("All dates must be from the same month to use monthly_data=True")
+
+            # load monthly forecast data
+            if self.forecast_data_source == 'era5_monthly':
+                loader_fcst = load_era5_monthly
+                fcst_datadir = self.data_paths['GENERAL']['ERA5_MONTHLY']
+            elif self.forecast_data_source == 'cerra_monthly':
+                loader_fcst = load_cerra_monthly
+                fcst_datadir = self.data_paths['GENERAL']['CEERA_MONTHLY']
+            else:
+                raise ValueError(f"Unsupported forecast data source for monthly data '{self.forecast_data_source}'")
+
+            # raw forecast data    
+            ds_fsct = loader_fcst(self.fcst_fields, self.dates[0], self.latitude_range, self.longitude_range)
+            # normalise forecast data
+            if self.normalise_inputs:
+                norm_stats = get_norm_stats(self.fcst_fields, data_config.normalisation_year, data_dir=fcst_datadir, loader_monthly=loader_fcst, 
+                                            dataset_name=self.forecast_data_source.split('_')[0], latitude_vals=self.latitude_range,
+                                            longitude_vals=self.longitude_range, output_dir=self.data_paths["GENERAL"].get("CONSTANTS"))
+                ds_fsct = normalise_data(ds_fsct, self.fcst_fields, norm_stats, data_config.input_normalisation_strategy)
+                self.normalise_inputs = False
+        
+            self.month_fcst_data = ds_fsct
+
+            # load monthly obs data
+            if self.observational_data_source == 'era5_monthly':
+                loader_obs = load_era5_monthly
+                obs_datadir = self.data_paths['GENERAL']['ERA5_MONTHLY']
+            elif self.observational_data_source == 'cerra_monthly':
+                loader_obs = load_cerra_monthly
+                obs_datadir = self.data_paths['GENERAL']['CEERA_MONTHLY']
+            elif self.observational_data_source == "imerg_monthly":
+                loader_obs = load_imerg_monthly
+                obs_datadir = self.data_paths['GENERAL']['IMERG_MONTHLY']
+            else:
+                raise ValueError(f"Unsupported observation data source for monthly data '{self.forecast_data_source}'")
+            
+            # raw observation data
+            ds_obs = loader_obs(self.obs_fields, self.dates[0], self.latitude_range, self.longitude_range)
+            if self.output_normalisation:
+            # normalise observation data
+                norm_stats = get_norm_stats(self.obs_fields, data_config.normalisation_year, data_dir=obs_datadir, loader_monthly=loader_obs, 
+                                            dataset_name=self.observational_data_source.split('_')[0], latitude_vals=self.latitude_range,
+                                            longitude_vals=self.longitude_range, output_dir=self.data_paths["GENERAL"].get("CONSTANTS"))
+                ds_obs = normalise_data(ds_obs, self.fcst_fields, norm_stats, data_config.output_normalisation)
+                self.output_normalisation = None
+
+            self.month_obs_data =ds_obs
+            self.obs_sh, self.fcst_sh = self.get_data_dims()
+        else:
+            self.month_obs_data, self.month_fcst_data = None, None
+            self.obs_sh, self.fcst_sh = None, None
                
         if self.downsample:
             # read downscaling factor from file
@@ -81,9 +146,13 @@ class DataGenerator(Sequence):
                                                   data_paths=self.data_paths['GENERAL'],
                                                   batch_size=self.batch_size,
                                                   latitude_vals=self.latitude_range, longitude_vals=self.longitude_range)
+            
     def __len__(self):
         # Number of batches in dataset
-        return len(self.dates) // self.batch_size
+        if self.monthly_data:
+            return len(self.month_fcst_data["time"]) // self.batch_size
+        else:
+            return len(self.dates) // self.batch_size
 
     def _dataset_downsampler(self, radar):
         kernel_tf = tf.constant(1.0/(self.ds_factor*self.ds_factor), shape=(self.ds_factor, self.ds_factor, 1, 1), dtype=tf.float32)
@@ -100,12 +169,19 @@ class DataGenerator(Sequence):
         # Get batch at index idx
         dates_batch = self.dates[idx*self.batch_size:(idx+1)*self.batch_size]
         hours_batch = self.hours[idx*self.batch_size:(idx+1)*self.batch_size]
+
+        if self.monthly_data:
+            fcstdir_or_ds = self.month_fcst_data
+            obsdir_or_ds = self.month_obs_data
+        else:
+            fcstdir_or_ds = self.data_paths['GENERAL'][self.forecast_data_source.upper()]
+            obsdir_or_ds = self.data_paths['GENERAL'][self.observational_data_source.upper()]
         
         # Load and return this batch of images
         data_x_batch, data_y_batch = load_fcst_radar_batch(
             dates_batch,
-            fcst_dir=self.data_paths['GENERAL'][self.forecast_data_source.upper()],
-            obs_data_dir=self.data_paths['GENERAL'][self.observational_data_source.upper()],
+            fcstdir_or_ds=fcstdir_or_ds,
+            obsdir_or_ds=obsdir_or_ds,
             constants_dir=self.data_paths['GENERAL']['CONSTANTS'],
             constant_fields=None, # These are already loaded separately
             fcst_fields=self.fcst_fields,
@@ -122,11 +198,27 @@ class DataGenerator(Sequence):
             # replace forecast data by coarsened radar data!
             data_x_batch = self._dataset_downsampler(data_y_batch[..., np.newaxis])
 
+        if self.monthly_data:
+            # shape are known a priori for monthly data only
+            assert data_x_batch.shape == (self.batch_size, *self.fcst_sh), \
+               f"Unexpected shape of forecast data: {data_x_batch.shape}, expected shape {(self.batch_size, *self.fcst_sh)}" 
+            assert data_y_batch.shape == (self.batch_size, *self.obs_sh), \
+               f"Unexpected shape of observation data: {data_x_batch.shape}, expected shape {(self.batch_size, *self.obs_sh)}"
+
         return {"lo_res_inputs": data_x_batch,
                 "hi_res_inputs": self.constants,
                 "dates": dates_batch, "hours": hours_batch},\
                 {"output": data_y_batch}
 
+    def get_data_dims(self):
+        obs_vars, fcst_vars = list(self.month_obs_data.data_vars), list(self.month_fcst_data.data_vars) 
+        var_obs, var_fcst = obs_vars[0], fcst_vars[0]
+        obs_sh, fcst_sh = list(self.month_obs_data[var_obs].shape[1::]), list(self.month_fcst_data[var_fcst].shape[1::])
+
+        # add number of predictors to dimension
+        fcst_sh = fcst_sh + [len(fcst_vars)]
+
+        return tuple(obs_sh), tuple(fcst_sh)
 
     def shuffle_data(self):
         assert len(self.hours) == len(self.dates)
@@ -138,6 +230,7 @@ class DataGenerator(Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             self.shuffle_data()
+  
 
 class PermutedDataGenerator(Sequence):
     """

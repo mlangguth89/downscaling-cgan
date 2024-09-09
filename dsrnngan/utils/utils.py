@@ -328,3 +328,21 @@ def get_area_range(data_config, area, special_areas=special_areas):
 
     return latitude_range, lat_range_index, longitude_range, lon_range_index
 
+# ML: Added auxiliary functions
+def last_day_of_month(any_day):
+    """
+    Returns the last day of a month
+    :param any_day : datetime object with any day of the month
+    :return: datetime object of lat day of month
+    """
+    next_month = any_day.replace(day=28) + datetime.timedelta(days=4)  # this will never fail
+    return next_month - datetime.timedelta(days=next_month.day)
+
+def all_same_month(date_list):
+    # Convert the list of datetime objects to a pandas Series
+    date_series = pd.Series(date_list)
+
+    # Extract the year and month and check if all are the same
+    year_month_series = date_series.dt.to_period('M')
+
+    return year_month_series.nunique() == 1
