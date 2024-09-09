@@ -714,6 +714,8 @@ def write_train_test_data(*args, training_range,
     if validation_range:
         #pass # Not using this at the moment
         print('\n*** Writing validation data')
+        # ML: validation is always performed on full data field, cf. here:
+        # https://github.com/ljharris23/public-downscaling-cgan/blob/dba977b9bfabc66b79b5a1a3a7eb47eb176963e2/dsrnngan/setupdata.py#L53
         write_data(validation_range, *args,
                    data_label='validation', make_patches = False, **kwargs)
         
@@ -785,12 +787,12 @@ if __name__ == '__main__':
     else:
         training_range = model_config.train.training_range
         
-        if hasattr(model_config.val, 'val_range'):
-            val_range = model_config.val.val_range
+        #if hasattr(model_config.val, 'val_range'):
+        #    val_range = model_config.val.val_range
         
-        if hasattr(model_config, 'eval'):
-            if hasattr(model_config.eval, 'eval_range'):
-                eval_range =  model_config.eval.eval_range
+        #if hasattr(model_config, 'eval'):
+        #    if hasattr(model_config.eval, 'eval_range'):
+        #        eval_range =  model_config.eval.eval_range
     
     write_train_test_data(training_range=training_range,
                           validation_range=val_range,
