@@ -115,4 +115,4 @@ paths:
           SEA: ''
           CONSTANTS: '/p/scratch/atmo-rep/data/cerra/const/'
       TFRecords:
-          tfrecords_path: '/p/scratch/atmo-rep/data/downscaling_tfrecords/test'
+          tfrecords_path: '/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/training_data/0aad51a8f3848213'
