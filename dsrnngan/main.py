@@ -237,10 +237,11 @@ def main(restart: bool,
             if not wandb_logging:
                 mode = 'disabled'
             else:
-                mode = 'online'
+                mode = 'offline'
                 # Initiialise weights and biases logging
             wandb.init(
-                project='cgan-test' if args.debug else 'cgan-east-africa',
+                # project='cgan-test' if args.debug else 'cgan-east-africa',
+                project= 'downscaling-competitor',
                 sync_tensorboard=True,
                 name=log_folder.split('/')[-1],
                 config={
