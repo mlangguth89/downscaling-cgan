@@ -17,6 +17,8 @@ system_tests/data/constants/
 system_tests/data/tfrecords/
 system_tests/data/tmp_model_test/
 virtual_envs/
+HPC_batch_scripts/
+HPC_scripts/
 */tmp
 */*/tmp
 *.o
