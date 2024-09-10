@@ -1,12 +1,12 @@
- matplotlib==3.4.3
- pandas==1.3.4
+ matplotlib==3.5.2
+ pandas==1.4.2
  jupyter
  numba
  cfgrib
- dask
+ dask==2022.12.0
  seaborn
  tqdm
- xarray==0.20.1
+ xarray==2022.9.0
  properscoring
  netcdf4
  h5netcdf
@@ -16,10 +16,11 @@
  keras-preprocessing
  black
  pytest
- numpy==1.21.3
- timezonefinder==6.2.0
+ numpy==1.22.3
+ timezonefinder==6.1.0
  gitpython
- wandb
- metpy
+ wandb==0.15.3
+ setuptools==62.1.0
+ metpy==1.4.0
  gitpython
  jupytext
