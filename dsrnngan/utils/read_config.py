@@ -161,8 +161,9 @@ def get_lat_lon_range_from_config(data_config=None):
     max_longitude = data_config.max_longitude
     longitude_step_size = data_config.longitude_step_size
     
-    latitude_range=np.arange(min_latitude, max_latitude, latitude_step_size)
-    longitude_range=np.arange(min_longitude, max_longitude, longitude_step_size)
+    # ML: Removed bug in range
+    latitude_range=np.arange(min_latitude, max_latitude+latitude_step_size/2, latitude_step_size)
+    longitude_range=np.arange(min_longitude, max_longitude+longitude_step_size/2, longitude_step_size)
     
     return latitude_range, longitude_range
 
