@@ -141,7 +141,7 @@ def main(restart: bool,
     print(model_config_dict)
     input_image_shape = (model_config_dict["train"]["img_chunk_width"], model_config_dict["train"]["img_chunk_width"], data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (model_config_dict["train"]["img_chunk_width"], model_config_dict["train"]["img_chunk_width"], num_constant_fields)
+    constants_image_shape = (output_image_shape[0], output_image_shape[1], num_constant_fields)
 
     print("***** Data shapes ******")
     print(input_image_shape)
