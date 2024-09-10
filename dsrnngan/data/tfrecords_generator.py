@@ -273,6 +273,7 @@ def create_dataset(data_label: str,
     files_ds = tf.data.Dataset.list_files(f"{folder}/{data_label}_*.{clss}.*.tfrecords")
      
     ds = tf.data.TFRecordDataset(files_ds,
+                                 compression_type="GZIP",
                                  num_parallel_reads=AUTOTUNE)
     
     ds = ds.shuffle(shuffle_size, seed=int_seed)
