@@ -813,7 +813,7 @@ if __name__ == '__main__':
         val_range = ['202003']
     else:
         if hasattr(model_config, 'train'):
-            if hasattr(model_config.eval, 'training_range'):
+            if hasattr(model_config.train, 'training_range'):
                 training_range = model_config.train.training_range
 
         if hasattr(model_config, 'val'):
