@@ -354,7 +354,7 @@ def write_data(year_month_ranges: list,
 
     Args:
         year_month_range (list): List of date strings in YYYYMM format, or a list of lists of date strings for non contiguous date ranges. The code will take all dates between the maximum and minimum year months (inclusive)
-        data_label (str): Label to assign to data (e.g. train, validate)
+        data_label (str): Label to assign to data (e.g. train, validation)
         forecast_data_source (str): Source of forecast data (e.g. ifs)
         observational_data_source (str): Source of observational data (e.g. imerg)
         hours (list): List of hours to include
@@ -419,12 +419,21 @@ def write_data(year_month_ranges: list,
     fle_hdles = {}
     for hour in hours:
         fle_hdles[hour] = {}
-        for cl in range(data_config.num_classes):
-            fle_hdles[hour][cl] = []
+        if data_label == "train":
+            for cl in range(data_config.num_classes):
+                fle_hdles[hour][cl] = []
+                for shard in range(num_shards):
+                    flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
+                    options = tf.io.TFRecordOptions(compression_type="GZIP")
+                    fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
+        elif data_label == "validation":
+            fle_hdles[hour][0] = []
             for shard in range(num_shards):
                 flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
                 options = tf.io.TFRecordOptions(compression_type="GZIP")
-                fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
+                fle_hdles[hour][0].append(tf.io.TFRecordWriter(flename, options=options))
+        else:
+            raise ValueError(f"data_label {data_label} not supported")
     
     for year_month_range in year_month_ranges:  
         
@@ -440,9 +449,9 @@ def write_data(year_month_ranges: list,
                 continue
 
         if sampling_in_files == "daily":
-            process_daily_data(data_config, dates, hours, start_date, fle_hdles, debug=debug)
+            process_daily_data(data_config, dates, hours, start_date, fle_hdles, data_label, debug=debug)
         elif sampling_in_files == "monthly":
-            process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, 
+            process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, data_label,
                                  make_patches=make_patches, debug=debug)
         else:
             raise ValueError(f"Sampling method {sampling_in_files} not supported")
@@ -456,7 +465,7 @@ def write_data(year_month_ranges: list,
                             
     return hash_dir
 
-def process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, make_patches, debug=False):
+def process_monthly_data(data_config, model_config, dates, hours, start_date, fle_hdles, data_label, make_patches, debug=False):
 
     # data_paths=get_data_paths(data_config=data_config)
     yr_m = list(set([date.strftime("%Y%m") for date in dates]))
@@ -486,16 +495,16 @@ def process_monthly_data(data_config, model_config, dates, hours, start_date, fl
                 assert sample[0]['hours'] == hour, f"Inconsistent hour of sample (sample: {sample[0]['hours']}, expected: {hour})"
                 
                 if make_patches:
-                    write_patches(sample, data_config, model_config, dgs.fcst_sh, fle_hdles)
+                    write_patches(sample, data_config, model_config, dgs.fcst_sh, fle_hdles, data_label)
                 else:     
-                    write_full_data(sample, data_config, fle_hdles)    
+                    write_full_data(sample, data_config, fle_hdles, data_label)    
 
             except FileNotFoundError as e:
                 logger.debug(f"Error loading for {t_now.strftime('%Y%m%d %H:%M')}")
 
 
 
-def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=False):
+def process_daily_data(data_config, dates, hours, start_date, fle_hdles, data_label, debug=False):
         # loop over hours 
         for hour in hours:          
                 
@@ -552,21 +561,26 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
                         features = tf.train.Features(feature=feature)
                         example = tf.train.Example(features=features)
                         example_to_string = example.SerializeToString()
-                        
-                        # If provided, bin data according to bin boundaries (typically quartiles)
-                        if data_config.class_bin_boundaries is not None:
-                                                    
-                            threshold = 0.1
-                            if data_config.output_normalisation is not None:
-                                rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
-                            else:
-                                rainy_pixel_fraction = (observations > threshold).mean()
 
-                            # ML: Bug in old version due to missing shift
-                            clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
-                            
+                        if data_label =="train":
+                            # If provided, bin data according to bin boundaries (typically quartiles)
+                            if data_config.class_bin_boundaries is not None:
+                                                        
+                                threshold = 0.1
+                                if data_config.output_normalisation is not None:
+                                    rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
+                                else:
+                                    rainy_pixel_fraction = (observations > threshold).mean()
+    
+                                # ML: Bug in old version due to missing shift
+                                clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
+                                
+                            else:
+                                clss = random.choice(range(data_config.num_classes))
+                        elif data_label == "validation":
+                            clss = 0
                         else:
-                            clss = random.choice(range(data_config.num_classes))
+                            raise ValueError(f"data_label {data_label} not supported")
                             
                         # Choose random shard
                         fh = random.choice(fle_hdles[hour][clss])
@@ -580,7 +594,7 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles ,debug=F
         else:
             print('No dates found')
             
-def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdles):
+def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdles, data_label):
     # chosen to approximately cover the full image, but can be changed!
     scaling_factor = model_config.downscaling_factor
     img_chunk_width = model_config.train.img_chunk_width
@@ -626,29 +640,34 @@ def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdl
             example = tf.train.Example(features=features)
             example_to_string = example.SerializeToString()
 
-            # If provided, bin data according to bin boundaries (typically quartiles)
-            if data_config.class_bin_boundaries is not None:               
-                threshold = 0.1
-                if data_config.output_normalisation is not None:
-                    rainy_pixel_fraction = (denormalise(output, normalisation_type=data_config.output_normalisation) > threshold).mean()
+            if data_label =="train":
+                # If provided, bin data according to bin boundaries (typically quartiles)
+                if data_config.class_bin_boundaries is not None:               
+                    threshold = 0.1
+                    if data_config.output_normalisation is not None:
+                        rainy_pixel_fraction = (denormalise(output, normalisation_type=data_config.output_normalisation) > threshold).mean()
+                    else:
+                        rainy_pixel_fraction = (output > threshold).mean()
+    
+                    # ML: Bug in old version due to missing shift
+                    clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
+                    
+                    logger.debug(f"Sample {ii} with rainy fraction {rainy_pixel_fraction:.3f} is categorized into bin {clss}")
                 else:
-                    rainy_pixel_fraction = (output > threshold).mean()
-
-                # ML: Bug in old version due to missing shift
-                clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1
-                
-                logger.debug(f"Sample {ii} with rainy fraction {rainy_pixel_fraction:.3f} is categorized into bin {clss}")
+                    clss = random.choice(range(data_config.num_classes))
+                    logger.debug(f"Sample {ii} is randomly categorized into bin {clss}")
+            elif data_label == "validation":
+                clss = 0
             else:
-                clss = random.choice(range(data_config.num_classes))
-                logger.debug(f"Sample {ii} is randomly categorized into bin {clss}")
-                
+                raise ValueError(f"data_label {data_label} not supported")
+                            
             # Choose random shard
             hour = int(sample[0]['hours'])
             fh = random.choice(fle_hdles[hour][clss])
 
             fh.write(example_to_string)
 
-def write_full_data(sample, data_config, fle_hdles):
+def write_full_data(sample, data_config, fle_hdles, data_label):
     """
     Write full data to tfrecords, i.e. without patching.
     """
@@ -679,20 +698,25 @@ def write_full_data(sample, data_config, fle_hdles):
         features = tf.train.Features(feature=feature)
         example = tf.train.Example(features=features)
         example_to_string = example.SerializeToString()
-        
-        # If provided, bin data according to bin boundaries (typically quartiles)
-        if data_config.class_bin_boundaries is not None:
-                                    
-            threshold = 0.1
-            if data_config.output_normalisation is not None:
-                rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
-            else:
-                rainy_pixel_fraction = (observations > threshold).mean()
 
-            # ML: Bug in old version due to missing shift
-            clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1            
+        if data_label =="train":
+            # If provided, bin data according to bin boundaries (typically quartiles)
+            if data_config.class_bin_boundaries is not None:
+                                        
+                threshold = 0.1
+                if data_config.output_normalisation is not None:
+                    rainy_pixel_fraction = (denormalise(observations, normalisation_type=data_config.output_normalisation) > threshold).mean()
+                else:
+                    rainy_pixel_fraction = (observations > threshold).mean()
+    
+                # ML: Bug in old version due to missing shift
+                clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1            
+            else:
+                clss = random.choice(range(data_config.num_classes))
+        elif data_label == "validation":
+            clss = 0
         else:
-            clss = random.choice(range(data_config.num_classes))
+            raise ValueError(f"data_label {data_label} not supported")
             
         # Choose random shard
         hour = int(sample[0]['hours'])
@@ -701,26 +725,28 @@ def write_full_data(sample, data_config, fle_hdles):
         fh.write(example_to_string)
 
 
-def write_train_test_data(*args, training_range,
+def write_train_test_data(*args, training_range=None,
                           validation_range=None,
                           test_range=None, **kwargs):
     """
-    ML: Added make_pathces argument to write_data to allow for writing of patches of data
+    ML: Added make_patches argument to write_data to allow for writing of patches of data
     """
+    if not (training_range or validation_range or test_range):
+        print("\n*** Neither train, val, nor test ranges are provided")
+        return
     
-    
-    write_data(training_range, *args,
-               data_label='train', make_patches = True, **kwargs)
+    if training_range:
+        print('\n*** Writing training data')
+        write_data(training_range, *args,
+                   data_label='train', make_patches = True, **kwargs)
     
     if validation_range:
-        #pass # Not using this at the moment
         print('\n*** Writing validation data')
         write_data(validation_range, *args,
                    data_label='validation', make_patches = False, **kwargs)
         
     if test_range:
         print('\n*** Writing test data')
-
         write_data(test_range, *args,
                    data_label='test', make_patches = False, **kwargs)
 
@@ -780,14 +806,19 @@ if __name__ == '__main__':
     
     val_range = None
     eval_range = None
+    training_range = None
      
     if args.debug:
         training_range = ['201701']
+        val_range = ['202003']
     else:
-        training_range = model_config.train.training_range
-        
-        if hasattr(model_config.val, 'val_range'):
-            val_range = model_config.val.val_range
+        if hasattr(model_config, 'train'):
+            if hasattr(model_config.eval, 'training_range'):
+                training_range = model_config.train.training_range
+
+        if hasattr(model_config, 'val'):
+            if hasattr(model_config.val, 'val_range'):
+                val_range = model_config.val.val_range
         
         if hasattr(model_config, 'eval'):
             if hasattr(model_config.eval, 'eval_range'):
