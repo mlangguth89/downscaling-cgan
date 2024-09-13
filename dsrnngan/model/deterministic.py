@@ -20,7 +20,7 @@ class Deterministic(object):
     def filenames_from_root(self, root):
         fn = {
             "gen_weights": root+"-gen_weights.h5",
-            "gen_opt_weights": root+"-gen_opt_weights.h5",
+            "gen_opt_weights": root+"-gen_opt_weights.pkl",
         }
         return fn
 
