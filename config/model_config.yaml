@@ -31,10 +31,12 @@ train:
     CL_type: "ensmeanMSE" # type of content loss to use: 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'
     content_loss_weight: 1000.0
     img_chunk_width: 40
+    create_TFRecords: False
 
 val:
     val_range: ['202001', '202012'] # cannot pass a list if using create_fixed_dataset
     val_size: 100
     ensemble_size: 20
+    create_TFRecords: True
 
 

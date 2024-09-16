@@ -347,7 +347,8 @@ def write_data(year_month_ranges: list,
                model_config: dict=None,
                make_patches: bool=False,
                debug: bool=False,
-               num_shards: int=1) -> str:
+               num_shards: int=1,
+               base_records_folder: str=None) -> str:
     """
     Function to write training data to TF records
     ML: Changes to handle data from monthly files.
@@ -375,13 +376,16 @@ def write_data(year_month_ranges: list,
         model_config = read_config.read_model_config()
 
     data_paths=get_data_paths(data_config=data_config)
-    records_folder = data_paths['TFRecords']["tfrecords_path"]
-    if not os.path.isdir(records_folder):
-        os.makedirs(records_folder, exist_ok=True)
+
+    if not base_records_folder:
+        base_records_folder = os.path.dirname(data_paths['TFRecords']["tfrecords_path"])
+    
+    if not os.path.isdir(base_records_folder):
+        os.makedirs(base_records_folder, exist_ok=True)
     
     #  Create directory that is hash of setup params, so that we know it's the right data later on
     data_config_dict = utils.convert_namespace_to_dict(data_config)
-    hash_dir = os.path.join(records_folder, hash_dict(data_config_dict))
+    hash_dir = os.path.join(base_records_folder, hash_dict(data_config_dict))
     
     if not os.path.isdir(hash_dir):
         os.makedirs(hash_dir, exist_ok=True)
@@ -428,10 +432,12 @@ def write_data(year_month_ranges: list,
                     fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
         elif data_label == "validation":
             fle_hdles[hour][0] = []
+            cl=0
+            fle_hdles[hour][cl] = []
             for shard in range(num_shards):
                 flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
                 options = tf.io.TFRecordOptions(compression_type="GZIP")
-                fle_hdles[hour][0].append(tf.io.TFRecordWriter(flename, options=options))
+                fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
         else:
             raise ValueError(f"data_label {data_label} not supported")
     
@@ -739,16 +745,21 @@ def write_train_test_data(*args, training_range=None,
         print('\n*** Writing training data')
         write_data(training_range, *args,
                    data_label='train', make_patches = True, **kwargs)
+        print('*** Writing training data has been completed')
     
     if validation_range:
         print('\n*** Writing validation data')
         write_data(validation_range, *args,
                    data_label='validation', make_patches = False, **kwargs)
+        print('*** Writing validation data has been completed')
         
     if test_range:
         print('\n*** Writing test data')
         write_data(test_range, *args,
                    data_label='test', make_patches = False, **kwargs)
+        print('*** Writing test data has been completed')
+
+    print('\n*** TFRecords generation has been completed')
 
 
 def save_dataset(tfrecords_dataset, flename, max_batches=None):
@@ -813,16 +824,26 @@ if __name__ == '__main__':
         val_range = ['202003']
     else:
         if hasattr(model_config, 'train'):
-            if hasattr(model_config.train, 'training_range'):
-                training_range = model_config.train.training_range
+            if hasattr(model_config.train, 'create_TFRecords') and model_config.train.create_TFRecords:
+                if hasattr(model_config.train, 'training_range'):
+                    training_range = model_config.train.training_range
+                else:
+                    raise ValueError(f"model_config.train.create_TFRecords is true, but no training_range is given")
 
         if hasattr(model_config, 'val'):
-            if hasattr(model_config.val, 'val_range'):
-                val_range = model_config.val.val_range
+            if hasattr(model_config.val, 'create_TFRecords') and model_config.val.create_TFRecords:
+                if hasattr(model_config.val, 'val_range'):
+                    val_range = model_config.val.val_range
+                else:
+                    raise ValueError(f"model_config.train.create_TFRecords is true, but no val_range is given")
+
         
         if hasattr(model_config, 'eval'):
-            if hasattr(model_config.eval, 'eval_range'):
-                eval_range =  model_config.eval.eval_range
+            if hasattr(model_config.eval, 'create_TFRecords') and model_config.eval.create_TFRecords:
+                if hasattr(model_config.eval, 'eval_range'):
+                    eval_range = model_config.eval.eval_range
+                else:
+                    raise ValueError(f"model_config.train.create_TFRecords is true, but no eval_range is given")
     
     write_train_test_data(training_range=training_range,
                           validation_range=val_range,
@@ -830,4 +851,5 @@ if __name__ == '__main__':
                           data_config=data_config,
                           model_config=model_config,
                           hours=args.fcst_hours,
-                          num_shards=args.num_shards)
+                          num_shards=args.num_shards,
+                          base_records_folder=args.records_folder)
