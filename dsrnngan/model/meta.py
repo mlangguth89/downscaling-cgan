@@ -49,6 +49,7 @@ def load_opt_weights(model, filepath):
     with open(filepath, "rb") as f:
         weight_values = pickle.load(f)
 
+    model.optimizer.build(model.trainable_variables)
     model.optimizer.set_weights(weight_values)
 
 
