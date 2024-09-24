@@ -107,7 +107,7 @@ paths:
           ERA5: ''
           ERA5_MONTHLY: '/p/scratch/atmo-rep/data/era5/new_structure/'     # Path to data at JSC
           CERRA_MONTHLY: '/p/scratch/atmo-rep/data/cerra/regridded'    # 
-          IMERG_MONTHLY: '/p/scratch/atmo-rep/data/imerg/imerg_regridded' # '/p/scratch/atmo-rep/data/imerg_regridded'    #
+          IMERG_MONTHLY: '/p/scratch/atmo-rep/data/imerg/imerg_regridded' 
           IFS: ''
           OROGRAPHY: '/p/scratch/atmo-rep/data/cerra/const/cerra_const_regridded.nc'
           LSM: '/p/scratch/atmo-rep/data/cerra/const/cerra_const_regridded.nc'

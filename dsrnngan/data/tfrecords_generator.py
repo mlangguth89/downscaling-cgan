@@ -733,7 +733,8 @@ def write_full_data(sample, data_config, fle_hdles, data_label):
 
 def write_train_test_data(*args, training_range=None,
                           validation_range=None,
-                          test_range=None, **kwargs):
+                          test_range=None,
+                          **kwargs):
     """
     ML: Added make_patches argument to write_data to allow for writing of patches of data
     """
@@ -798,6 +799,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_shards', dest="num_shards", type=int, default=1, 
                         help='Number of shards to split dataset into multiple (to make sure records are not too big)')
     parser.add_argument('--debug',action='store_true')
+    parser.add_argument('--val',action='store_true')
+    parser.add_argument('--eval',action='store_true')
+    parser.add_argument('--train',action='store_true')
     args = parser.parse_args()
     
     # Load relevant parameters from local config
@@ -824,26 +828,26 @@ if __name__ == '__main__':
         val_range = ['202003']
     else:
         if hasattr(model_config, 'train'):
-            if hasattr(model_config.train, 'create_TFRecords') and model_config.train.create_TFRecords:
+            if args.train:
                 if hasattr(model_config.train, 'training_range'):
                     training_range = model_config.train.training_range
                 else:
-                    raise ValueError(f"model_config.train.create_TFRecords is true, but no training_range is given")
+                    raise ValueError(f"args.train is is true, but no training_range is given")
 
         if hasattr(model_config, 'val'):
-            if hasattr(model_config.val, 'create_TFRecords') and model_config.val.create_TFRecords:
+            if args.val:
                 if hasattr(model_config.val, 'val_range'):
                     val_range = model_config.val.val_range
                 else:
-                    raise ValueError(f"model_config.train.create_TFRecords is true, but no val_range is given")
+                    raise ValueError(f"args.val is is true, but no val_range is given")
 
         
         if hasattr(model_config, 'eval'):
-            if hasattr(model_config.eval, 'create_TFRecords') and model_config.eval.create_TFRecords:
+            if args.eval:
                 if hasattr(model_config.eval, 'eval_range'):
                     eval_range = model_config.eval.eval_range
                 else:
-                    raise ValueError(f"model_config.train.create_TFRecords is true, but no eval_range is given")
+                    raise ValueError(f"args.eval is true, but no eval_range is given")
     
     write_train_test_data(training_range=training_range,
                           validation_range=val_range,
