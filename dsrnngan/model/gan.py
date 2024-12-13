@@ -37,8 +37,8 @@ class WGANGP(object):
         fn = {
             "gen_weights": root+"-gen_weights.h5",
             "disc_weights": root+"-disc_weights.h5",
-            "gen_opt_weights": root+"-gen_opt_weights.h5",
-            "disc_opt_weights": root+"-disc_opt_weights.h5"
+            "gen_opt_weights": root+"-gen_opt_weights.pkl",
+            "disc_opt_weights": root+"-disc_opt_weights.pkl"
         }
         return fn
 

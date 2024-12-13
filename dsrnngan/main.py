@@ -138,9 +138,16 @@ def main(restart: bool,
 
     num_constant_fields = len(data_config.constant_fields)
 
-    input_image_shape = (data_config.input_image_height, data_config.input_image_width, data_config.input_channels)
+    print(model_config_dict)
+    input_image_shape = (model_config_dict["train"]["img_chunk_width"], model_config_dict["train"]["img_chunk_width"], data_config.input_channels)
     output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1], 1)
-    constants_image_shape = (data_config.input_image_height, data_config.input_image_width, num_constant_fields)
+    constants_image_shape = (output_image_shape[0], output_image_shape[1], num_constant_fields)
+
+    print("***** Data shapes ******")
+    print(input_image_shape)
+    print(output_image_shape)
+    print(constants_image_shape)
+
     
     if training_weights is None:
         training_weights = model_config.train.training_weights
@@ -237,10 +244,11 @@ def main(restart: bool,
             if not wandb_logging:
                 mode = 'disabled'
             else:
-                mode = 'online'
+                mode = 'offline'
                 # Initiialise weights and biases logging
             wandb.init(
-                project='cgan-test' if args.debug else 'cgan-east-africa',
+                # project='cgan-test' if args.debug else 'cgan-east-africa',
+                project= 'downscaling-competitor',
                 sync_tensorboard=True,
                 name=log_folder.split('/')[-1],
                 config={

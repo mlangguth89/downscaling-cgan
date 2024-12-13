@@ -33,6 +33,7 @@ def setup_batch_gen(records_folder: str,
 
     tfrecords_generator.return_dic = False
     print(f"downsample flag is {downsample}")
+
     train = DataGenerator('train',
                            batch_size=batch_size,
                            fcst_shape=fcst_shape,
@@ -40,7 +41,7 @@ def setup_batch_gen(records_folder: str,
                            out_shape=out_shape,
                            downsample=downsample, 
                            weights=weights, 
-                           crop_size=crop_size,
+                           crop_size=None,
                            rotate=rotate,
                            records_folder=records_folder,
                            seed=seed)
