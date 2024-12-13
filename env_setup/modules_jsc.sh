@@ -12,6 +12,7 @@
   ml git/2.36.0-nodocs
   # ml Jupyter/2022.3.3
   #ml ESMF/8.2.0    # may require version 8.4.1 which is only available for Stages/2023
+  ml CDO/2.1.1
   ml netcdf4-python/1.6.1-serial
   ml h5py/3.7.0-serial
   ml scikit-image/0.19.3
