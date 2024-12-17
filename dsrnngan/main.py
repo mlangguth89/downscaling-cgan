@@ -49,8 +49,12 @@ eval_group.add_argument('--eval-blitz', dest='evalnum', action='store_const', co
 
 parser.add_argument('--num-samples', type=int,
                     help="Number of samples to train on (overrides value in config)")
-parser.add_argument('--num-eval-images', type=int, default=20,
+parser.add_argument('--num-eval-images', type=int, default=None,
                     help="Number of images to evaluate on")
+parser.add_argument('--eval-months', type=str, default=None,
+                    help="Months to evaluate on. Comma-separated list or range of months to evaluate on (e.g., '1,2,3' or '1-6').")
+parser.add_argument('--eval-model', type=int, default=None,
+                    help="Model to evaluate on")
 parser.add_argument('--eval-ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
 parser.add_argument('--eval-on-train-set', action="store_true", 
@@ -96,7 +100,9 @@ def main(restart: bool,
          debug: bool=False,
          output_suffix: str=None, 
          log_folder: str=None,
-         wandb_logging: bool=False
+         wandb_logging: bool=False,
+         eval_months: str=None,
+         eval_model: int=None
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -332,6 +338,7 @@ def main(restart: bool,
     # evaluate model performance
     if evaluate:
         logger.debug('Performing evaluation')
+        print("records_folder: "+str(records_folder))
         evaluation.evaluate_multiple_checkpoints(model_config=model_config,
                                                  data_config=data_config,
                                                  log_folder=log_folder,
@@ -344,7 +351,9 @@ def main(restart: bool,
                                                  shuffle=shuffle_eval,
                                                  save_generated_samples=save_generated_samples,
                                                  batch_size=1,
-                                                 use_training_data=args.eval_on_train_set)
+                                                 use_training_data=args.eval_on_train_set,
+                                                 eval_months=eval_months,
+                                                 eval_model=eval_model)
     
     return log_folder
 
@@ -422,7 +431,21 @@ if __name__ == "__main__":
     
         log_folder = args.log_folder or model_config.log_folder 
         log_folder = os.path.join(log_folder, args.records_folder.split('/')[-1])
+        print("log_folder: "+str(log_folder))
+    print("eval_ensemble_size: "+str(args.eval_ensemble_size))
+    print("num_eval_images: "+str(args.num_eval_images))
 
+    eval_months = []
+    if args.eval_months:
+        if '-' in args.eval_months:
+            # Handle range (e.g., '1-6')
+            start, end = map(int, args.eval_months.split('-'))
+            eval_months = list(range(start, end + 1))
+        else:
+            # Handle comma-separated list (e.g., '1,2,3')
+            eval_months = list(map(int, args.eval_months.split(',')))
+    else:
+        eval_months = None
     main(
             model_config=model_config,
             data_config=data_config,
@@ -444,4 +467,6 @@ if __name__ == "__main__":
             output_suffix=output_suffix,
             log_folder=log_folder,
             debug=args.debug,
-            wandb_logging=args.wandb_logging)
+            wandb_logging=args.wandb_logging,
+            eval_months=eval_months,
+            eval_model=args.eval_model)

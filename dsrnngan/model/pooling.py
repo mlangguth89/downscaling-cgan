@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras.layers import MaxPool2D, AvgPool2D
 
 
@@ -15,6 +16,7 @@ def pool(input, pool_type, data_format='channels_last'):
         x = np.expand_dims(x, 0)
         
     pool_op = {
+        'no_pooling': lambda x: tf.convert_to_tensor(x),
         'max_4': MaxPool2D(pool_size=(4, 4), strides=(2, 2), data_format=data_format),
         'max_16': MaxPool2D(pool_size=(16, 16), strides=(4, 4), data_format=data_format),
         'avg_4': AvgPool2D(pool_size=(4, 4), strides=(2, 2), data_format=data_format),

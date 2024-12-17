@@ -4,14 +4,14 @@
 #SBATCH --ntasks=1
 ##SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --output=generate_validation_TFRecords-out.%j
-#SBATCH --error=generate_validation_TFRecords-err.%j
-##SBATCH --time=02:00:00
-#SBATCH --time=24:00:00
+#SBATCH --output=logs/Evaluate_WGAN.%j-out
+#SBATCH --error=logs/Evaluate_WGAN.%j-err
+#SBATCH --time=02:00:00
+##SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 ##SBATCH --partition=batch
-#SBATCH --partition=gpus
-##SBATCH --partition=develgpus
+##SBATCH --partition=gpus
+#SBATCH --partition=develgpus
 ##SBATCH --partition=booster
 ##SBATCH --partition=develbooster
 ##SBATCH --mail-type=ALL
@@ -42,12 +42,13 @@ if [ -z ${VIRTUAL_ENV} ]; then
    fi
 fi
 
-records_folder=/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/evaluation_data/
+records_folder=/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/evaluation_data/33b737e4a85a41aa
+#/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/validation_data/33b737e4a85a41aa
 data_config=${BASE_DIR}/config/data_config.yaml
 model_config=${BASE_DIR}/config/model_config.yaml
-
-
+model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16
+#model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16_alt
+# --num-eval-images 20
 
 # run job
-srun --overlap python -m dsrnngan.data.tfrecords_generator --records-folder ${records_folder} --data-config-path ${data_config} --model-config-path ${model_config} --eval 
-
+srun --overlap python -m dsrnngan.main --records-folder ${records_folder} --model-folder ${model_folder} --eval-ensemble-size 4  --no-train --eval-model 3 --eval-blitz 

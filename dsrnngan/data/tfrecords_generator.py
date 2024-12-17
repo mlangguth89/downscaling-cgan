@@ -48,6 +48,85 @@ def DataGenerator(data_label, batch_size, fcst_shape, con_shape,
                                 folder=records_folder, 
                                 seed=seed)
 
+def DataGeneratorFull(data_label, batch_size, fcst_shape, con_shape, 
+                  out_shape, repeat=True, 
+                  downsample=False, weights=None, crop_size=None, rotate=False,
+                  records_folder=records_folder, seed=None):
+    if data_label=="validation":
+        shuffle_size=256
+    else:
+        shuffle_size=0
+    return create_full_dataset(data_label, 
+                                batch_size,
+                                fcst_shape,
+                                con_shape,
+                                out_shape,
+                                folder=records_folder,
+                                downsample=downsample, 
+                                shuffle_size=shuffle_size,
+                                seed=seed)
+
+def create_full_dataset(data_label: str,
+                        batch_size: int,
+                        fcst_shape: tuple,
+                        con_shape: tuple,
+                        out_shape: tuple,
+                        folder: str,
+                        downsample: bool=False,
+                        shuffle_size: int=256,
+                        seed: int=None):
+
+    if seed:
+        if not isinstance(seed, int):
+            int_seed = seed[0]
+        else:
+            int_seed = seed
+    else:
+        int_seed = None
+
+
+    def load_and_parse_file(files, sguffe_size):
+        ds = tf.data.TFRecordDataset(files, compression_type="GZIP", num_parallel_reads=AUTOTUNE)
+        if shuffle_size>0:
+            ds = ds.shuffle(shuffle_size, seed=int_seed)
+        ds = ds.map(lambda x: _parse_batch(x, insize=fcst_shape, consize=con_shape, outsize=out_shape, data_label=data_label),
+                    num_parallel_calls=AUTOTUNE)
+        return ds
+    
+    # Function to extract the number from the filename
+    def extract_number_from_filename(file_path):
+        # Split the filename by underscores and take the second part
+        file_name = file_path.split("/")[-1]
+        number_str = file_name.split("_")[1].split(".")[0] # Extract the "number" part
+        try:
+            number = int(number_str)  # Convert to an integer
+        except Exception as e:
+            raise ValueError(f"Error converting {number_str} to an integer: {e}")
+        return number
+
+    # List all files in the folder and filter them based on the pattern
+    file_list = [os.path.join(folder, file) for file in os.listdir(folder) if file.startswith(f"{data_label}_") and file.endswith(".tfrecords")]
+    
+    # Sort the file_list based on the extracted number
+    sorted_file_list = sorted(file_list, key=extract_number_from_filename)
+
+    files_ds = tf.data.Dataset.from_tensor_slices(sorted_file_list)
+    
+    if shuffle_size>0:
+        ds = load_and_parse_file(files_ds, shuffle_size)
+    else:
+        # Create all hourly datasets and store them in a list
+        hourly_datasets = [load_and_parse_file(file, shuffle_size) for file in files_ds]
+        
+        # Combine the hourly datasets for each day
+        ds = tf.data.Dataset.zip(tuple(hourly_datasets))
+
+    ds = ds.batch(batch_size).prefetch(AUTOTUNE)
+    if downsample and return_dic:
+        ds = ds.map(_dataset_downsampler)
+    elif downsample and not return_dic:
+        ds = ds.map(_dataset_downsampler_list)
+    return ds
 
 def create_mixed_dataset(data_label: str,
                          batch_size: int,
@@ -83,9 +162,11 @@ def create_mixed_dataset(data_label: str,
         _type_: _description_
     """    
 
-    classes = 4
     if weights is None:
+        classes = 4
         weights = [1./classes]*classes
+    else:
+        classes = len(weights)
     datasets = [create_dataset(data_label,
                                i,
                                fcst_shape=fcst_shape,
@@ -198,7 +279,10 @@ def _dataset_rotater_dict(inputs, outputs, seed=None):
 def _parse_batch(record_batch,
                  insize=(20, 20, 9),
                  consize=(200, 200, 2),
-                 outsize=(200, 200, 1)):
+                 outsize=(200, 200, 1),
+                 data_label="train"):
+
+
     """_summary_
 
     Args:
@@ -212,25 +296,42 @@ def _parse_batch(record_batch,
     """
     # Create a description of the features
     
-
-    feature_description = {
-        'generator_input': tf.io.FixedLenFeature(insize, tf.float32),
-        'constants': tf.io.FixedLenFeature(consize, tf.float32),
-        'generator_output': tf.io.FixedLenFeature(outsize, tf.float32),
-    }
+    if data_label == "train" or data_label == "validation":
+        feature_description = {
+            'generator_input': tf.io.FixedLenFeature(insize, tf.float32),
+            'constants': tf.io.FixedLenFeature(consize, tf.float32),
+            'generator_output': tf.io.FixedLenFeature(outsize, tf.float32),
+        }
+    else:
+        feature_description = {
+            'generator_input': tf.io.FixedLenFeature(insize, tf.float32),
+            'constants': tf.io.FixedLenFeature(consize, tf.float32),
+            'generator_output': tf.io.FixedLenFeature(outsize, tf.float32),
+            'timestamp': tf.io.FixedLenFeature(1, tf.int64),
+        }
 
     # Parse the input `tf.Example` proto using the dictionary above
     example = tf.io.parse_example(record_batch, feature_description)
+
+    if data_label == "train" or data_label == "validation":
+        if return_dic:
+            output = ({'lo_res_inputs': example['generator_input'],
+                       'hi_res_inputs': example['constants']},
+                      {'output': example['generator_output']})
     
-    if return_dic:
-        output = ({'lo_res_inputs': example['generator_input'],
-                   'hi_res_inputs': example['constants']},
-                  {'output': example['generator_output']})
-
-        return output
+            return output
+        else:
+            return example['generator_input'], example['constants'], example['generator_output']
     else:
-        return example['generator_input'], example['constants'], example['generator_output']
-
+        if return_dic:
+            output = ({'lo_res_inputs': example['generator_input'],
+                       'hi_res_inputs': example['constants'],
+                       'timestamp': example['timestamp']},
+                      {'output': example['generator_output']})
+    
+            return output
+        else:
+            return example['generator_input'], example['constants'], example['generator_output'], example['timestamp']
 
 def create_dataset(data_label: str,
                    clss: str,
@@ -281,7 +382,8 @@ def create_dataset(data_label: str,
     ds = ds.map(lambda x: _parse_batch(x,
                                        insize=fcst_shape,
                                        consize=con_shape,
-                                       outsize=out_shape))
+                                       outsize=out_shape,
+                                       data_label=data_label))
                 # num_parallel_calls=AUTOTUNE)
                 
     if crop_size:
@@ -307,8 +409,9 @@ def create_dataset(data_label: str,
         return ds
 
 
+
 def create_fixed_dataset(year: int=None,
-                         mode: str='validation',
+                         data_label: str='validation',
                          batch_size: int=16,
                          downsample: bool=False,
                          fcst_shape: tuple=(20, 20, 9),
@@ -318,7 +421,7 @@ def create_fixed_dataset(year: int=None,
                          folder: str=records_folder):
     assert year is not None or name is not None, "Must specify year or file name"
     if name is None:
-        name = os.path.join(folder, f"{mode}{year}.tfrecords")
+        name = os.path.join(folder, f"{data_label}{year}.tfrecords")
     else:
         name = os.path.join(folder, name)
     fl = glob.glob(name)
@@ -339,6 +442,9 @@ def create_fixed_dataset(year: int=None,
 
 def _float_feature(list_of_floats: list):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
+
+def _int64_feature(list_of_ints: list):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=list_of_ints))
 
 def write_data(year_month_ranges: list,
                data_label: str,
@@ -430,7 +536,7 @@ def write_data(year_month_ranges: list,
                     flename = os.path.join(hash_dir, f"{data_label}_{hour}.{cl}.{shard}.tfrecords")
                     options = tf.io.TFRecordOptions(compression_type="GZIP")
                     fle_hdles[hour][cl].append(tf.io.TFRecordWriter(flename, options=options))
-        elif data_label == "validation":
+        elif data_label == "validation" or data_label == "evaluation":
             fle_hdles[hour][0] = []
             cl=0
             fle_hdles[hour][cl] = []
@@ -583,7 +689,7 @@ def process_daily_data(data_config, dates, hours, start_date, fle_hdles, data_la
                                 
                             else:
                                 clss = random.choice(range(data_config.num_classes))
-                        elif data_label == "validation":
+                        elif data_label == "validation" or data_label == "evaluation":
                             clss = 0
                         else:
                             raise ValueError(f"data_label {data_label} not supported")
@@ -662,7 +768,7 @@ def write_patches(sample, data_config, model_config, lo_res_input_shape, fle_hdl
                 else:
                     clss = random.choice(range(data_config.num_classes))
                     logger.debug(f"Sample {ii} is randomly categorized into bin {clss}")
-            elif data_label == "validation":
+            elif data_label == "validation" or data_label == "evaluation":
                 clss = 0
             else:
                 raise ValueError(f"data_label {data_label} not supported")
@@ -679,11 +785,16 @@ def write_full_data(sample, data_config, fle_hdles, data_label):
     """
     # ML: from Bobby Antonio's code
 
+    #print("sample[0]['hours']: "+str(sample[0]['hours']))
+    #print("sample[0]['dates']: "+str(sample[0]['dates']))
     (depth, _, _) = sample[1]['output'].shape   
     for k in range(depth):         
         observations = sample[1]['output'][k,...].flatten()
         forecast = sample[0]['lo_res_inputs'][k,...].flatten()
         const = sample[0]['hi_res_inputs'][k,...].flatten()
+        hour = sample[0]['hours'][k]
+        date = sample[0]['dates'][k]
+        timestamp = pd.Timestamp(date) + pd.Timedelta(hours=hour)  
 
         # Check no Null values
         if np.isnan(observations).any() or np.isnan(forecast).any() or np.isnan(const).any():
@@ -694,12 +805,19 @@ def write_full_data(sample, data_config, fle_hdles, data_label):
             raise ValueError('one or more of arrays is all zeros')
         
         # Check hi res data has same dimensions
-            
-        feature = {
-            'generator_input': _float_feature(forecast),
-            'constants': _float_feature(const),
-            'generator_output': _float_feature(observations)
-        }
+        if data_label =="evaluation":
+            feature = {
+                'generator_input': _float_feature(forecast),
+                'constants': _float_feature(const),
+                'generator_output': _float_feature(observations),
+                'timestamp': _int64_feature([int(timestamp.timestamp())])
+            }
+        else:
+            feature = {
+                'generator_input': _float_feature(forecast),
+                'constants': _float_feature(const),
+                'generator_output': _float_feature(observations)
+            }
 
         features = tf.train.Features(feature=feature)
         example = tf.train.Example(features=features)
@@ -719,13 +837,12 @@ def write_full_data(sample, data_config, fle_hdles, data_label):
                 clss = np.digitize(rainy_pixel_fraction, data_config.class_bin_boundaries, right=False) - 1            
             else:
                 clss = random.choice(range(data_config.num_classes))
-        elif data_label == "validation":
+        elif data_label == "validation" or data_label == "evaluation":
             clss = 0
         else:
             raise ValueError(f"data_label {data_label} not supported")
             
         # Choose random shard
-        hour = int(sample[0]['hours'])
         fh = random.choice(fle_hdles[hour][clss])
 
         fh.write(example_to_string)
@@ -733,12 +850,12 @@ def write_full_data(sample, data_config, fle_hdles, data_label):
 
 def write_train_test_data(*args, training_range=None,
                           validation_range=None,
-                          test_range=None,
+                          evaluation_range=None,
                           **kwargs):
     """
     ML: Added make_patches argument to write_data to allow for writing of patches of data
     """
-    if not (training_range or validation_range or test_range):
+    if not (training_range or validation_range or evaluation_range):
         print("\n*** Neither train, val, nor test ranges are provided")
         return
     
@@ -754,11 +871,11 @@ def write_train_test_data(*args, training_range=None,
                    data_label='validation', make_patches = False, **kwargs)
         print('*** Writing validation data has been completed')
         
-    if test_range:
-        print('\n*** Writing test data')
-        write_data(test_range, *args,
-                   data_label='test', make_patches = False, **kwargs)
-        print('*** Writing test data has been completed')
+    if evaluation_range:
+        print('\n*** Writing evaluation data')
+        write_data(evaluation_range, *args,
+                   data_label='evaluation', make_patches = False, **kwargs)
+        print('*** Writing evaluation data has been completed')
 
     print('\n*** TFRecords generation has been completed')
 
@@ -827,23 +944,22 @@ if __name__ == '__main__':
         training_range = ['201701']
         val_range = ['202003']
     else:
-        if hasattr(model_config, 'train'):
-            if args.train:
+        if args.train:
+            if hasattr(model_config, 'train'):
                 if hasattr(model_config.train, 'training_range'):
                     training_range = model_config.train.training_range
                 else:
                     raise ValueError(f"args.train is is true, but no training_range is given")
 
-        if hasattr(model_config, 'val'):
-            if args.val:
+        if args.val:
+            if hasattr(model_config, 'val'):
                 if hasattr(model_config.val, 'val_range'):
                     val_range = model_config.val.val_range
                 else:
                     raise ValueError(f"args.val is is true, but no val_range is given")
 
-        
-        if hasattr(model_config, 'eval'):
-            if args.eval:
+        if args.eval:
+            if hasattr(model_config, 'eval'):
                 if hasattr(model_config.eval, 'eval_range'):
                     eval_range = model_config.eval.eval_range
                 else:
@@ -851,7 +967,7 @@ if __name__ == '__main__':
     
     write_train_test_data(training_range=training_range,
                           validation_range=val_range,
-                          test_range=eval_range,
+                          evaluation_range=eval_range,
                           data_config=data_config,
                           model_config=model_config,
                           hours=args.fcst_hours,

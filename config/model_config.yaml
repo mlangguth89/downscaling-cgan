@@ -37,6 +37,12 @@ val:
     val_range: ['202001', '202012'] # cannot pass a list if using create_fixed_dataset
     val_size: 100
     ensemble_size: 20
-    #create_TFRecords: True
+    img_height: 196
+    img_width: 217
 
-
+eval:
+    eval_range: ['202001', '202012'] # cannot pass a list if using create_fixed_dataset
+    eval_size: 100
+    ensemble_size: 20
+    img_height: 196
+    img_width: 217

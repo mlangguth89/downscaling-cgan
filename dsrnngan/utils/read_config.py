@@ -45,9 +45,12 @@ def read_model_config(config_filename: str='model_config.yaml', config_folder: s
     model_config.train.ensemble_size = model_config_dict['train'].get('ensemble_size')
     model_config.train.training_ratio = model_config_dict['train'].get('training_ratio', 5)
     model_config.train.rotate = model_config_dict['train'].get('rotate', False)
-
+    
     model_config.val.val_range = model_config_dict['val'].get('val_range')
     model_config.val.val_size = model_config_dict.get("val", {}).get("val_size")
+    model_config.val.ensemble_size = model_config_dict.get("val", {}).get("ensemble_size")
+    model_config.val.img_width = model_config_dict.get("val", {}).get("img_width")
+    model_config.val.img_height = model_config_dict.get("val", {}).get("img_height")
     
     model_config.generator.learning_rate_gen = float(model_config.generator.learning_rate_gen)
     model_config.generator.output_activation = model_config_dict['generator'].get('output_activation', 'softplus')

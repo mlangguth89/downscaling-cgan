@@ -9,7 +9,7 @@ from typing import Iterable, Generator
 from types import SimpleNamespace
 
 from dsrnngan.data import tfrecords_generator, setupdata
-from dsrnngan.data.tfrecords_generator import DataGenerator
+from dsrnngan.data.tfrecords_generator import DataGenerator, DataGeneratorFull
 from dsrnngan.data.data import DATA_PATHS
 from dsrnngan.utils.utils import date_range_from_year_month_range, load_yaml_file
 from dsrnngan.utils import read_config
@@ -61,7 +61,54 @@ def setup_batch_gen(records_folder: str,
     return train, None
 
 
+def setup_batch_gen_full(
+                    records_folder: str,
+                    fcst_shape: tuple,
+                    con_shape: tuple,
+                    out_shape: tuple,
+                    data_label: str='validation',
+                    batch_size: int=64,
+                    downsample: bool=False,
+                    seed: int=None
+                    ):
+
+    tfrecords_generator.return_dic = False
+    print(f"downsample flag is {downsample}")
+    data_gen_full = DataGeneratorFull(
+                        data_label=data_label,
+                        batch_size=batch_size,
+                        fcst_shape=fcst_shape,
+                        con_shape=con_shape,
+                        out_shape=out_shape,
+                        downsample=downsample, 
+                        records_folder=records_folder,
+                        seed=seed)
+    return data_gen_full
+
 def setup_full_image_dataset(
+                            records_folder: str,
+                            fcst_shape_full: tuple,
+                            con_shape_full: tuple,
+                            out_shape_full: tuple,
+                            data_label: str='validation',
+                            batch_size: int=64,
+                            downsample: bool=False,
+                            seed: int=None
+                            ):
+    
+    data_full = setup_batch_gen_full(
+                	records_folder=records_folder,
+                    fcst_shape=fcst_shape_full,
+                    con_shape=con_shape_full,
+                    out_shape=out_shape_full,
+                    data_label=data_label,
+                    batch_size=batch_size,
+                    downsample=downsample,
+                    seed=seed)
+ 
+    return data_full
+
+def setup_full_image_dataset_deprecated(
                              data_config,
                              year_month_ranges,
                              batch_size=2,
@@ -70,21 +117,24 @@ def setup_full_image_dataset(
                              shuffle=True,
                              ):
 
-    from dsrnngan.data.data_generator import DataGenerator as DataGeneratorFull
+    
+  
+    from dsrnngan.data.data_generator import DataGenerator
     from dsrnngan.data.data import get_obs_dates
 
     date_range = date_range_from_year_month_range(year_month_ranges)
-    # dates = get_obs_dates(date_range,
-    #                       obs_data_source=data_config.obs_data_source, 
-    #                       data_paths=read_config.get_data_paths(data_config=data_config),
-    #                       hour=hour)
+    dates = get_obs_dates(date_range,
+                           obs_data_source=data_config.obs_data_source, 
+                           data_paths=read_config.get_data_paths(data_config=data_config),
+                           hour=hour)
 
-    data_full = DataGeneratorFull(dates=date_range,
+    data_full = DataGenerator(dates=date_range,
                                   data_config=data_config,
                                   batch_size=batch_size,
                                   shuffle=shuffle,
                                   downsample=downsample,
-                                  hour=hour)
+                                  hour=hour,
+                                  records_folder=records_folder)
     return data_full
 
 def setup_data(data_config: SimpleNamespace,
@@ -98,7 +148,9 @@ def setup_data(data_config: SimpleNamespace,
                load_full_image: bool=False,
                seed: int=None,
                shuffle: bool=True,
-               full_image_batch_size: int=1) -> tuple[Generator]:
+               full_image_batch_size: int=1,
+               use_training_data: bool=False,
+               data_label="validation") -> tuple[Generator]:
     """Setup data for training or validation
 
     Args:
@@ -123,22 +175,34 @@ def setup_data(data_config: SimpleNamespace,
         if model_config.train.training_range is None:
             batch_gen_train = None
         else:
-            batch_gen_train = setup_full_image_dataset(data_config=data_config,
-                                          year_month_ranges=model_config.train.training_range,
-                                          batch_size=full_image_batch_size,
-                                          downsample=model_config.downsample,
-                                          hour=hour,
-                                          shuffle=shuffle)
-        if model_config.val.val_range is None:
+            if use_training_data:
+                batch_gen_train = setup_full_image_dataset_deprecated(data_config=data_config,
+                                              year_month_ranges=model_config.train.training_range,
+                                              batch_size=full_image_batch_size,
+                                              downsample=model_config.downsample,
+                                              hour=hour,
+                                              shuffle=shuffle)
+            else:
+                batch_gen_train = None
+
+        if model_config.val.val_range is None and data_label=="validation":
+            batch_gen_valid = None
+        elif model_config.eval.eval_range is None and data_label=="evaluation":
             batch_gen_valid = None
         else:
-            batch_gen_valid = setup_full_image_dataset(data_config=data_config,
-                                          year_month_ranges=model_config.val.val_range,
-                                          batch_size=full_image_batch_size,
-                                          downsample=model_config.downsample,
-                                          hour=hour,
-                                          shuffle=shuffle)
-
+            if use_training_data:
+                batch_gen_valid = None
+            else:
+                batch_size = model_config.eval.batch_size if data_label == "evaluation" else model_config.train.batch_size
+                batch_gen_valid = setup_full_image_dataset(
+                                        records_folder=records_folder,
+                                        fcst_shape_full=fcst_shape,
+                                        con_shape_full=con_shape,
+                                        out_shape_full=out_shape,
+                                        data_label=data_label,
+                                        batch_size=batch_size,
+                                        downsample=model_config.downsample,
+                                        seed=seed)
     else:
         if not records_folder:
             raise ValueError('No records folder given')
@@ -265,7 +329,7 @@ if __name__=='__main__':
             n_hours = int(args.n_samples/len(ym_date_range))
             hours = np.random.choice(range(0,23), size=n_hours, replace=False)
             
-        data_gen = setup_full_image_dataset(
+        data_gen = setup_full_image_dataset_deprecated(
                              data_config=data_config,
                              year_month_ranges=ym_range,
                              batch_size=2,

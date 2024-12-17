@@ -1,5 +1,6 @@
 import gc
 import os
+import sys
 import warnings
 from datetime import datetime, timedelta
 import pickle
@@ -12,6 +13,9 @@ from tensorflow.python.keras.utils import generic_utils
 from datetime import datetime
 from typing import Iterable
 from types import SimpleNamespace
+import netCDF4 as nc
+import xarray as xr
+
 
 from dsrnngan.data.data_generator import DataGenerator
 from dsrnngan.data import data
@@ -48,18 +52,33 @@ def setup_inputs(
                                    data_config=data_config)
 
     gen = model.gen
+
+
+    num_constant_fields = len(data_config.constant_fields)
     
+    input_image_shape = (model_config.eval.img_height , model_config.eval.img_width, data_config.input_channels)
+    output_image_shape = (model_config.downscaling_factor * input_image_shape[0], model_config.downscaling_factor * input_image_shape[1])
+    constants_image_shape = (model_config.downscaling_factor * input_image_shape[0] , model_config.downscaling_factor * input_image_shape[1], num_constant_fields)
+
+    print("i: "+str(input_image_shape))
+    print("o: "+str(output_image_shape))
+    print("c: "+str(constants_image_shape))
 
     # always uses full-sized images
     print('Loading full sized image dataset')
     data_gen_train, data_gen_valid = setupdata.setup_data(
         data_config,
         model_config,
+        fcst_shape=input_image_shape,
+        con_shape=constants_image_shape,
+        out_shape=output_image_shape,
         records_folder=records_folder,
         load_full_image=True,
         shuffle=shuffle,
         hour=hour,
-        full_image_batch_size=batch_size)
+        full_image_batch_size=batch_size,
+        use_training_data=use_training_data,
+        data_label="evaluation")
     
     if use_training_data:
         return gen, data_gen_train
@@ -108,10 +127,11 @@ def generate_gan_sample(gen: gan.WGANGP,
 def create_single_sample(*,
                    data_config: SimpleNamespace,
                    model_config: SimpleNamespace,
-                   data_idx: int,
                    batch_size: int,
                    gen: gan.WGANGP,
-                   data_gen: DataGenerator,
+                   lo_res_inputs, #data_gen: DataGenerator,
+                   hi_res_inputs,
+                   output,
                    latitude_range: Iterable,
                    longitude_range: Iterable,
                    ensemble_size: int,
@@ -119,45 +139,41 @@ def create_single_sample(*,
                    input_normalisation: str,
                    seed: int=None
                    ):
-    
-    if 'tp' in data_config.input_fields:
-        tpidx = data_config.input_fields.index('tp')
+
+
+    input_field_variables = list(data_config.input_fields.keys())
+    if 'tp' in input_field_variables:
+        tpidx = input_field_variables.index('tp')
     else:
         # Temporary fix to allow testing of other tp variants
-        tpidx = data_config.input_fields.index('tpq')
+        tpidx = input_field_variables.index('tpq')
     
     batch_size = 1  # do one full-size image at a time
 
     if model_config.mode == "det":
         ensemble_size = 1  # can't generate an ensemble deterministically
 
-    # load truth images
-    inputs, outputs = data_gen[data_idx]
-      
-    cond = inputs['lo_res_inputs']
-    fcst = cond[0, :, :, tpidx]
-    const = inputs['hi_res_inputs']
-    obs = outputs['output'][0, :, :]
-    date = inputs['dates']
-    hour = inputs['hours']           
     
-    # Get observations 24hrs before
-    imerg_persisted_fcst = data.load_imerg(date[0] - timedelta(days=1), hour=hour[0], latitude_vals=latitude_range, 
-                                            longitude_vals=longitude_range, normalisation_type=output_normalisation)
-    
-    assert imerg_persisted_fcst.shape == obs.shape, ValueError('Shape mismatch in iMERG persistent and truth')
-    assert len(date) == 1, ValueError('Currently must be run with a batch size of 1')
-    assert len(date) == len(hour), ValueError('This is strange, why are they different sizes?')
-        
+    cond = lo_res_inputs
+    fcst = cond[0, :, :, :]
+    const = hi_res_inputs
+    obs = output[0, :, :]
+
     if output_normalisation is not None:
         obs = data.denormalise(obs, normalisation_type=output_normalisation)
     
     if input_normalisation is not None:
         fcst = data.denormalise(fcst, normalisation_type=input_normalisation)
-            
+
+    lo_res_target = fcst[:, :, tpidx]
+    
     if model_config.mode == "GAN":
+        original_stdout = sys.stdout
+        with open(os.devnull, 'w') as f:
+            sys.stdout = f  
+            samples_gen = generate_gan_sample(gen, cond, const, model_config.generator.noise_channels, ensemble_size, batch_size, seed)
+        sys.stdout = original_stdout
         
-        samples_gen = generate_gan_sample(gen, cond, const, model_config.generator.noise_channels, ensemble_size, batch_size, seed)
             
     elif model_config.mode == "det":
         samples_gen = []
@@ -182,13 +198,12 @@ def create_single_sample(*,
         
         sample_gen = samples_gen[ii][0, :, :, 0]
         
-        # sample_gen shape should be [n, h, w, c] e.g. [1, 940, 940, 1]
         if output_normalisation is not None:
             sample_gen = data.denormalise(sample_gen, normalisation_type=output_normalisation)
 
         samples_gen[ii] = sample_gen
 
-    return obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour
+    return obs, samples_gen, fcst, lo_res_target, cond, const
 
 def eval_one_chkpt(*,
                    gen,
@@ -200,7 +215,10 @@ def eval_one_chkpt(*,
                    ensemble_size,
                    normalize_ranks=True,
                    show_progress=True,
-                   batch_size: int=1):
+                   batch_size: int=1,
+                   output_folder=None,
+                   model_number=None,
+                   eval_months=None):
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
     output_normalisation = data_config.output_normalisation
@@ -209,42 +227,41 @@ def eval_one_chkpt(*,
         input_normalisation = data_config.input_normalisation_strategy['tp']['normalisation']
     else:
         input_normalisation = None
-        
-    if num_images < 5:
+
+
+    if num_images is not None and num_images < 5:
         Warning('These scores are best performed with more images')
     
     truth_vals = []
     samples_gen_vals = []
     fcst_vals = []
-    persisted_fcst_vals = []
-    dates = []
-    hours = []
+    lo_res_target_vals = []
+    time_vals = []
+    time_vals_str = []
     cond_vals = []
     const_vals = []
-    
     ranks = []
     lowress = []
     hiress = []
     crps_scores = {}
     mse_all = []
     emmse_all = []
-    fcst_mse_all = []
     ralsd_rmse_all = []
-    ralsd_rmse_fcst_all = []
     corr_all = []
-    correlation_fcst_all = []
-    csi_fcst_all = []
     csi_all = []
     max_bias_all = []
-    max_bias_fcst_all = []
-    fcst_mae_all = []
     max_quantile_diff = []
 
-    if 'tp' in data_config.input_fields:
-        tpidx = data_config.input_fields.index('tp')
+    agg_metrics = []
+
+    show_progress_temp = show_progress
+    
+    input_field_variables = list(data_config.input_fields.keys())
+    if 'tp' in input_field_variables:
+        tpidx = input_field_variables.index('tp')
     else:
         # Temporary fix to allow testing of other tp variants
-        tpidx = data_config.input_fields.index('tpq')
+        tpidx = input_field_variables.index('tpq')
     
     batch_size = 1  # do one full-size image at a time
 
@@ -253,179 +270,334 @@ def eval_one_chkpt(*,
 
     if show_progress:
         # Initialize progbar
-        progbar = generic_utils.Progbar(num_images,
-                                        stateful_metrics=("CRPS", "EM-MSE"))
+        progbar = generic_utils.Progbar(target=num_images,
+                                        stateful_metrics=("CRPS", "EM-RMSE"))
 
     CRPS_pooling_methods = ['no_pooling', 'max_4', 'max_16', 'avg_4', 'avg_16']
 
     rng = np.random.default_rng()
 
-    data_idx = 0
-    for kk in tqdm(range(num_images)):
-        
-        success = False
-        for n in range(5):
-            if success:
-                continue
-            try:
-                obs, samples_gen, fcst, imerg_persisted_fcst, cond, const, date, hour = create_single_sample(
-                        data_idx=data_idx,
-                        data_config=data_config,
-                        model_config=model_config,
-                        batch_size=batch_size,
-                        gen=gen,
-                        data_gen=data_gen,
-                        latitude_range=latitude_range,
-                        longitude_range=longitude_range,
-                        ensemble_size=ensemble_size,
-                        output_normalisation=output_normalisation,
-                        input_normalisation=input_normalisation
-                        )
-                success = True
-                data_idx += 1
-                
-            except Exception as e:
-                if n < 4:
-                    print(f'Could not load file, attempting retry {n+1} of 4')
-                    data_idx += 1
-                    continue
-                else:
-                    raise e
-            except IndexError:
-                # Run out of samples
-                break 
-        
-        dates.append(date)
-        hours.append(hour)
-        cond_vals.append(cond)
-        const_vals.append(const)
 
-        # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
-    
-        ralsd_rmse = calculate_ralsd_rmse(obs, samples_gen)
-        ralsd_rmse_all.append(ralsd_rmse.flatten())
-        
-        ralsd_rmse_fcst_all.append(calculate_ralsd_rmse(obs, [fcst]).flatten())
-               
-        # turn list of predictions into array, for CRPS/rank calculations
-        samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
-        
-        mse_all.append(mse(samples_gen[:,:,0], obs))
-        emmse_all.append(mse(np.mean(samples_gen, axis=-1), obs))
-        fcst_mse_all.append(mse(obs, fcst))
-        fcst_mae_all.append(mae(obs,fcst))
-        
-        corr_all.append(calculate_pearsonr(obs, samples_gen[:, :, 0]))
-        correlation_fcst_all.append(calculate_pearsonr(obs, fcst))
-        
-        # critical success index
-        csi_all.append(critical_success_index(obs, samples_gen[:,:,0], threshold=1.0))
-        csi_fcst_all.append(critical_success_index(obs, fcst, threshold=1.0))
-        
-        # Max difference
-        max_bias_all.append((samples_gen - np.stack([obs]*ensemble_size, axis=-1)).max())
-        max_bias_fcst_all.append((fcst -obs).max())
-        
-        # Max difference at 99.99th quantile
-        max_quantile_diff.append( np.abs(np.quantile(samples_gen[:,:,0], 0.99999) - np.quantile(obs, 0.99999)).max() )
-        
-        # Store these values for e.g. correlation on the grid
-        truth_vals.append(obs)
-        samples_gen_vals.append(samples_gen)
-        fcst_vals.append(fcst)
-        persisted_fcst_vals.append(imerg_persisted_fcst)
-        
-        ####################  CRPS calculation ##########################
-        # calculate CRPS scores for different pooling methods
-        for method in CRPS_pooling_methods:
 
-            if method == 'no_pooling':
-                truth_pooled = obs
-                samples_gen_pooled = samples_gen
+    try:
+        total_processed_images=0
+        data_gen_iter = data_gen.as_numpy_iterator()
+        num_images_left = None
+        num_processed_days = 0
+        month = 0
+        year = 0
+        while num_images is None or total_processed_images < num_images:
+            data_batch = next(data_gen_iter)
+            if len(data_batch) > 0:
+                number_of_days_per_batch = len(data_batch[0][3])
             else:
-                truth_pooled = pool(obs, method)
-                samples_gen_pooled = pool(samples_gen, method)
+                continue
+            for k in range(number_of_days_per_batch):
+                if num_images is not None and total_processed_images >= num_images:
+                        break
+                processed_images = 0
+                num_processed_days += 1
+                if num_processed_days%32 != 1:
+                    continue
+                for j, hour_data in enumerate(data_batch):
+                    if num_images is not None and total_processed_images >= num_images:
+                        break
+                    processed_images += 1
+                    total_processed_images += 1
+                    lo_res_inputs, hi_res_inputs, output, timestamp = hour_data
+                    success = False
+                    time_pd = pd.Timestamp.fromtimestamp(timestamp[k][0], tz='UTC')
+                    #time_np = np.datetime64(time_pd)
+                    time = timestamp[k][0]
+                    time_str = time_pd.strftime('%Y-%m-%d %H:%M:%S')
+                    month_old = month
+                    year_old = year
+                    month = time_pd.month
+                    year = time_pd.year
+                    #print(f"time: {time_str}")
+                    #print(f"month: {str(month)}")
+                    #print(f"year: {str(year)}")
+
+                    if eval_months is not None:
+                        if month < min(eval_months): 
+                            month_old = 0
+                            show_progress_temp = False
+                            continue
+                        elif month > max(eval_months):
+                            month = max(eval_months) 
+                            show_progress_temp = False
+                            continue
+                            
+                    show_progress_temp = show_progress
+                    
+                    if month_old!=0 and month!=month_old:
+                        save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals, output_folder, model_number, month_old, year_old)
+                        agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month_old, year_old, model_number, output_folder))
+                        
+                        time_vals = []
+                        time_vals_str = []
+                        truth_vals = []
+                        samples_gen_vals = []
+                        fcst_vals = []
+                        cond_vals = []
+                        const_vals = []
+                        lo_res_target_vals = []
+                        crps_scores = {}
+                        mse_all = [] 
+                        emmse_all = []
+                        ralsd_rmse_all = []
+                        corr_all = []
+                        csi_all = []
+                        max_bias_all = []
+                        max_quantile_diff = [] 
+                        ranks = []
+                        lowress = [] 
+                        hiress = [] 
+
+                        gc.collect()
+
+                    for n in range(5):
+                        if success:
+                            continue
+                        try:         
+                            obs, samples_gen, fcst, lo_res_target, cond, const = create_single_sample(
+                                    data_config=data_config,
+                                    model_config=model_config,
+                                    batch_size=1,
+                                    gen=gen,
+                                    lo_res_inputs=np.expand_dims(lo_res_inputs[k, ...], axis=0), 
+                                    hi_res_inputs=np.expand_dims(hi_res_inputs[k, ...], axis=0),
+                                    output=np.expand_dims(output[k, ...], axis=0),
+                                    latitude_range=latitude_range,
+                                    longitude_range=longitude_range,
+                                    ensemble_size=ensemble_size,
+                                    output_normalisation=output_normalisation,
+                                    input_normalisation=input_normalisation
+                                    )
+                            success = True
+                            
+                        except Exception as e:
+                            if n < 4:
+                                print(f'Could not load file, attempting retry {n+1} of 4')
+                                continue
+                            else:
+                                raise e
                 
-            # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
-            crps_truth_input = np.expand_dims(obs, 0)
-            crps_gen_input = np.expand_dims(samples_gen, 0)
-            crps_score_grid = crps_ensemble(crps_truth_input, crps_gen_input)
-            crps_score = crps_score_grid.mean()
-            del truth_pooled, samples_gen_pooled
-            gc.collect()
-
-            if method not in crps_scores:
-                crps_scores[method] = []
-
-            crps_scores[method].append(crps_score)
-        
-        
-        # calculate ranks; only calculated without pooling
-
-        # Add noise to truth and generated samples to make 0-handling fairer
-        # NOTE truth and sample_gen are 'polluted' after this, hence we do this last
-        obs += rng.random(size=obs.shape, dtype=np.float32)*noise_factor
-        samples_gen += rng.random(size=samples_gen.shape, dtype=np.float32)*noise_factor
-
-        truth_flat = obs.ravel()  # unwrap into one long array, then unwrap samples_gen in same format
-        samples_gen_ranks = samples_gen.reshape((-1, ensemble_size))  # unknown batch size/img dims, known number of samples
-        rank = np.count_nonzero(truth_flat[:, None] >= samples_gen_ranks, axis=-1)  # mask array where truth > samples gen, count
-        ranks.append(rank)
-        
-        # keep track of input and truth rainfall values, to facilitate further ranks processing
-        cond_exp = np.repeat(np.repeat(data.denormalise(cond[..., tpidx], normalisation_type=input_normalisation).astype(np.float32), ds_fac, axis=-1), ds_fac, axis=-2)
-        lowress.append(cond_exp.ravel())
-        hiress.append(obs.astype(np.float32).ravel())
-        del samples_gen_ranks, truth_flat
-        gc.collect()
-
-        if show_progress:
-            emmse_so_far = np.sqrt(np.mean(emmse_all))
-            crps_mean = np.mean(crps_scores['no_pooling'])
-            losses = [("EM-MSE", emmse_so_far), ("CRPS", crps_mean)]
-            progbar.add(1, values=losses)
+                    cond_vals.append(cond)
+                    const_vals.append(const)
+                    time_vals_str.append(time_str)
+                    time_vals.append(time)
+                    
             
+                    # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
+                
+                    ralsd_rmse = calculate_ralsd_rmse(obs, samples_gen)
+                    ralsd_rmse_all.append(ralsd_rmse.flatten())
+           
+                    # turn list of predictions into array, for CRPS/rank calculations
+                    samples_gen = np.stack(samples_gen, axis=-1)  # shape of samples_gen is [n, h, w, c] e.g. [1, 940, 940, 10]
+                    
+                    mse_all.append(mse(samples_gen[:,:,0], obs))
+                    emmse_all.append(mse(np.mean(samples_gen, axis=-1), obs))
+                    
+                    corr_all.append(calculate_pearsonr(obs, samples_gen[:, :, 0]))
+      
+                    # critical success index
+                    csi_all.append(critical_success_index(obs, samples_gen[:,:,0], threshold=1.0))
+    
+                    # Max difference
+                    max_bias_all.append((samples_gen - np.stack([obs]*ensemble_size, axis=-1)).max())
+    
+                    # Max difference at 99.99th quantile
+                    max_quantile_diff.append( np.abs(np.quantile(samples_gen[:,:,0], 0.99999) - np.quantile(obs, 0.99999)).max() )
+                    
+                    # Store these values for e.g. correlation on the grid
+                    truth_vals.append(obs)
+                    samples_gen_vals.append(samples_gen)
+                    fcst_vals.append(fcst)
+                    lo_res_target_vals.append(lo_res_target)
+    
+                    ####################  CRPS calculation ##########################
+                    # calculate CRPS scores for different pooling methods
+                    
+                    for method in CRPS_pooling_methods:
+                        truth_pooled = pool(obs, method)
+                        samples_gen_pooled = pool(samples_gen, method)
+                        # crps_ensemble expects truth dims [N, H, W], pred dims [N, H, W, C]
+                        crps_truth_input = np.squeeze(truth_pooled, axis=-1)
+                        crps_gen_input = samples_gen_pooled
+                        crps_score_grid = crps_ensemble(crps_truth_input, crps_gen_input)
+                        crps_score = crps_score_grid.mean()
+                        del truth_pooled, samples_gen_pooled, crps_truth_input, crps_gen_input
+                        gc.collect()
+            
+                        if method not in crps_scores:
+                            crps_scores[method] = []
+            
+                        crps_scores[method].append(crps_score)
+                    
+                    
+                    # calculate ranks; only calculated without pooling
+            
+                    # Add noise to truth and generated samples to make 0-handling fairer
+                    # NOTE truth and sample_gen are 'polluted' after this, hence we do this last
+                    obs += rng.random(size=obs.shape, dtype=np.float32)*noise_factor
+                    samples_gen += rng.random(size=samples_gen.shape, dtype=np.float32)*noise_factor
+            
+                    truth_flat = obs.ravel()  # unwrap into one long array, then unwrap samples_gen in same format
+                    samples_gen_ranks = samples_gen.reshape((-1, ensemble_size))  # unknown batch size/img dims, known number of samples
+                    rank = np.count_nonzero(truth_flat[:, None] >= samples_gen_ranks, axis=-1)  # mask array where truth > samples gen, count
+                    ranks.append(rank)
+                    
+                    # keep track of input and truth rainfall values, to facilitate further ranks processing
+                    cond_exp = np.repeat(np.repeat(data.denormalise(cond[..., tpidx], normalisation_type=input_normalisation).astype(np.float32), ds_fac, axis=-1), ds_fac, axis=-2)
+                    lowress.append(cond_exp.ravel())
+                    hiress.append(obs.astype(np.float32).ravel())
+                    del samples_gen_ranks, truth_flat
+                    gc.collect()
+                
+                if show_progress_temp:
+                    emrmse_so_far = np.sqrt(np.mean(emmse_all))
+                    crps_mean = np.mean(crps_scores['no_pooling'])
+                    losses = [("EM-RMSE", emrmse_so_far), ("CRPS", crps_mean)]
+                    progbar.add(processed_images, values=losses)
 
-    truth_array = np.stack(truth_vals, axis=0)
-    samples_gen_array = np.stack(samples_gen_vals, axis=0)
-    fcst_array = np.stack(fcst_vals, axis=0)
-    persisted_fcst_array = np.stack(persisted_fcst_vals, axis=0)
+    except StopIteration:
+        # Wenn das Dataset erschöpft ist, verlasse die Schleife
+        print("All batches have been processed.")
+        print("number of processed images: "+str(total_processed_images))
+
+    agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month_old, year_old, model_number, output_folder))
     
-    point_metrics = {}
-        
+    save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals,  output_folder, model_number, month, year)
+
+    df = pd.concat(agg_metrics, ignore_index=True)
+    df = df.drop(columns=['month', 'year'])
+
+    result_df = pd.DataFrame([
+        {**{'N': n}, 
+         **{metric: weighted_avg(df[df['N'] == n], metric) for metric in df.columns if metric != 'N'}}
+        for n in df['N'].unique()
+    ])
+    result_df['rmse'] = np.sqrt(result_df['mse'])
+    result_df['emrmse'] = np.sqrt(result_df['emmse'])
+
+    return result_df
+
+
+def weighted_avg(df, metric_col):
+    avg_values = [x[0] for x in df[metric_col]]
+    counts = [x[1] for x in df[metric_col]]
+    return np.average(avg_values, weights=counts)
+
+def save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month, year, model_number, output_folder):
     ralsd_rmse_all = np.concatenate(ralsd_rmse_all)
-    
+
+    point_metrics = {}
+    point_metrics['month'] = month
+    point_metrics['year'] = year
     for method in crps_scores:
-        point_metrics['CRPS_' + method] = np.asarray(crps_scores[method]).mean()
-     
-    point_metrics['rmse'] = np.sqrt(np.mean(mse_all))
-    point_metrics['emmse'] = np.sqrt(np.mean(emmse_all))
-    point_metrics['mse_fcst'] = np.sqrt(np.mean(fcst_mse_all))
-    point_metrics['mae_fcst'] = np.sqrt(np.mean(fcst_mse_all))
-    point_metrics['ralsd'] = np.nanmean(ralsd_rmse_all)
-    point_metrics['ralsd_fcst'] = np.nanmean(ralsd_rmse_fcst_all)
-    point_metrics['corr'] = np.mean(corr_all)
-    point_metrics['corr_fcst'] = np.mean(correlation_fcst_all)
-    point_metrics['csi'] = np.mean(csi_all)
-    point_metrics['csi_fcst'] = np.mean(csi_fcst_all)
-    point_metrics['max_bias'] = np.mean(max_bias_all)
-    point_metrics['max_bias_fcst'] = np.mean(max_bias_fcst_all)
-    point_metrics['max_quantile_diff'] = np.mean(max_quantile_diff)
+        point_metrics['CRPS_' + method] = (np.asarray(crps_scores[method]).mean(), len(np.asarray(crps_scores[method])))
+    point_metrics['mse'] = (np.mean(mse_all), len(mse_all))
+    point_metrics['emmse'] = (np.mean(emmse_all), len(emmse_all))
+    point_metrics['ralsd'] = (np.nanmean(ralsd_rmse_all), np.sum(~np.isnan(ralsd_rmse_all)))
+    point_metrics['corr'] = (np.mean(corr_all), len(corr_all))
+    point_metrics['csi'] = (np.mean(csi_all), len(csi_all))
+    point_metrics['max_bias'] = (np.mean(max_bias_all), len(max_bias_all))
+    point_metrics['max_quantile_diff'] = (np.mean(max_quantile_diff), len(max_quantile_diff))
     
     ranks = np.concatenate(ranks)
-    lowress = np.concatenate(lowress)
-    hiress = np.concatenate(hiress)
-    gc.collect()
+    #lowress = np.concatenate(lowress)
+    #hiress = np.concatenate(hiress)
     if normalize_ranks:
         ranks = (ranks / ensemble_size).astype(np.float32)
-        gc.collect()
-    rank_arrays = (ranks, lowress, hiress)
+    OP = rank_OP(ranks)
+
+    op_tuple= (OP, len(ranks))
     
-    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'fcst_array': fcst_array, 
-              'persisted_fcst': persisted_fcst_array, 'dates': dates, 'hours': hours}
+    # Create a dataframe of all the data (to ensure scores are recorded in the right column)
+    df = pd.DataFrame.from_dict(dict(N=model_number, op=[op_tuple], **{k: [v] for k, v in point_metrics.items()}))
+    #df = pd.DataFrame.from_dict(dict(N=model_number, **{k: [v] for k, v in point_metrics.items()}))
+    eval_fname = os.path.join(output_folder, f"eval_validation_temp.csv")
+    write_header = not os.path.exists(eval_fname)
+    df.to_csv(eval_fname, header=write_header, mode='a', float_format='%.6f', index=False)
 
-    return rank_arrays, point_metrics, arrays
+    return df
 
+def save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals, output_folder, model_number, month, year):
+    time_str_array = np.array(time_vals_str, dtype='S19') 
+    time_array = np.array(time_vals) 
+    truth_array = np.stack(truth_vals, axis=0)
+    samples_gen_array = np.stack(samples_gen_vals, axis=0)
+    samples_gen_mean_array = np.stack(np.mean(samples_gen_vals, axis=-1), axis=0)
+    fcst_array = np.stack(fcst_vals, axis=0)
+    lo_res_target_array = np.stack(lo_res_target_vals, axis=0)
+    print("truth_array.shape: "+str(truth_array.shape)) 
+    print("samples_gen_array.shape: "+str(samples_gen_array.shape)) 
+    print("samples_gen_mean_array.shape: "+str(samples_gen_mean_array.shape)) 
+    print("fcst_array.shape: "+str(fcst_array.shape)) 
+    print("lo_res_target_array.shape: "+str(lo_res_target_array.shape)) 
+    print("time_array.shape: "+str(time_array.shape)) 
+    print("time_str_array.shape: "+str(time_str_array.shape)) 
+
+    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'input': fcst_array, 'input (target)': lo_res_target_array, 'samples_gen_mean': samples_gen_mean_array, 'time': time_array, 'time (str)': time_str_array}
+
+    filename_nc = os.path.join(output_folder, f'pred_samples_{model_number}_y{year}_m{month}.nc')
+
+    # Initialize data variables dictionary
+    data_vars = {}
+    coords = {}
+
+    # Loop through arrays to set up variables and dimensions
+    for key, array in arrays.items():
+        if key == 'input' or key == 'input (target)':
+            array = np.repeat(np.repeat(array, 3, axis=1), 3, axis=2)  # Upsampling
+        if key == 'input':
+            dims = ('time', 'y', 'x', 'channel')
+            data_vars[key] = (dims, array, {"long_name": "Input data"})
+        elif key == 'samples_gen':
+            dims = ('time', 'y', 'x', 'ensemble')
+            data_vars[key] = (dims, array, {"long_name": "Generated samples"})
+        elif key == 'time':
+            coords['time'] = ('time', array, {
+                "long_name": "Time",
+                "units": "seconds since 1970-01-01 00:00:00 UTC",
+                "calendar": "gregorian",
+                "standard_name": "time"
+            })
+        elif key == 'time (str)':
+            dims = ('time',)
+            data_vars[key] = (dims, array, {"long_name": "Time as string"})
+        elif key == 'input (target)':
+            dims = ('time', 'y', 'x')
+            data_vars[key] = (dims, array, {"long_name": 'Low resolution target variable'})
+        elif key == 'truth':
+            dims = ('time', 'y', 'x')
+            data_vars[key] = (dims, array, {"long_name": 'Ground truth data'})
+        elif key == 'samples_gen_mean':
+            dims = ('time', 'y', 'x')
+            data_vars[key] = (dims, array, {"long_name": 'Mean of generated samples'})
+
+    current_time = pd.Timestamp.now().isoformat(timespec='seconds')
+    
+    # Define global attributes for the dataset
+    attrs = {
+        "title": "Total Precipitation Downscaling",
+        "institution": "FZJ",
+        "source": "IMERG, ERA5",
+        "history": f"Created on {xr.cftime_range(current_time, periods=1)[0]}"
+        #"references": "http://cfconventions.org/"
+    }
+
+    # Create the Dataset
+    ds = xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
+
+    # Save the dataset to a NetCDF file
+    ds.to_netcdf(filename_nc, format="NETCDF4")
+
+    print(f'Data successfully saved as CF-compliant NetCDF in {filename_nc}!')
+
+    return 
 
 def rank_OP(norm_ranks, num_ranks=100):
     op = np.count_nonzero(
@@ -453,7 +625,9 @@ def evaluate_multiple_checkpoints(
                                   shuffle,
                                   save_generated_samples=False,
                                   batch_size: int=1,
-                                  use_training_data: bool=False
+                                  use_training_data: bool=False,
+                                  eval_months=None,
+                                  eval_model=None
                                   ):
 
     gen, data_gen = setup_inputs(model_config=model_config,
@@ -465,29 +639,20 @@ def evaluate_multiple_checkpoints(
                                        use_training_data=use_training_data)
     header = True
 
-    for model_number in model_numbers:
+    for model_number_index, model_number in enumerate(model_numbers):
+
+        if eval_model is not None and model_number_index != eval_model:
+            continue
+        print(f"model_number: {str(model_number)}")
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
 
         if not os.path.isfile(gen_weights_file):
             print(gen_weights_file, "not found, skipping")
             continue
 
-        print(gen_weights_file)
         if model_config.mode == "VAEGAN":
             _init_VAEGAN(gen, data_gen, True, 1, model_config.latent_variables)
         gen.load_weights(gen_weights_file)
-        
-        rank_arrays, agg_metrics, arrays = eval_one_chkpt(
-                                             gen=gen,
-                                             data_gen=data_gen,
-                                             data_config=data_config,
-                                             model_config=model_config,
-                                             num_images=num_images,
-                                             ensemble_size=ensemble_size,
-                                             noise_factor=noise_factor,
-                                             batch_size=batch_size)
-        ranks, lowress, hiress = rank_arrays
-        OP = rank_OP(ranks)
         
 
         if use_training_data:
@@ -498,23 +663,33 @@ def evaluate_multiple_checkpoints(
         # save one directory up from model weights, in same dir as logfile
         # Assuming that it is very unlikely to have the same start and end of the range and have a collision on this hash
         range_hash = hashlib.sha256(str(ym_range).encode('utf-8')).hexdigest()[:5]
-        output_folder = os.path.join(log_folder, f"n{num_images}_{ym_range[0][0]}-{ym_range[-1][-1]}_{range_hash}_e{ensemble_size}")
+        num_images_index = num_images if num_images is not None else 0
+        output_folder = os.path.join(log_folder, f"n{num_images_index}_{ym_range[0][0]}-{ym_range[-1][-1]}_{range_hash}_e{ensemble_size}_xarray")
         
         os.makedirs(output_folder, exist_ok=True)
+
+        df = eval_one_chkpt(
+                         gen=gen,
+                         data_gen=data_gen,
+                         data_config=data_config,
+                         model_config=model_config,
+                         num_images=num_images,
+                         ensemble_size=ensemble_size,
+                         noise_factor=noise_factor,
+                         batch_size=batch_size,
+                         output_folder=output_folder,
+                         model_number=model_number,
+                         eval_months=eval_months)
 
         # Save exact validation range
         with open(os.path.join(output_folder, 'val_range.pkl'), 'wb+') as ofh:
             pickle.dump(ym_range, ofh)
         
-        # Create a dataframe of all the data (to ensure scores are recorded in the right column)
-        df = pd.DataFrame.from_dict(dict(N=model_number, op=OP, **{k: [v] for k, v in agg_metrics.items()}))
+        # Save a dataframe of all the data (to ensure scores are recorded in the right column)
         eval_fname = os.path.join(output_folder, f"eval_validation.csv")
-        df.to_csv(eval_fname, header=header, mode='a', float_format='%.6f', index=False)
-        header = False
+        write_header = not os.path.exists(eval_fname)
+        df.to_csv(eval_fname, header=write_header, mode='a', float_format='%.6f', index=False)
 
-        if save_generated_samples:
-            with open(os.path.join(output_folder, f"arrays-{model_number}.pkl"), 'wb+') as ofh:
-                pickle.dump(arrays, ofh, pickle.HIGHEST_PROTOCOL)
         
 
 def calculate_ralsd_rmse(truth, samples):
@@ -531,7 +706,7 @@ def calculate_ralsd_rmse(truth, samples):
             sample = np.expand_dims(sample, (0))
         expanded_samples.append(sample)
     samples = expanded_samples
-    
+
     assert truth.shape[0] == 1, 'Incorrect shape for truth'
     assert samples[0].shape[0] == 1
 
