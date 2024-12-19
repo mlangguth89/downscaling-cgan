@@ -6,12 +6,12 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --output=logs/Evaluate_WGAN.%j-out
 #SBATCH --error=logs/Evaluate_WGAN.%j-err
-#SBATCH --time=02:00:00
-##SBATCH --time=24:00:00
+##SBATCH --time=02:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 ##SBATCH --partition=batch
-##SBATCH --partition=gpus
-#SBATCH --partition=develgpus
+#SBATCH --partition=gpus
+##SBATCH --partition=develgpus
 ##SBATCH --partition=booster
 ##SBATCH --partition=develbooster
 ##SBATCH --mail-type=ALL
@@ -46,9 +46,11 @@ records_folder=/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/evalua
 #/p/scratch/atmo-rep/data/downscaling/downscaling_tfrecords/validation_data/33b737e4a85a41aa
 data_config=${BASE_DIR}/config/data_config.yaml
 model_config=${BASE_DIR}/config/model_config.yaml
-model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16
-#model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16_alt
-# --num-eval-images 20
+#model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16
+model_folder=/p/scratch/hclimrep/pavel1/0aad51a8f3848213_downscaling_harris_wgan_bs16_alt
+# --eval-months-idx 1,2,4-6,9
 
 # run job
-srun --overlap python -m dsrnngan.main --records-folder ${records_folder} --model-folder ${model_folder} --eval-ensemble-size 4  --no-train --eval-model 3 --eval-blitz 
+srun --overlap python -m dsrnngan.main --records-folder ${records_folder} --model-folder ${model_folder} --eval-ensemble-size 100  --no-train --eval-model-idx 2 --eval-blitz --skip-interval 1 --eval-months-idx 9-11 --lon-min -19.0833333333333 --lon-max 35.0833333333333  --lat-min 24.9166666666667  --lat-max 73.8333333333333
+
+

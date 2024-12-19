@@ -51,10 +51,16 @@ parser.add_argument('--num-samples', type=int,
                     help="Number of samples to train on (overrides value in config)")
 parser.add_argument('--num-eval-images', type=int, default=None,
                     help="Number of images to evaluate on")
-parser.add_argument('--eval-months', type=str, default=None,
-                    help="Months to evaluate on. Comma-separated list or range of months to evaluate on (e.g., '1,2,3' or '1-6').")
-parser.add_argument('--eval-model', type=int, default=None,
+parser.add_argument('--eval-months-idx', type=str, default=None,
+                    help="Months to evaluate on. Comma-separated list or range of months to evaluate on (e.g., '1,2,3' or '0-5').")
+parser.add_argument('--eval-model-idx', type=int, default=None,
                     help="Model to evaluate on")
+parser.add_argument('--skip-interval', type=int, default=1,
+                    help="Evaluate only every ith day, where i is specified by this parameter.")
+parser.add_argument("--lat-min", type=float, default=None, help="Minimum latitude value.")
+parser.add_argument("--lat-max", type=float, default=None, help="Maximum latitude value.")
+parser.add_argument("--lon-min", type=float, default=None, help="Minimum longitude value.")
+parser.add_argument("--lon-max", type=float, default=None, help="Maximum longitude value.")
 parser.add_argument('--eval-ensemble-size', type=int, default=None,
                     help="Size of ensemble to evaluate on")
 parser.add_argument('--eval-on-train-set', action="store_true", 
@@ -101,8 +107,13 @@ def main(restart: bool,
          output_suffix: str=None, 
          log_folder: str=None,
          wandb_logging: bool=False,
-         eval_months: str=None,
-         eval_model: int=None
+         eval_months_idx: str=None,
+         eval_model_idx: int=None,
+         skip_interval: int=1,
+         lon_min: float=None,
+         lon_max: float=None,
+         lat_min: float=None,
+         lat_max: float=None
          ):
     """ Function for training and evaluating a cGAN, from a dataset of tf records
 
@@ -352,8 +363,13 @@ def main(restart: bool,
                                                  save_generated_samples=save_generated_samples,
                                                  batch_size=1,
                                                  use_training_data=args.eval_on_train_set,
-                                                 eval_months=eval_months,
-                                                 eval_model=eval_model)
+                                                 eval_months_idx=eval_months_idx,
+                                                 eval_model_idx=eval_model_idx,
+                                                 skip_interval=skip_interval,
+                                                 lon_min=lon_min,
+                                                 lon_max=lon_max,
+                                                 lat_min=lat_min,
+                                                 lat_max=lat_max)
     
     return log_folder
 
@@ -435,38 +451,46 @@ if __name__ == "__main__":
     print("eval_ensemble_size: "+str(args.eval_ensemble_size))
     print("num_eval_images: "+str(args.num_eval_images))
 
-    eval_months = []
-    if args.eval_months:
-        if '-' in args.eval_months:
-            # Handle range (e.g., '1-6')
-            start, end = map(int, args.eval_months.split('-'))
-            eval_months = list(range(start, end + 1))
-        else:
-            # Handle comma-separated list (e.g., '1,2,3')
-            eval_months = list(map(int, args.eval_months.split(',')))
+    eval_months_idx = []
+    if args.eval_months_idx:
+        for part in args.eval_months_idx.split(','):
+            if '-' in part:
+                # Handle range (e.g., '3-5')
+                start, end = map(int, part.split('-'))
+                eval_months_idx.extend(range(start, end + 1))
+            else:
+                # Handle single value (e.g., '1')
+                eval_months_idx.append(int(part))
     else:
-        eval_months = None
+        eval_months_idx = None
+        
+        
     main(
-            model_config=model_config,
-            data_config=data_config,
-            data_paths=data_paths,
-            records_folder=args.records_folder,
-            restart=args.restart, 
-            do_training=args.do_training, 
-            evalnum=args.evalnum,
-            noise_factor=args.noise_factor,
-            num_samples_override=args.num_samples,
-            num_eval_images=args.num_eval_images,
-            eval_model_numbers=eval_model_numbers,
-            val_start=args.val_ym_start,
-            val_end=args.val_ym_end,
-            eval_ensemble_size=args.eval_ensemble_size,
-            shuffle_eval=not args.no_shuffle_eval,
-            save_generated_samples=args.save_generated_samples,
-            training_weights=args.training_weights,
-            output_suffix=output_suffix,
-            log_folder=log_folder,
-            debug=args.debug,
-            wandb_logging=args.wandb_logging,
-            eval_months=eval_months,
-            eval_model=args.eval_model)
+        model_config=model_config,
+        data_config=data_config,
+        data_paths=data_paths,
+        records_folder=args.records_folder,
+        restart=args.restart, 
+        do_training=args.do_training, 
+        evalnum=args.evalnum,
+        noise_factor=args.noise_factor,
+        num_samples_override=args.num_samples,
+        num_eval_images=args.num_eval_images,
+        eval_model_numbers=eval_model_numbers,
+        val_start=args.val_ym_start,
+        val_end=args.val_ym_end,
+        eval_ensemble_size=args.eval_ensemble_size,
+        shuffle_eval=not args.no_shuffle_eval,
+        save_generated_samples=args.save_generated_samples,
+        training_weights=args.training_weights,
+        output_suffix=output_suffix,
+        log_folder=log_folder,
+        debug=args.debug,
+        wandb_logging=args.wandb_logging,
+        eval_months_idx=eval_months_idx,
+        eval_model_idx=args.eval_model_idx,
+        skip_interval=args.skip_interval,
+        lon_min=args.lon_min,
+        lon_max=args.lon_max,
+        lat_min=args.lat_min,
+        lat_max=args.lat_max)

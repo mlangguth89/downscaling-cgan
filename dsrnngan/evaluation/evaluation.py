@@ -16,7 +16,6 @@ from types import SimpleNamespace
 import netCDF4 as nc
 import xarray as xr
 
-
 from dsrnngan.data.data_generator import DataGenerator
 from dsrnngan.data import data
 from dsrnngan.utils import read_config, utils
@@ -218,7 +217,12 @@ def eval_one_chkpt(*,
                    batch_size: int=1,
                    output_folder=None,
                    model_number=None,
-                   eval_months=None):
+                   eval_months_idx=None,
+                   skip_interval=1,
+                   lon_min=None,
+                   lon_max=None,
+                   lat_min=None,
+                   lat_max=None):
     
     latitude_range, longitude_range = read_config.get_lat_lon_range_from_config(data_config)
     output_normalisation = data_config.output_normalisation
@@ -231,6 +235,17 @@ def eval_one_chkpt(*,
 
     if num_images is not None and num_images < 5:
         Warning('These scores are best performed with more images')
+
+    if lon_min and lon_max:
+        lon_range = [lon_min, lon_max]
+    else:
+        lon_range = None
+
+    if lat_min and lat_max:
+        lat_range = [lat_min, lat_max]
+    else:
+        lat_range = None
+
     
     truth_vals = []
     samples_gen_vals = []
@@ -238,6 +253,7 @@ def eval_one_chkpt(*,
     lo_res_target_vals = []
     time_vals = []
     time_vals_str = []
+    time_vals_int = []
     cond_vals = []
     const_vals = []
     ranks = []
@@ -278,12 +294,13 @@ def eval_one_chkpt(*,
     rng = np.random.default_rng()
 
 
-
+    save_at_end = True
     try:
         total_processed_images=0
         data_gen_iter = data_gen.as_numpy_iterator()
         num_images_left = None
         num_processed_days = 0
+        month_idx = 0
         month = 0
         year = 0
         while num_images is None or total_processed_images < num_images:
@@ -296,9 +313,13 @@ def eval_one_chkpt(*,
                 if num_images is not None and total_processed_images >= num_images:
                         break
                 processed_images = 0
-                num_processed_days += 1
-                if num_processed_days%32 != 1:
+                
+                if num_processed_days%skip_interval != 0:
+                    num_processed_days += 1
                     continue
+                else:
+                    num_processed_days += 1
+                    
                 for j, hour_data in enumerate(data_batch):
                     if num_images is not None and total_processed_images >= num_images:
                         break
@@ -307,54 +328,51 @@ def eval_one_chkpt(*,
                     lo_res_inputs, hi_res_inputs, output, timestamp = hour_data
                     success = False
                     time_pd = pd.Timestamp.fromtimestamp(timestamp[k][0], tz='UTC')
-                    #time_np = np.datetime64(time_pd)
-                    time = timestamp[k][0]
+                    time_np = np.datetime64(time_pd)
+                    #print("time_np: "+str(time_np))
+                    time_int = timestamp[k][0]
                     time_str = time_pd.strftime('%Y-%m-%d %H:%M:%S')
                     month_old = month
                     year_old = year
                     month = time_pd.month
                     year = time_pd.year
-                    #print(f"time: {time_str}")
-                    #print(f"month: {str(month)}")
-                    #print(f"year: {str(year)}")
 
-                    if eval_months is not None:
-                        if month < min(eval_months): 
-                            month_old = 0
-                            show_progress_temp = False
-                            continue
-                        elif month > max(eval_months):
-                            month = max(eval_months) 
-                            show_progress_temp = False
-                            continue
-                            
-                    show_progress_temp = show_progress
-                    
+                    save_monthly_data = False
                     if month_old!=0 and month!=month_old:
-                        save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals, output_folder, model_number, month_old, year_old)
-                        agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month_old, year_old, model_number, output_folder))
+                        if eval_months_idx is None:
+                            save_monthly_data = True
+                        elif month_idx in eval_months_idx:
+                            save_monthly_data = True
+                            
+                    if save_monthly_data:
+                        save_netCDF(time_vals, time_vals_int, time_vals_str, truth_vals, 
+                                    samples_gen_vals, fcst_vals, lo_res_target_vals, 
+                                    output_folder, model_number, month_old, 
+                                    year_old, lon_range, lat_range, input_field_variables)
                         
-                        time_vals = []
-                        time_vals_str = []
-                        truth_vals = []
-                        samples_gen_vals = []
-                        fcst_vals = []
-                        cond_vals = []
-                        const_vals = []
-                        lo_res_target_vals = []
+                        agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, 
+                                                        ralsd_rmse_all, corr_all, csi_all, 
+                                                        max_bias_all, max_quantile_diff, ranks, 
+                                                        lowress, hiress, normalize_ranks, 
+                                                        ensemble_size, month_old, year_old, 
+                                                        model_number, output_folder))
+                        
+                        time_vals, time_vals_int, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, cond_vals, const_vals, \
+                        lo_res_target_vals, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, \
+                        max_quantile_diff, ranks, lowress, hiress = ([] for _ in range(19))
                         crps_scores = {}
-                        mse_all = [] 
-                        emmse_all = []
-                        ralsd_rmse_all = []
-                        corr_all = []
-                        csi_all = []
-                        max_bias_all = []
-                        max_quantile_diff = [] 
-                        ranks = []
-                        lowress = [] 
-                        hiress = [] 
-
                         gc.collect()
+
+                    if month_old!=0 and month!=month_old:
+                        month_idx += 1
+
+                    if eval_months_idx is not None and month_idx not in eval_months_idx:
+                        show_progress_temp = False
+                        if month_idx > max(eval_months_idx):
+                            save_at_end = False
+                        continue
+
+                    show_progress_temp = show_progress
 
                     for n in range(5):
                         if success:
@@ -386,7 +404,8 @@ def eval_one_chkpt(*,
                     cond_vals.append(cond)
                     const_vals.append(const)
                     time_vals_str.append(time_str)
-                    time_vals.append(time)
+                    time_vals.append(time_np)
+                    time_vals_int.append(time_int)
                     
             
                     # Do all RALSD at once, to avoid re-calculating power spectrum of truth image
@@ -467,9 +486,17 @@ def eval_one_chkpt(*,
         print("All batches have been processed.")
         print("number of processed images: "+str(total_processed_images))
 
-    agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month_old, year_old, model_number, output_folder))
-    
-    save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals,  output_folder, model_number, month, year)
+    if save_at_end:
+        agg_metrics.append(save_metrics(crps_scores, mse_all, emmse_all, 
+                                        ralsd_rmse_all, corr_all, csi_all, 
+                                        max_bias_all, max_quantile_diff, ranks, 
+                                        lowress, hiress, normalize_ranks, 
+                                        ensemble_size, month_old, year_old, 
+                                        model_number, output_folder))
+        
+        save_netCDF(time_vals, time_vals_int, time_vals_str, truth_vals, samples_gen_vals, 
+                    fcst_vals, lo_res_target_vals,  output_folder, model_number, 
+                    month, year, lon_range, lat_range, input_field_variables)
 
     df = pd.concat(agg_metrics, ignore_index=True)
     df = df.drop(columns=['month', 'year'])
@@ -490,7 +517,11 @@ def weighted_avg(df, metric_col):
     counts = [x[1] for x in df[metric_col]]
     return np.average(avg_values, weights=counts)
 
-def save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_all, max_bias_all, max_quantile_diff, ranks, lowress, hiress, normalize_ranks, ensemble_size, month, year, model_number, output_folder):
+def save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, 
+                 corr_all, csi_all, max_bias_all, max_quantile_diff, 
+                 ranks, lowress, hiress, normalize_ranks, 
+                 ensemble_size, month, year, model_number, output_folder):
+    
     ralsd_rmse_all = np.concatenate(ralsd_rmse_all)
 
     point_metrics = {}
@@ -524,8 +555,12 @@ def save_metrics(crps_scores, mse_all, emmse_all, ralsd_rmse_all, corr_all, csi_
 
     return df
 
-def save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_vals, lo_res_target_vals, output_folder, model_number, month, year):
+def save_netCDF(time_vals, time_vals_int, time_vals_str, truth_vals, samples_gen_vals, 
+                fcst_vals, lo_res_target_vals, output_folder, model_number, 
+                month, year, lon_range, lat_range, input_field_variables):
+    
     time_str_array = np.array(time_vals_str, dtype='S19') 
+    time_int_array = np.array(time_vals_int) 
     time_array = np.array(time_vals) 
     truth_array = np.stack(truth_vals, axis=0)
     samples_gen_array = np.stack(samples_gen_vals, axis=0)
@@ -540,63 +575,115 @@ def save_netCDF(time_vals, time_vals_str, truth_vals, samples_gen_vals, fcst_val
     print("time_array.shape: "+str(time_array.shape)) 
     print("time_str_array.shape: "+str(time_str_array.shape)) 
 
-    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'input': fcst_array, 'input (target)': lo_res_target_array, 'samples_gen_mean': samples_gen_mean_array, 'time': time_array, 'time (str)': time_str_array}
+    arrays = {'truth': truth_array, 'samples_gen': samples_gen_array, 'input': fcst_array, 'input (target)': lo_res_target_array, 'samples_gen_mean': samples_gen_mean_array, 'time': time_array, 'time (str)': time_str_array, 'time (int)': time_int_array}
 
     filename_nc = os.path.join(output_folder, f'pred_samples_{model_number}_y{year}_m{month}.nc')
 
-    # Initialize data variables dictionary
-    data_vars = {}
-    coords = {}
+    # recover geographical coordinate information and define coordinates
+    #Lat 24.9166666666667 - 73.8333333333333
+    #Lon -19.0833333333333 - 35.0833333333333
+    if lat_range:
+        lat = np.linspace(lat_range[0], lat_range[1], arrays['samples_gen'].shape[1])
+    else:
+        lat = np.arange(0, arrays['samples_gen'].shape[1])
+    if lon_range:
+        lon = np.linspace(lon_range[0], lon_range[1], arrays['samples_gen'].shape[2])
+    else:
+        lon = np.arange(0, arrays['samples_gen'].shape[2])
+    ens = np.arange(1, arrays['samples_gen'].shape[3]+1)
+    #channels = np.arange(0, arrays["input"].shape[3])
+    channels = input_field_variables if input_field_variables and len(input_field_variables)== arrays["input"].shape[3] else np.arange(0, arrays["input"].shape[3])
+    if not input_field_variables or len(input_field_variables) != arrays["input"].shape[3]:
+        print(
+            f"Warning: input_field_variables is invalid or mismatched. "
+            f"Falling back to numeric indices for channels."
+        )
+    time = arrays["time"]
+    #print(time)
+    print("Datatype of time:", time.dtype)
 
-    # Loop through arrays to set up variables and dimensions
-    for key, array in arrays.items():
-        if key == 'input' or key == 'input (target)':
-            array = np.repeat(np.repeat(array, 3, axis=1), 3, axis=2)  # Upsampling
-        if key == 'input':
-            dims = ('time', 'y', 'x', 'channel')
-            data_vars[key] = (dims, array, {"long_name": "Input data"})
-        elif key == 'samples_gen':
-            dims = ('time', 'y', 'x', 'ensemble')
-            data_vars[key] = (dims, array, {"long_name": "Generated samples"})
-        elif key == 'time':
-            coords['time'] = ('time', array, {
-                "long_name": "Time",
-                "units": "seconds since 1970-01-01 00:00:00 UTC",
-                "calendar": "gregorian",
-                "standard_name": "time"
-            })
-        elif key == 'time (str)':
-            dims = ('time',)
-            data_vars[key] = (dims, array, {"long_name": "Time as string"})
-        elif key == 'input (target)':
-            dims = ('time', 'y', 'x')
-            data_vars[key] = (dims, array, {"long_name": 'Low resolution target variable'})
-        elif key == 'truth':
-            dims = ('time', 'y', 'x')
-            data_vars[key] = (dims, array, {"long_name": 'Ground truth data'})
-        elif key == 'samples_gen_mean':
-            dims = ('time', 'y', 'x')
-            data_vars[key] = (dims, array, {"long_name": 'Mean of generated samples'})
-
-    current_time = pd.Timestamp.now().isoformat(timespec='seconds')
+    # Create Dataset
     
-    # Define global attributes for the dataset
-    attrs = {
-        "title": "Total Precipitation Downscaling",
-        "institution": "FZJ",
-        "source": "IMERG, ERA5",
-        "history": f"Created on {xr.cftime_range(current_time, periods=1)[0]}"
-        #"references": "http://cfconventions.org/"
-    }
+    tot_prec_ref = xr.DataArray(
+        arrays["truth"],
+        dims=["time", "lat", "lon"],
+        coords={"time": time, "lat": lat, "lon": lon},
+        name="tot_prec_ref",
+        attrs={"long_name": "Ground truth precipitation", "units": "kg/m^2", "source": "IMERG"}
+    )
+    
+    tot_prec_pred = xr.DataArray(
+        arrays["samples_gen"],
+        dims=["time", "lat", "lon", "ens"],
+        coords={"time": time, "lat": lat, "lon": lon, "ens": ens},
+        name="tot_prec_pred",
+        attrs={"long_name": "Generated precipitation samples", "units": "kg/m^2", "source": "HarrisWGAN Model"}
+    )
+    
+    tot_prec_pred_mean = xr.DataArray(
+        arrays["samples_gen_mean"],
+        dims=["time", "lat", "lon"],
+        coords={"time": time, "lat": lat, "lon": lon},
+        name="tot_prec_pred_mean",
+        attrs={"long_name": "Mean of generated precipitation samples", "units": "kg/m^2", "source": "Model"}
+    )
+    
+    input_tot_prec_data = xr.DataArray(
+        np.repeat(np.repeat(arrays['input (target)'], 3, axis=1), 3, axis=2),
+        dims=["time", "lat", "lon"],
+        coords={"time": time, "lat": lat, "lon": lon},
+        name="input_tot_prec_data",
+        attrs={"long_name": "Low resolution target precipitation", "units": "kg/m^2", "source": "ERA5"}
+    )
+    
+    input_data = xr.DataArray(
+        np.repeat(np.repeat(arrays['input'], 3, axis=1), 3, axis=2),
+        dims=["time", "lat", "lon", "channel"],
+        coords={"time": time, "lat": lat, "lon": lon, "channel": channels},
+        name="input_data",
+        attrs={"long_name": "Input forecast data", "source": "ERA5"}
+    )
+    
+    time_str = xr.DataArray(
+        arrays['time (str)'],
+        dims=["time"],
+        coords={"time": time},
+        name="time_str",
+        attrs={"long_name": "Human-readable time strings"}
+    )
 
-    # Create the Dataset
-    ds = xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
-
+    time_int = xr.DataArray(
+        arrays['time (int)'],
+        dims=["time"],
+        coords={"time": time},
+        name="time_int",
+        attrs={"long_name": "seconds since 1970-01-01 00:00:00 UTC"}
+    )
+    
+    
+    ds= xr.Dataset(
+        {
+            "tot_prec_ref": tot_prec_ref,
+            "tot_prec_pred": tot_prec_pred,
+            "tot_prec_pred_mean": tot_prec_pred_mean,
+            "input_tot_prec_data": input_tot_prec_data,
+            "input_data": input_data,
+            #"time_str": time_str,
+            #"time_int": time_int,
+        },
+        attrs={
+            "title": "Total Precipitation Downscaling Dataset",
+            "institution": "Forschungszentrum Jülich (FZJ)",
+            "source": "IMERG, ERA5, Harris WGAN Downscaling Model",
+            "history": f"Created on {pd.Timestamp.now().isoformat(timespec='seconds')}",
+        }
+    )
+    
     # Save the dataset to a NetCDF file
     ds.to_netcdf(filename_nc, format="NETCDF4")
 
     print(f'Data successfully saved as CF-compliant NetCDF in {filename_nc}!')
-
+   
     return 
 
 def rank_OP(norm_ranks, num_ranks=100):
@@ -626,8 +713,13 @@ def evaluate_multiple_checkpoints(
                                   save_generated_samples=False,
                                   batch_size: int=1,
                                   use_training_data: bool=False,
-                                  eval_months=None,
-                                  eval_model=None
+                                  eval_months_idx=None,
+                                  eval_model_idx=None,
+                                  skip_interval=1,
+                                  lon_min=None,
+                                  lon_max=None,
+                                  lat_min=None,
+                                  lat_max=None
                                   ):
 
     gen, data_gen = setup_inputs(model_config=model_config,
@@ -641,7 +733,7 @@ def evaluate_multiple_checkpoints(
 
     for model_number_index, model_number in enumerate(model_numbers):
 
-        if eval_model is not None and model_number_index != eval_model:
+        if eval_model_idx is not None and model_number_index != eval_model_idx:
             continue
         print(f"model_number: {str(model_number)}")
         gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
@@ -664,22 +756,27 @@ def evaluate_multiple_checkpoints(
         # Assuming that it is very unlikely to have the same start and end of the range and have a collision on this hash
         range_hash = hashlib.sha256(str(ym_range).encode('utf-8')).hexdigest()[:5]
         num_images_index = num_images if num_images is not None else 0
-        output_folder = os.path.join(log_folder, f"n{num_images_index}_{ym_range[0][0]}-{ym_range[-1][-1]}_{range_hash}_e{ensemble_size}_xarray")
+        output_folder = os.path.join(log_folder, f"n{num_images_index}_{ym_range[0][0]}-{ym_range[-1][-1]}_{range_hash}_e{ensemble_size}_complete")
         
         os.makedirs(output_folder, exist_ok=True)
 
         df = eval_one_chkpt(
-                         gen=gen,
-                         data_gen=data_gen,
-                         data_config=data_config,
-                         model_config=model_config,
-                         num_images=num_images,
-                         ensemble_size=ensemble_size,
-                         noise_factor=noise_factor,
-                         batch_size=batch_size,
-                         output_folder=output_folder,
-                         model_number=model_number,
-                         eval_months=eval_months)
+                 gen=gen,
+                 data_gen=data_gen,
+                 data_config=data_config,
+                 model_config=model_config,
+                 num_images=num_images,
+                 ensemble_size=ensemble_size,
+                 noise_factor=noise_factor,
+                 batch_size=batch_size,
+                 output_folder=output_folder,
+                 model_number=model_number,
+                 eval_months_idx=eval_months_idx,
+                 skip_interval=skip_interval,
+                 lon_min=lon_min,
+                 lon_max=lon_max,
+                 lat_min=lat_min,
+                 lat_max=lat_max)
 
         # Save exact validation range
         with open(os.path.join(output_folder, 'val_range.pkl'), 'wb+') as ofh:
